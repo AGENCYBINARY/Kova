@@ -51,7 +51,7 @@ export default async function ActionsPage() {
           <p className={styles.eyebrow}>Approval Workflow</p>
           <h1 className={styles.title}>Actions Queue</h1>
           <p className={styles.subtitle}>
-            Review every proposed action before CODEX touches an external system.
+            Review every proposed action before Kova touches an external system.
           </p>
         </div>
         <div className={styles.headerStats}>

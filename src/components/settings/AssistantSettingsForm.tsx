@@ -29,7 +29,7 @@ interface Profile {
 
 const defaultProfile: Profile = {
   executiveMode: true,
-  assistantName: 'CODEX',
+  assistantName: 'Kova',
   roleDescription: 'Executive AI operator and high-performance digital secretary',
   defaultLanguage: 'fr',
   writingTone: 'executive',
@@ -168,7 +168,7 @@ export function AssistantSettingsForm() {
           <div>
             <h3 className={styles.title}>Executive Assistant Mode</h3>
             <p className={styles.description}>
-              Configure CODEX to behave like a senior executive secretary: polished writing, stronger judgment, and proactive execution rules.
+              Configure Kova to behave like a senior executive secretary: polished writing, stronger judgment, and proactive execution rules.
             </p>
           </div>
           <div className={styles.toggleLine}>

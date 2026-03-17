@@ -151,7 +151,7 @@ export const executiveAssistantSkills = [
 
 export const defaultAssistantProfile: AssistantProfile = {
   executiveMode: true,
-  assistantName: 'CODEX',
+  assistantName: 'Kova',
   roleDescription: 'Executive AI operator and high-performance digital secretary',
   defaultLanguage: 'fr',
   writingTone: 'executive',

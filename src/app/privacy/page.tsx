@@ -11,16 +11,16 @@ export default function PrivacyPage() {
 
         <section className={styles.hero}>
           <p className={styles.eyebrow}>Privacy Policy</p>
-          <h1 className={styles.title}>Privacy policy for CODEX by AGENCY BINARY</h1>
+          <h1 className={styles.title}>Privacy policy for Kova by AGENCY BINARY</h1>
           <p className={styles.subtitle}>
-            This policy explains what data we collect, how we use it, and how connected workspace data is handled inside the CODEX application.
+            This policy explains what data we collect, how we use it, and how connected workspace data is handled inside the Kova application.
           </p>
         </section>
 
         <section className={styles.section}>
           <h2>Who we are</h2>
           <p>
-            CODEX is operated by AGENCY BINARY. If you have any privacy questions, you can contact us at contact@agencybinary.fr.
+            Kova is operated by AGENCY BINARY. If you have any privacy questions, you can contact us at contact@agencybinary.fr.
           </p>
         </section>
 
@@ -47,7 +47,7 @@ export default function PrivacyPage() {
         <section className={styles.section}>
           <h2>Third-party services</h2>
           <p>
-            When you connect third-party services such as Google Workspace or Notion, CODEX only uses the permissions explicitly granted by the user. Tokens are stored encrypted and used only to perform approved actions or maintain the requested integrations.
+            When you connect third-party services such as Google Workspace or Notion, Kova only uses the permissions explicitly granted by the user. Tokens are stored encrypted and used only to perform approved actions or maintain the requested integrations.
           </p>
         </section>
 

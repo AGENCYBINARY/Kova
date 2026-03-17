@@ -11,16 +11,16 @@ export default function TermsPage() {
 
         <section className={styles.hero}>
           <p className={styles.eyebrow}>Terms Of Use</p>
-          <h1 className={styles.title}>Terms of use for CODEX by AGENCY BINARY</h1>
+          <h1 className={styles.title}>Terms of use for Kova by AGENCY BINARY</h1>
           <p className={styles.subtitle}>
-            These terms govern access to and use of the CODEX application, including connected integrations and AI-assisted execution workflows.
+            These terms govern access to and use of the Kova application, including connected integrations and AI-assisted execution workflows.
           </p>
         </section>
 
         <section className={styles.section}>
           <h2>Use of the service</h2>
           <p>
-            CODEX is provided for professional workflow automation and operational assistance. You agree to use the service only for lawful purposes and in compliance with all applicable rules and provider policies.
+            Kova is provided for professional workflow automation and operational assistance. You agree to use the service only for lawful purposes and in compliance with all applicable rules and provider policies.
           </p>
         </section>
 
@@ -36,7 +36,7 @@ export default function TermsPage() {
         <section className={styles.section}>
           <h2>Integrations and external services</h2>
           <p>
-            CODEX may connect to services such as Google Workspace and Notion. Your use of those services remains subject to their own terms and policies. AGENCY BINARY is not responsible for outages, limitations, or policy changes imposed by third-party providers.
+            Kova may connect to services such as Google Workspace and Notion. Your use of those services remains subject to their own terms and policies. AGENCY BINARY is not responsible for outages, limitations, or policy changes imposed by third-party providers.
           </p>
         </section>
 

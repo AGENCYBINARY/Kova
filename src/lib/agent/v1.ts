@@ -52,7 +52,7 @@ function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
     input.trim(),
     '',
     'Merci,',
-    signature || profile?.signatureName || 'CODEX',
+    signature || profile?.signatureName || 'Kova',
   ].join('\n')
 
   return profile?.defaultLanguage === 'en'
@@ -62,7 +62,7 @@ function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
         input.trim(),
         '',
         'Best regards,',
-        signature || profile?.signatureName || 'CODEX',
+        signature || profile?.signatureName || 'Kova',
       ].join('\n')
     : body
 }
@@ -103,8 +103,8 @@ function buildCalendarProposal(input: string, profile?: AssistantProfile, contac
       createMeetLink: true,
       description:
         profile?.defaultLanguage === 'en'
-          ? 'Prepared by CODEX from the user request.'
-          : "Préparé par CODEX à partir de la demande de l'utilisateur.",
+          ? 'Prepared by Kova from the user request.'
+          : "Préparé par Kova à partir de la demande de l'utilisateur.",
       notes:
         profile?.defaultLanguage === 'en'
           ? `Default duration: ${durationMinutes} minutes. Buffer preference: ${profile?.schedulingBufferMinutes || 0} minutes.`
@@ -130,7 +130,7 @@ function buildMeetingEmailFollowupProposal(
           input.trim(),
           '',
           'Best regards,',
-          profile?.signatureBlock?.trim() || profile?.signatureName || 'CODEX',
+          profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova',
         ].join('\n')
       : [
           'Bonjour,',
@@ -140,7 +140,7 @@ function buildMeetingEmailFollowupProposal(
           input.trim(),
           '',
           'Merci,',
-          profile?.signatureBlock?.trim() || profile?.signatureName || 'CODEX',
+          profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova',
         ].join('\n')
 
   return {

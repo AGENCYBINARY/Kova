@@ -34,7 +34,7 @@ export default function HomePage() {
               strokeLinejoin="round"
             />
           </svg>
-          <span className={styles.logoText}>CODEX</span>
+          <span className={styles.logoText}>Kova</span>
         </div>
 
         <h1 className={styles.title}>
@@ -44,7 +44,7 @@ export default function HomePage() {
         </h1>
 
         <p className={styles.description}>
-          CODEX is a SaaS control layer for AI execution: chat with the agent, review proposed actions,
+          Kova is a SaaS control layer for AI execution: chat with the agent, review proposed actions,
           approve what goes out to Gmail, Google Calendar, Notion or Google Docs, and keep a clean audit trail.
         </p>
 
@@ -71,7 +71,7 @@ export default function HomePage() {
               </svg>
             </div>
             <h3>Copilot Chat</h3>
-            <p>Demande une action en langage naturel et CODEX prépare l’exécution.</p>
+            <p>Demande une action en langage naturel et Kova prépare l’exécution.</p>
           </div>
 
           <div className={styles.feature}>

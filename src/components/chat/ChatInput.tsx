@@ -110,10 +110,10 @@ export function ChatInput({
       </div>
       <p className={styles.hint}>
         {preferredMode === 'ask'
-          ? 'Ask mode: CODEX drafts the action, shows the preview, and waits for your Yes or No.'
+          ? 'Ask mode: Kova drafts the action, shows the preview, and waits for your Yes or No.'
           : effectiveMode === 'auto'
-            ? 'Auto mode: CODEX executes immediately when the request is usable and safe enough.'
-            : 'Auto mode requested, but CODEX will fall back to review when confidence or recipient safety is not sufficient.'}
+            ? 'Auto mode: Kova executes immediately when the request is usable and safe enough.'
+            : 'Auto mode requested, but Kova will fall back to review when confidence or recipient safety is not sufficient.'}
       </p>
     </div>
   )

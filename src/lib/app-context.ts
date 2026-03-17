@@ -26,11 +26,11 @@ export async function getAppContext(): Promise<AppContextResult> {
   }
 
   const clerkUser = await currentUser()
-  const email = clerkUser?.emailAddresses[0]?.emailAddress || `${userId}@codex.local`
+  const email = clerkUser?.emailAddresses[0]?.emailAddress || `${userId}@kova.local`
   const name =
     [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(' ') ||
     clerkUser?.username ||
-    'CODEX Operator'
+    'Kova Operator'
 
   const dbUser = await prisma.user.upsert({
     where: { clerkId: userId },

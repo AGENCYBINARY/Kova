@@ -53,7 +53,7 @@ export const dashboardActions: DashboardAction[] = [
       title: 'Product sync with Martin',
       startTime: '2026-03-17T14:00:00.000Z',
       endTime: '2026-03-17T14:30:00.000Z',
-      attendees: ['martin@example.com', 'ops@codex.app'],
+      attendees: ['martin@example.com', 'ops@kova.app'],
       description: 'Review launch readiness and owner handoffs.',
     },
     status: 'pending',
@@ -69,7 +69,7 @@ export const dashboardActions: DashboardAction[] = [
     title: 'Send launch approval recap',
     description: 'Draft and send a recap email to the launch stakeholder group.',
     parameters: {
-      to: ['leadership@codex.app', 'launch@codex.app'],
+      to: ['leadership@kova.app', 'launch@kova.app'],
       subject: 'Launch approval recap',
       body: 'Sharing the final checklist, open blockers, and owner assignments.',
     },
@@ -121,7 +121,7 @@ export const dashboardActions: DashboardAction[] = [
     title: 'Notify finance of vendor renewal',
     description: 'Send a reminder email about the renewal due this week.',
     parameters: {
-      to: ['finance@codex.app'],
+      to: ['finance@kova.app'],
       subject: 'Vendor renewal due Friday',
       body: 'Reminder with contract summary, owner, and approval path.',
     },

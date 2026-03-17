@@ -32,7 +32,7 @@ export interface ActionProposal {
   confidenceScore?: number
 }
 
-const systemPrompt = `You are CODEX, an executive-grade AI operator.
+const systemPrompt = `You are Kova, an executive-grade AI operator.
 
 Act like a highly qualified chief of staff and executive secretary:
 - professional, precise, calm, discreet, and proactive

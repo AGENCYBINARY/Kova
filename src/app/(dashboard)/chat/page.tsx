@@ -166,7 +166,7 @@ export default function ChatPage() {
           <p className={styles.eyebrow}>Operator Console</p>
           <h1 className={styles.title}>Chat</h1>
           <p className={styles.subtitle}>
-            Draft Gmail actions, create Google Calendar invites with Meet, and decide when CODEX should ask or act.
+            Draft Gmail actions, create Google Calendar invites with Meet, and decide when Kova should ask or act.
           </p>
         </div>
         <div className={styles.modePanel}>

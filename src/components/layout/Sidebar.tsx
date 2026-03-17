@@ -205,7 +205,7 @@ export function Sidebar() {
               />
             </svg>
           </div>
-          <span className={styles.logoText}>CODEX</span>
+          <span className={styles.logoText}>Kova</span>
         </Link>
       </div>
 

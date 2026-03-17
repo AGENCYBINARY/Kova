@@ -127,7 +127,7 @@ export async function createNotionPage(token: string, parameters: Record<string,
     throw new Error('NOTION_PARENT_PAGE_ID or parentPageId is required for Notion page creation.')
   }
 
-  const title = String(parameters.title || 'CODEX page')
+  const title = String(parameters.title || 'Kova page')
   const content = String(parameters.content || '')
 
   const data = await notionFetch('/pages', token, {
@@ -200,7 +200,7 @@ export async function updateNotionPage(token: string, parameters: Record<string,
               {
                 type: 'text',
                 text: {
-                  content: content || fields || 'Updated by CODEX',
+                  content: content || fields || 'Updated by Kova',
                 },
               },
             ],

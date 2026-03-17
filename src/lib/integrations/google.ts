@@ -231,7 +231,7 @@ function decodeMimeWords(value: string) {
 
 export async function sendGmailMessage(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
   const recipients = Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')
-  const subject = String(parameters.subject || 'CODEX message')
+  const subject = String(parameters.subject || 'Kova message')
   const body = String(parameters.body || '')
   const mime = [
     `To: ${recipients}`,
@@ -356,7 +356,7 @@ export async function createGoogleCalendarEvent(accessToken: string, parameters:
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      summary: parameters.title || 'CODEX event',
+      summary: parameters.title || 'Kova event',
       description: parameters.description || parameters.notes || '',
       start: { dateTime: parameters.startTime },
       end: { dateTime: parameters.endTime },
@@ -453,7 +453,7 @@ export async function createGoogleDoc(accessToken: string, parameters: Record<st
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      title: parameters.title || 'CODEX document',
+      title: parameters.title || 'Kova document',
     }),
   })
 

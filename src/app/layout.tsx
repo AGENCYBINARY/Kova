@@ -3,7 +3,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'CODEX - AI Execution Agent',
+  title: 'Kova - AI Execution Agent',
   description: 'AI-powered execution agent for professionals and teams',
 }
 
