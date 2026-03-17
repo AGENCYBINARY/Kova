@@ -1,0 +1,111 @@
+.message {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  max-width: 80%;
+}
+
+.message.user {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.avatarWrapper {
+  flex-shrink: 0;
+}
+
+.aiAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-gold), var(--accent-blue));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+.bubble {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-lg);
+  position: relative;
+}
+
+.user .bubble {
+  background: var(--bg-tertiary);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.assistant .bubble {
+  background: rgba(79, 169, 205, 0.08);
+  border: 1px solid rgba(79, 169, 205, 0.18);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.thinkingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.thinkingDots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+.thinkingDots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinkingDots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 16px;
+  background: var(--accent-gold);
+  margin-left: 2px;
+  animation: blink 1s infinite;
+  vertical-align: middle;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+}

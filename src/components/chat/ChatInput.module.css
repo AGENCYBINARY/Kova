@@ -1,0 +1,115 @@
+.container {
+  padding: var(--space-md);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+}
+
+.modeSwitch {
+  display: inline-flex;
+  padding: 4px;
+  margin-bottom: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  gap: 4px;
+}
+
+.modeButton {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.modeButtonActive {
+  background: linear-gradient(135deg, rgba(240, 191, 109, 0.18), rgba(79, 169, 205, 0.18));
+  color: var(--text-primary);
+  border: 1px solid rgba(240, 191, 109, 0.16);
+}
+
+.modeSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.modeSummaryText {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.inputWrapper {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.inputWrapper:focus-within {
+  border-color: var(--accent-gold);
+}
+
+.textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 200px;
+  resize: none;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.textarea:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.sendButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-gold), var(--accent-blue));
+  color: white;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sendButton:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.sendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin-top: var(--space-sm);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: left;
+}

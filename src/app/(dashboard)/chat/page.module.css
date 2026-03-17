@@ -1,0 +1,116 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(238, 171, 84, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(79, 169, 205, 0.14), transparent 24%);
+}
+
+.header {
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(14, 19, 28, 0.96), rgba(11, 15, 22, 0.92)),
+    var(--bg-secondary);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  align-items: flex-end;
+}
+
+.eyebrow {
+  margin-bottom: 6px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #f0bf6d;
+}
+
+.title {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 720px;
+}
+
+.modePanel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 10px;
+  min-width: 240px;
+}
+
+.modeMetric {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.modeMetric strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  text-transform: capitalize;
+}
+
+.modeLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+}
+
+.statusStrip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 24px 0;
+}
+
+.statusCard {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(10, 15, 21, 0.7);
+  backdrop-filter: blur(12px);
+}
+
+.statusCard strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.statusLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md) 0 var(--space-md);
+}
+
+@media (max-width: 860px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modePanel,
+  .statusStrip {
+    grid-template-columns: 1fr;
+  }
+}

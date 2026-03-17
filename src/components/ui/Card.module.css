@@ -1,0 +1,53 @@
+.card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+
+.default {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+}
+
+.elevated {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
+  box-shadow: var(--shadow-md);
+}
+
+.bordered {
+  background: linear-gradient(180deg, rgba(15, 18, 25, 0.86), rgba(11, 14, 20, 0.92));
+  border: 1px solid var(--border);
+}
+
+.padding-none {
+  padding: 0;
+}
+
+.padding-sm {
+  padding: var(--space-sm);
+}
+
+.padding-md {
+  padding: var(--space-md);
+}
+
+.padding-lg {
+  padding: var(--space-lg);
+}
+
+.header {
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-sm);
+}
+
+.content {
+  flex: 1;
+}
+
+.footer {
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-sm);
+}

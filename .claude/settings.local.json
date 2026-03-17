@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /Users/agencybinary/Documents/CODEX/*.json 2>/dev/null | head -20)",
+      "Bash(npm run build 2>&1 | head -50)",
+      "Bash(npm run build 2>&1 | head -60)",
+      "Bash(npm run build 2>&1)",
+      "Bash(open /Users/agencybinary/Documents/CODEX/.env.local)",
+      "Bash(open -a TextEdit /Users/agencybinary/Documents/CODEX/.env.local)",
+      "Bash(npm install @clerk/nextjs)",
+      "Bash(pkill -f \"next dev\" 2>/dev/null; sleep 2; lsof -ti:3000 | xargs kill -9 2>/dev/null; lsof -ti:3001 | xargs kill -9 2>/dev/null; sleep 1)",
+      "Bash(rm -f /Users/agencybinary/Documents/CODEX/pnpm-lock.yaml && npm install)",
+      "Bash(npm run db:generate && npm run db:push)",
+      "Bash(npx dotenv -e .env.local -- prisma db push)",
+      "Bash(pg_isready -h localhost -p 5432 2>&1 || echo \"PostgreSQL not running\")",
+      "Bash(which psql || brew list postgresql@16 2>/dev/null || brew list postgresql@15 2>/dev/null || echo \"PostgreSQL not installed\")"
+    ]
+  }
+}

@@ -1,0 +1,223 @@
+.container {
+  min-height: 100vh;
+}
+
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 50;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(18, 28, 22, 0.94), rgba(12, 20, 16, 0.96)),
+    rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  color: #d9ffea;
+  font-size: 13px;
+  line-height: 1.45;
+  backdrop-filter: blur(14px);
+  animation: toastIn 180ms ease-out;
+}
+
+.header {
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-purple);
+  margin-bottom: var(--space-xs);
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.content {
+  padding: var(--space-lg);
+  max-width: 880px;
+}
+
+.section {
+  margin-bottom: var(--space-xl);
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.card {
+  padding: var(--space-md);
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.profileInfo {
+  flex: 1;
+}
+
+.profileName {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.profileEmail {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) 0;
+}
+
+.settingInfo {
+  flex: 1;
+}
+
+.settingTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.settingDescription {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-sm) 0;
+}
+
+/* Toggle Switch */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggleSlider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-hover);
+  transition: var(--transition-fast);
+  border-radius: 24px;
+}
+
+.toggleSlider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: var(--transition-fast);
+  border-radius: 50%;
+}
+
+.toggle input:checked + .toggleSlider {
+  background-color: var(--accent-green);
+}
+
+.toggle input:checked + .toggleSlider:before {
+  transform: translateX(20px);
+}
+
+.select {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.select:focus {
+  border-color: var(--accent-blue);
+  outline: none;
+}
+
+.dangerSetting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.dangerSetting .settingInfo {
+  flex: 1;
+}
+
+.dangerSetting .settingTitle {
+  color: var(--accent-red);
+}
+
+@media (max-width: 768px) {
+  .profile,
+  .setting,
+  .dangerSetting {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .select {
+    width: 100%;
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
