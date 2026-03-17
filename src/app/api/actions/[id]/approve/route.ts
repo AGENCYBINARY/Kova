@@ -128,8 +128,8 @@ export async function POST(
       data: {
         content:
           completedActions.length > 1
-            ? `Approved and executed ${completedActions.length} actions successfully.`
-            : `Approved and executed: "${completedActions[0].action.title}". ${completedActions[0].details}`,
+            ? `C'est bon. ${completedActions.length} actions ont ete executees avec succes.`
+            : `C'est bon. "${completedActions[0].action.title}" a ete execute. ${completedActions[0].details}`,
         role: 'assistant',
         metadata: {
           actionId: action.id,

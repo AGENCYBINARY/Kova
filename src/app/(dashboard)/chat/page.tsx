@@ -87,8 +87,10 @@ export default function ChatPage() {
             role: 'assistant',
             content:
               (data.effectiveExecutionMode || executionMode) === 'ask'
-                ? "I drafted everything. Do you want me to send it like this?"
-                : 'Execution completed or queued automatically.',
+                ? executionMode === 'auto'
+                  ? "I prepared the action for review because a manual check is still required."
+                  : 'Action ready. Review it and approve when you want me to send it.'
+                : 'Done. The action was executed automatically.',
           },
         ])
         setProposals((prev) => [...prev, ...data.proposals])

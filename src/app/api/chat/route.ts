@@ -377,7 +377,7 @@ export async function POST(request: Request) {
 
           const executionMessage = await prisma.message.create({
             data: {
-              content: `Executed automatically: "${createdAction.title}". ${execution.details}`,
+              content: `C'est bon. "${createdAction.title}" a ete execute automatiquement. ${execution.details}`,
               role: 'assistant',
               metadata: {
                 actionId: createdAction.id,
@@ -433,7 +433,7 @@ export async function POST(request: Request) {
 
         const executionMessage = await prisma.message.create({
           data: {
-            content: `I could not execute the request automatically: ${message}. I kept the actions pending for review.`,
+            content: `Je n'ai pas pu executer la demande automatiquement: ${message}. J'ai garde les actions en attente de validation.`,
             role: 'assistant',
             metadata: {
               actionStatus: 'pending',
