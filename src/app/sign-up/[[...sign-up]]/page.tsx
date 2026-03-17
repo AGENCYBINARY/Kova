@@ -13,7 +13,7 @@ export default function SignUpPage() {
           </p>
         </div>
         <div className={styles.panel}>
-          <SignUp />
+          <SignUp fallbackRedirectUrl="/dashboard" />
         </div>
       </div>
     </div>

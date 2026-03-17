@@ -6,3 +6,5 @@ dist
 coverage
 *.log
 prisma/dev.db
+.playwright-cli
+output/playwright
