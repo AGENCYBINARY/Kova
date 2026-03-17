@@ -48,6 +48,7 @@ function targetAppForType(type: DashboardAction['type']): DashboardAction['targe
   if (type === 'send_email') return 'Gmail'
   if (type === 'create_calendar_event') return 'Google Calendar'
   if (type === 'create_google_doc' || type === 'update_google_doc') return 'Google Docs'
+  if (type === 'create_google_drive_file') return 'Google Drive'
   return 'Notion'
 }
 
@@ -76,6 +77,8 @@ function mapIntegration(record: {
           ? 'Notion'
           : record.type === 'google_docs'
             ? 'Google Docs'
+            : record.type === 'google_drive'
+              ? 'Google Drive'
             : 'Slack'
 
   const descriptionMap: Record<string, string> = {
@@ -83,6 +86,7 @@ function mapIntegration(record: {
     calendar: 'Create events, coordinate meetings, and resolve schedule conflicts.',
     notion: 'Update pages, maintain databases, and publish workspace summaries.',
     google_docs: 'Create briefs, execution summaries, and structured documents from agent output.',
+    google_drive: 'Create folders and save generated files to Drive for later sharing and reuse.',
     slack: 'Route notifications and post approvals back to operating channels.',
   }
 
@@ -91,6 +95,7 @@ function mapIntegration(record: {
     calendar: 'Scheduling and calendar execution.',
     notion: 'Knowledge base and docs automation.',
     google_docs: 'Docs generation and updates.',
+    google_drive: 'Drive storage and file delivery.',
     slack: 'Team notifications and approvals.',
   }
 
@@ -99,6 +104,7 @@ function mapIntegration(record: {
     calendar: '#4285F4',
     notion: '#FFFFFF',
     google_docs: '#34A853',
+    google_drive: '#0F9D58',
     slack: '#4A154B',
   }
 
@@ -107,6 +113,7 @@ function mapIntegration(record: {
     calendar: '◔',
     notion: 'N',
     google_docs: 'G',
+    google_drive: 'D',
     slack: 'S',
   }
 

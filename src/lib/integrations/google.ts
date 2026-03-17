@@ -13,7 +13,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
 ]
 
-const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs'] as const
+const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive'] as const
 
 function getGoogleRedirectUri() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -491,6 +491,114 @@ export async function updateGoogleDoc(accessToken: string, parameters: Record<st
     output: {
       provider: 'google_docs',
       documentId,
+    },
+  }
+}
+
+async function ensureDriveFolder(accessToken: string, folderName: string) {
+  const query = `mimeType='application/vnd.google-apps.folder' and trashed=false and name='${folderName.replace(/'/g, "\\'")}'`
+  const lookupResponse = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&pageSize=10`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  )
+
+  if (lookupResponse.ok) {
+    const lookupData = await lookupResponse.json() as { files?: Array<{ id: string; name: string }> }
+    const existingFolder = lookupData.files?.find((file) => file.name === folderName)
+    if (existingFolder) {
+      return existingFolder.id
+    }
+  }
+
+  const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+    }),
+  })
+
+  if (!createResponse.ok) {
+    throw new Error(`Google Drive folder creation failed: ${createResponse.status}`)
+  }
+
+  const folder = await createResponse.json() as { id: string }
+  return folder.id
+}
+
+export async function createGoogleDriveFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const name = String(parameters.name || 'Kova file')
+  const mimeType = String(parameters.mimeType || 'text/plain')
+  const content = typeof parameters.content === 'string' ? parameters.content : ''
+  const folderName = typeof parameters.folderName === 'string' ? parameters.folderName.trim() : ''
+  const parentFolderId = folderName ? await ensureDriveFolder(accessToken, folderName) : null
+
+  const metadata = {
+    name,
+    mimeType,
+    ...(parentFolderId ? { parents: [parentFolderId] } : {}),
+  }
+
+  const isFolder = mimeType === 'application/vnd.google-apps.folder'
+
+  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink,parents,mimeType', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'multipart/related; boundary=kova_drive_boundary',
+    },
+    body: isFolder
+      ? [
+          '--kova_drive_boundary',
+          'Content-Type: application/json; charset=UTF-8',
+          '',
+          JSON.stringify(metadata),
+          '--kova_drive_boundary--',
+        ].join('\r\n')
+      : [
+          '--kova_drive_boundary',
+          'Content-Type: application/json; charset=UTF-8',
+          '',
+          JSON.stringify(metadata),
+          '--kova_drive_boundary',
+          `Content-Type: ${mimeType}`,
+          '',
+          content,
+          '--kova_drive_boundary--',
+        ].join('\r\n'),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive file creation failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    id: string
+    name: string
+    webViewLink?: string
+    webContentLink?: string
+    mimeType?: string
+    parents?: string[]
+  }
+
+  return {
+    details: isFolder ? 'Folder created in Google Drive.' : 'File created in Google Drive.',
+    output: {
+      provider: 'google_drive',
+      fileId: data.id,
+      name: data.name,
+      mimeType: data.mimeType || mimeType,
+      folderId: parentFolderId,
+      folderName: folderName || null,
+      link: data.webViewLink || data.webContentLink || null,
     },
   }
 }

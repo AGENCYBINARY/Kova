@@ -40,7 +40,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
           <p className={styles.eyebrow}>App Surfaces</p>
           <h1 className={styles.title}>Integrations</h1>
           <p className={styles.subtitle}>
-            Control which tools the agent can reach across Gmail, Notion, Google Calendar, and Google Docs.
+            Control which tools the agent can reach across Gmail, Notion, Google Calendar, Google Docs, and Google Drive.
           </p>
         </div>
         <div className={styles.headerBadges}>
@@ -117,7 +117,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
               <div className={styles.cardActions}>
                 <IntegrationActions
                   provider={
-                    integration.id === 'gmail' || integration.id === 'calendar' || integration.id === 'google_docs'
+                    integration.id === 'gmail' || integration.id === 'calendar' || integration.id === 'google_docs' || integration.id === 'google_drive'
                       ? 'google'
                       : integration.id === 'notion'
                         ? 'notion'

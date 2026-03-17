@@ -76,6 +76,7 @@ const defaultIntegrations = [
   { name: 'Calendar', status: 'disconnected', color: '#4285F4' },
   { name: 'Notion', status: 'disconnected', color: '#000000' },
   { name: 'Docs', status: 'disconnected', color: '#34A853' },
+  { name: 'Drive', status: 'disconnected', color: '#0F9D58' },
   { name: 'Slack', status: 'disconnected', color: '#4A154B' },
 ]
 
@@ -116,10 +117,19 @@ function IntegrationLogo({ name }: { name: string }) {
     )
   }
 
+  if (name === 'Drive') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M9 4h6l5 8-3 5H7l-3-5 5-8Z" stroke="#0F9D58" strokeWidth="2" strokeLinejoin="round" />
+        <path d="M9 4 4 12M15 4l5 8M7 17h10" stroke="#0F9D58" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="5" y="5" width="14" height="14" rx="4" stroke="#E879F9" strokeWidth="2" />
-      <path d="M9 12h6M12 9v6" stroke="#E879F9" strokeWidth="2" strokeLinecap="round" />
+      <rect x="5" y="5" width="14" height="14" rx="4" stroke="#4A154B" strokeWidth="2" />
+      <path d="M9 12h6M12 9v6" stroke="#4A154B" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
@@ -160,6 +170,11 @@ export function Sidebar() {
             name: 'Docs',
             status: data.items.find((item: { id: string; status: string }) => item.id === 'google_docs')?.status || 'disconnected',
             color: '#34A853',
+          },
+          {
+            name: 'Drive',
+            status: data.items.find((item: { id: string; status: string }) => item.id === 'google_drive')?.status || 'disconnected',
+            color: '#0F9D58',
           },
           {
             name: 'Slack',

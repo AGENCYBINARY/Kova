@@ -155,7 +155,7 @@ function buildWelcomeMessage() {
     id: 'welcome',
     role: 'assistant' as const,
     content:
-      "I'm your Kova operator. Ask me to draft emails, schedule meetings, update Notion, or create Google Docs. I will prepare the action for approval before execution.",
+      "I'm your Kova operator. Ask me to draft emails, schedule meetings, work in Notion, create Google Docs, or save files to Google Drive. I will prepare the action for approval before execution.",
   }
 }
 

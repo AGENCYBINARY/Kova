@@ -45,7 +45,7 @@ export default function HomePage() {
 
         <p className={styles.description}>
           Kova is a SaaS control layer for AI execution: chat with the agent, review proposed actions,
-          approve what goes out to Gmail, Google Calendar, Notion or Google Docs, and keep a clean audit trail.
+          approve what goes out to Gmail, Google Calendar, Notion, Google Docs, or Google Drive, and keep a clean audit trail.
         </p>
 
         <div className={styles.productStrip}>
@@ -105,7 +105,7 @@ export default function HomePage() {
               </svg>
             </div>
             <h3>Integrations</h3>
-            <p>Connexion et suivi de Gmail, Notion, Google Calendar et Google Docs.</p>
+            <p>Connexion et suivi de Gmail, Notion, Google Calendar, Google Docs et Google Drive.</p>
           </div>
 
           <div className={styles.feature}>

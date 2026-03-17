@@ -1,6 +1,6 @@
 # Kova
 
-Kova is a Next.js operator console for AI-assisted execution across Gmail, Google Calendar, Google Meet, Google Docs, and Notion.
+Kova is a Next.js operator console for AI-assisted execution across Gmail, Google Calendar, Google Meet, Google Docs, Google Drive, and Notion.
 
 ## Stack
 

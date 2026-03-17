@@ -32,7 +32,7 @@ export async function POST(
     where: {
       userId: dbUserId,
       workspaceId,
-      type: params.provider === 'google' ? { in: ['gmail', 'calendar', 'google_docs'] } : type,
+      type: params.provider === 'google' ? { in: ['gmail', 'calendar', 'google_docs', 'google_drive'] } : type,
     } as never,
     data: {
       lastSyncAt: new Date(),

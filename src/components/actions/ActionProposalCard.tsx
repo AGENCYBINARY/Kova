@@ -68,6 +68,36 @@ function renderCalendarPreview(parameters: Record<string, unknown>) {
   )
 }
 
+function renderDrivePreview(parameters: Record<string, unknown>) {
+  const name = typeof parameters.name === 'string' ? parameters.name : 'Untitled file'
+  const folderName = typeof parameters.folderName === 'string' ? parameters.folderName : null
+  const mimeType = typeof parameters.mimeType === 'string' ? parameters.mimeType : 'text/plain'
+  const content = typeof parameters.content === 'string' ? parameters.content : ''
+  const isFolder = mimeType === 'application/vnd.google-apps.folder'
+
+  return (
+    <div className={styles.previewBlock}>
+      <div className={styles.previewRow}>
+        <span className={styles.previewLabel}>{isFolder ? 'Dossier' : 'Nom'}</span>
+        <span className={styles.previewValue}>{name}</span>
+      </div>
+      {!isFolder ? (
+        <div className={styles.previewRow}>
+          <span className={styles.previewLabel}>Format</span>
+          <span className={styles.previewValue}>{mimeType}</span>
+        </div>
+      ) : null}
+      {folderName ? (
+        <div className={styles.previewRow}>
+          <span className={styles.previewLabel}>Emplacement</span>
+          <span className={styles.previewValue}>{folderName}</span>
+        </div>
+      ) : null}
+      {content ? <div className={styles.previewBody}>{content}</div> : null}
+    </div>
+  )
+}
+
 function renderProposalPreview(type: string, parameters: Record<string, unknown>) {
   if (type === 'send_email') {
     return renderEmailPreview(parameters)
@@ -75,6 +105,10 @@ function renderProposalPreview(type: string, parameters: Record<string, unknown>
 
   if (type === 'create_calendar_event') {
     return renderCalendarPreview(parameters)
+  }
+
+  if (type === 'create_google_drive_file') {
+    return renderDrivePreview(parameters)
   }
 
   return (
@@ -127,6 +161,12 @@ const actionIcons: Record<string, JSX.Element> = {
       <path d="M14 3v5h5" />
       <path d="M9 16h6" />
       <path d="M9 12h4" />
+    </svg>
+  ),
+  create_google_drive_file: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M9 3h6l5 9-5 9H9l-5-9 5-9z" />
+      <path d="M9 3 4 12M15 3l5 9M9 21l-5-9m11 9 5-9M7 16h10" />
     </svg>
   ),
 }

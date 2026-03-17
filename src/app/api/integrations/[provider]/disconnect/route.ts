@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 
-const GOOGLE_TYPES = ['gmail', 'calendar', 'google_docs']
+const GOOGLE_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive']
 
 export async function POST(
   _request: Request,

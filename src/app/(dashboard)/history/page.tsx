@@ -46,6 +46,12 @@ const actionIcons: Record<string, JSX.Element> = {
       <path d="M9 12h4" />
     </svg>
   ),
+  create_google_drive_file: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M9 3h6l5 9-5 9H9l-5-9 5-9z" />
+      <path d="M9 3 4 12M15 3l5 9M7 16h10" />
+    </svg>
+  ),
 }
 
 export default async function HistoryPage() {

@@ -5,6 +5,7 @@ import type { IntegrationExecutionResult, IntegrationProvider } from '@/lib/inte
 import {
   createGoogleCalendarEvent,
   createGoogleDoc,
+  createGoogleDriveFile,
   getValidGoogleAccessToken,
   sendGmailMessage,
   updateGoogleDoc,
@@ -24,6 +25,8 @@ function providerForAction(type: DashboardAction['type']): IntegrationProvider {
     case 'create_google_doc':
     case 'update_google_doc':
       return 'google_docs'
+    case 'create_google_drive_file':
+      return 'google_drive'
     case 'create_notion_page':
     case 'update_notion_page':
       return 'notion'
@@ -80,6 +83,11 @@ export async function executePersistedAction(params: {
     return params.action.type === 'update_google_doc'
       ? updateGoogleDoc(accessToken, parameters)
       : createGoogleDoc(accessToken, parameters)
+  }
+
+  if (provider === 'google_drive') {
+    const accessToken = await getValidGoogleAccessToken(integration)
+    return createGoogleDriveFile(accessToken, parameters)
   }
 
   const accessToken = getValidNotionAccessToken(integration)

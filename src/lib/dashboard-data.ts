@@ -17,12 +17,13 @@ export interface DashboardAction {
     | 'create_notion_page'
     | 'create_google_doc'
     | 'update_google_doc'
+    | 'create_google_drive_file'
   title: string
   description: string
   parameters: Record<string, unknown>
   status: ActionStatus
   riskLevel: 'low' | 'medium' | 'high'
-  targetApp: 'Gmail' | 'Google Calendar' | 'Notion' | 'Google Docs'
+  targetApp: 'Gmail' | 'Google Calendar' | 'Notion' | 'Google Docs' | 'Google Drive'
   createdAt: string
   executedAt?: string
   confidenceScore: number
@@ -31,7 +32,7 @@ export interface DashboardAction {
 }
 
 export interface DashboardIntegration {
-  id: 'gmail' | 'calendar' | 'notion' | 'google_docs' | 'slack'
+  id: 'gmail' | 'calendar' | 'notion' | 'google_docs' | 'google_drive' | 'slack'
   name: string
   description: string
   shortDescription: string
@@ -198,6 +199,18 @@ export const dashboardIntegrations: DashboardIntegration[] = [
     shortDescription: 'Docs generation and updates.',
     color: '#34A853',
     icon: 'G',
+    status: 'disconnected',
+    connectedAccount: null,
+    lastSync: null,
+    health: 'attention',
+  },
+  {
+    id: 'google_drive',
+    name: 'Google Drive',
+    description: 'Create folders and save generated files to Drive for later sharing and reuse.',
+    shortDescription: 'Drive storage and file delivery.',
+    color: '#0F9D58',
+    icon: 'D',
     status: 'disconnected',
     connectedAccount: null,
     lastSync: null,

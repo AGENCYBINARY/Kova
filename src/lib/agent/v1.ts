@@ -10,6 +10,7 @@ export const agentActionTypeSchema = z.enum([
   'create_notion_page',
   'create_google_doc',
   'update_google_doc',
+  'create_google_drive_file',
 ])
 
 export type AgentActionType = z.infer<typeof agentActionTypeSchema>
@@ -218,6 +219,36 @@ function buildGoogleDocProposal(input: string, profile?: AssistantProfile): Agen
   }
 }
 
+function buildGoogleDriveProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const normalized = normalizeInput(input)
+  const wantsFolderOnly = /(folder|dossier)/.test(normalized) && !/(file|fichier|save|upload|enregistrer)/.test(normalized)
+
+  return {
+    type: 'create_google_drive_file',
+    title: wantsFolderOnly ? 'Create Google Drive folder' : 'Save file to Google Drive',
+    description: wantsFolderOnly
+      ? 'Create a Google Drive folder for this workspace request.'
+      : 'Create a file in Google Drive and store the generated content in the selected folder if needed.',
+    parameters: wantsFolderOnly
+      ? {
+          name:
+            profile?.defaultLanguage === 'en'
+              ? 'New Drive folder'
+              : 'Nouveau dossier Drive',
+          mimeType: 'application/vnd.google-apps.folder',
+        }
+      : {
+          name:
+            profile?.defaultLanguage === 'en'
+              ? 'Kova file'
+              : 'Fichier Kova',
+          content: input,
+          mimeType: 'text/plain',
+        },
+    confidenceScore: 0.85,
+  }
+}
+
 function buildNotionProposal(input: string, profile?: AssistantProfile): AgentProposal {
   const wantsUpdate = /(update|refresh|edit|modify)/.test(input)
   const createTitle =
@@ -338,6 +369,16 @@ function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
+  if (/(google drive|drive\b|dossier|folder|upload|save to drive|save in drive|enregistrer dans drive|mettre dans drive|stocke.*drive)/.test(normalized)) {
+    return {
+      response:
+        language === 'en'
+          ? 'I prepared a Google Drive action for review.'
+          : 'J’ai préparé une action Google Drive à valider.',
+      proposals: [buildGoogleDriveProposal(input, assistantProfile)],
+    }
+  }
+
   if (/(notion|wiki|database|base de donnees|base de données|workspace|page)/.test(normalized)) {
     return {
       response:
@@ -351,8 +392,8 @@ function buildFallbackResponseWithContactsAndProfile(
   return {
     response:
       language === 'en'
-        ? 'I can convert that into an action for Gmail, Google Calendar, Notion, or Google Docs. Specify the target app or intended result and I will prepare it.'
-        : 'Je peux transformer cela en action pour Gmail, Google Calendar, Notion ou Google Docs. Précisez l’application cible ou le résultat attendu et je la préparerai.',
+        ? 'I can convert that into an action for Gmail, Google Calendar, Google Drive, Notion, or Google Docs. Specify the target app or intended result and I will prepare it.'
+        : 'Je peux transformer cela en action pour Gmail, Google Calendar, Google Drive, Notion ou Google Docs. Précisez l’application cible ou le résultat attendu et je la préparerai.',
     proposals: [],
   }
 }
