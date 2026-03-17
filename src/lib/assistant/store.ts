@@ -8,6 +8,10 @@ function asObject(value: unknown): Record<string, unknown> {
     : {}
 }
 
+function normalizeLegacyText(value: string) {
+  return value.replaceAll('CODEX', 'Kova').replaceAll('Codex', 'Kova').replaceAll('codex', 'kova')
+}
+
 function parseAssistantProfile(value: unknown): AssistantProfile {
   const obj = asObject(value)
   const assistantName =
@@ -16,12 +20,15 @@ function parseAssistantProfile(value: unknown): AssistantProfile {
         ? defaultAssistantProfile.assistantName
         : obj.assistantName
       : defaultAssistantProfile.assistantName
+  const roleDescription =
+    typeof obj.roleDescription === 'string'
+      ? normalizeLegacyText(obj.roleDescription)
+      : defaultAssistantProfile.roleDescription
 
   return {
     executiveMode: typeof obj.executiveMode === 'boolean' ? obj.executiveMode : defaultAssistantProfile.executiveMode,
     assistantName,
-    roleDescription:
-      typeof obj.roleDescription === 'string' ? obj.roleDescription : defaultAssistantProfile.roleDescription,
+    roleDescription,
     defaultLanguage:
       obj.defaultLanguage === 'fr' || obj.defaultLanguage === 'en'
         ? obj.defaultLanguage
@@ -79,13 +86,14 @@ export async function getAssistantProfile(workspaceId: string) {
   const profile = parseAssistantProfile(workspace?.preferences)
   const preferences = asObject(workspace?.preferences)
 
-  if (preferences.assistantName === 'CODEX') {
+  if (preferences.assistantName === 'CODEX' || preferences.roleDescription !== profile.roleDescription) {
     await prisma.workspace.update({
       where: { id: workspaceId },
       data: {
         preferences: {
           ...preferences,
           assistantName: profile.assistantName,
+          roleDescription: profile.roleDescription,
         } as Prisma.JsonObject,
       },
     })

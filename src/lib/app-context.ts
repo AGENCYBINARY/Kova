@@ -82,7 +82,7 @@ export async function getAppContext(): Promise<AppContextResult> {
         lastSyncAt: null,
         metadata: {
           connectedAccount: null,
-          seededBy: 'codex-v1',
+          seededBy: 'kova-v1',
         },
         workspaceId: workspace.id,
         userId: dbUser.id,
@@ -103,12 +103,12 @@ export async function getAppContext(): Promise<AppContextResult> {
       status: 'disconnected',
       lastSyncAt: null,
       expiresAt: null,
-      metadata: {
-        connectedAccount: null,
-        normalizedBy: 'codex-auth-bootstrap',
+        metadata: {
+          connectedAccount: null,
+          normalizedBy: 'kova-auth-bootstrap',
+        },
       },
-    },
-  })
+    })
 
   return {
     userId,

@@ -367,7 +367,7 @@ export async function createGoogleCalendarEvent(accessToken: string, parameters:
         ? {
             conferenceData: {
               createRequest: {
-                requestId: `codex-${Date.now()}`,
+                requestId: `kova-${Date.now()}`,
                 conferenceSolutionKey: {
                   type: 'hangoutsMeet',
                 },
