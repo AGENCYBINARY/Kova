@@ -9,16 +9,6 @@ interface ChatInputProps {
   onModeChange: (mode: 'ask' | 'auto') => void
   disabled?: boolean
   preferredMode: 'ask' | 'auto'
-  effectiveMode: 'ask' | 'auto'
-  effectiveModeReason?: string
-}
-
-function formatModeReason(reason?: string) {
-  if (!reason) {
-    return 'manual review'
-  }
-
-  return reason.replaceAll('_', ' ')
 }
 
 export function ChatInput({
@@ -26,8 +16,6 @@ export function ChatInput({
   onModeChange,
   disabled,
   preferredMode,
-  effectiveMode,
-  effectiveModeReason,
 }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -48,16 +36,6 @@ export function ChatInput({
   }
 
   const handleModeChange = (mode: 'ask' | 'auto') => {
-    if (mode === 'auto') {
-      const confirmed = window.confirm(
-        "Mode prévention: l'assistant pourra exécuter directement certaines actions. Utilise ce mode seulement si les intégrations sont bien configurées."
-      )
-
-      if (!confirmed) {
-        return
-      }
-    }
-
     onModeChange(mode)
   }
 
@@ -80,11 +58,6 @@ export function ChatInput({
         >
           Agir sans demander
         </button>
-      </div>
-      <div className={styles.modeSummary}>
-        <span className={styles.modeSummaryText}>Mode demandé: {preferredMode}</span>
-        <span className={styles.modeSummaryText}>Mode appliqué: {effectiveMode}</span>
-        <span className={styles.modeSummaryText}>Règle: {formatModeReason(effectiveModeReason)}</span>
       </div>
       <div className={styles.inputWrapper}>
         <Textarea
@@ -111,9 +84,7 @@ export function ChatInput({
       <p className={styles.hint}>
         {preferredMode === 'ask'
           ? 'Ask mode: Kova drafts the action, shows the preview, and waits for your Yes or No.'
-          : effectiveMode === 'auto'
-            ? 'Auto mode: Kova executes immediately when the request is usable and safe enough.'
-            : 'Auto mode requested, but Kova will fall back to review when confidence or recipient safety is not sufficient.'}
+          : 'Auto mode: Kova executes immediately when the request is usable and safe enough.'}
       </p>
     </div>
   )

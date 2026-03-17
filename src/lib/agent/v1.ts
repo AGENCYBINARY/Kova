@@ -44,6 +44,12 @@ function normalizeInput(input: string) {
   return input.trim().toLowerCase()
 }
 
+function requestNeedsMeetLink(input: string) {
+  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams)/.test(
+    normalizeInput(input)
+  )
+}
+
 function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
   const signature = profile?.signatureBlock?.trim()
   const body = [
@@ -391,6 +397,32 @@ export async function runAgentTurn(
         .filter((proposal): proposal is AgentProposal => proposal !== null)
 
       const enrichedProposals = proposals.map((proposal) => {
+        if (proposal.type === 'create_calendar_event') {
+          const attendees = Array.isArray(proposal.parameters.attendees)
+            ? proposal.parameters.attendees.filter((value): value is string => typeof value === 'string' && value.includes('@'))
+            : []
+          const maybeRecipient = extractRecipientName(input)
+          const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
+
+          return {
+            ...proposal,
+            parameters: {
+              ...proposal.parameters,
+              createMeetLink:
+                typeof proposal.parameters.createMeetLink === 'boolean'
+                  ? proposal.parameters.createMeetLink || requestNeedsMeetLink(input)
+                  : requestNeedsMeetLink(input),
+              attendees:
+                attendees.length > 0
+                  ? attendees
+                  : knownContact
+                    ? [knownContact.email]
+                    : attendees,
+            },
+            confidenceScore: Math.max(proposal.confidenceScore, requestNeedsMeetLink(input) ? 0.9 : 0.85),
+          }
+        }
+
         if (proposal.type !== 'send_email') {
           return proposal
         }

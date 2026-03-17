@@ -10,10 +10,16 @@ function asObject(value: unknown): Record<string, unknown> {
 
 function parseAssistantProfile(value: unknown): AssistantProfile {
   const obj = asObject(value)
+  const assistantName =
+    typeof obj.assistantName === 'string'
+      ? obj.assistantName.trim() === 'CODEX'
+        ? defaultAssistantProfile.assistantName
+        : obj.assistantName
+      : defaultAssistantProfile.assistantName
 
   return {
     executiveMode: typeof obj.executiveMode === 'boolean' ? obj.executiveMode : defaultAssistantProfile.executiveMode,
-    assistantName: typeof obj.assistantName === 'string' ? obj.assistantName : defaultAssistantProfile.assistantName,
+    assistantName,
     roleDescription:
       typeof obj.roleDescription === 'string' ? obj.roleDescription : defaultAssistantProfile.roleDescription,
     defaultLanguage:
@@ -70,7 +76,22 @@ export async function getAssistantProfile(workspaceId: string) {
     select: { preferences: true },
   })
 
-  return parseAssistantProfile(workspace?.preferences)
+  const profile = parseAssistantProfile(workspace?.preferences)
+  const preferences = asObject(workspace?.preferences)
+
+  if (preferences.assistantName === 'CODEX') {
+    await prisma.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        preferences: {
+          ...preferences,
+          assistantName: profile.assistantName,
+        } as Prisma.JsonObject,
+      },
+    })
+  }
+
+  return profile
 }
 
 export async function updateAssistantProfile(workspaceId: string, profile: AssistantProfile) {

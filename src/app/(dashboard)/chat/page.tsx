@@ -29,8 +29,6 @@ export default function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [isBootstrapping, setIsBootstrapping] = useState(true)
   const [preferredExecutionMode, setPreferredExecutionMode] = useState<ExecutionMode>('ask')
-  const [effectiveExecutionMode, setEffectiveExecutionMode] = useState<ExecutionMode>('ask')
-  const [executionModeReason, setExecutionModeReason] = useState<string>('manual_review')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -78,8 +76,6 @@ export default function ChatPage() {
       }
 
       const data = await response.json()
-      setEffectiveExecutionMode(data.effectiveExecutionMode || executionMode)
-      setExecutionModeReason(data.executionModeReason || 'manual_review')
       if (data.assistantMessage) {
         setMessages((prev) => [...prev, data.assistantMessage])
       }
@@ -162,35 +158,12 @@ export default function ChatPage() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Operator Console</p>
-          <h1 className={styles.title}>Chat</h1>
-          <p className={styles.subtitle}>
-            Draft Gmail actions, create Google Calendar invites with Meet, and decide when Kova should ask or act.
-          </p>
-        </div>
-        <div className={styles.modePanel}>
-          <div className={styles.modeMetric}>
-            <span className={styles.modeLabel}>Requested</span>
-            <strong>{preferredExecutionMode}</strong>
-          </div>
-          <div className={styles.modeMetric}>
-            <span className={styles.modeLabel}>Applied</span>
-            <strong>{effectiveExecutionMode}</strong>
-          </div>
-        </div>
+        <p className={styles.eyebrow}>Operator Console</p>
+        <h1 className={styles.title}>Chat</h1>
+        <p className={styles.subtitle}>
+          Draft Gmail actions, create Google Calendar invites with Meet, and decide when Kova should ask or act.
+        </p>
       </header>
-
-      <div className={styles.statusStrip}>
-        <div className={styles.statusCard}>
-          <span className={styles.statusLabel}>Pending review</span>
-          <strong>{proposals.length}</strong>
-        </div>
-        <div className={styles.statusCard}>
-          <span className={styles.statusLabel}>Execution rule</span>
-          <strong>{executionModeReason.replaceAll('_', ' ')}</strong>
-        </div>
-      </div>
 
       <div className={styles.messages}>
         {isBootstrapping && messages.length === 0 ? (
@@ -240,8 +213,6 @@ export default function ChatPage() {
         onModeChange={setPreferredExecutionMode}
         disabled={isLoading}
         preferredMode={preferredExecutionMode}
-        effectiveMode={effectiveExecutionMode}
-        effectiveModeReason={executionModeReason}
       />
     </div>
   )

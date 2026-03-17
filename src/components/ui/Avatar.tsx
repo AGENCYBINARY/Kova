@@ -21,7 +21,7 @@ export function Avatar({ src, alt = 'Avatar', size = 'md', fallback }: AvatarPro
   if (src) {
     return (
       <div className={`${styles.avatar} ${styles[size]}`}>
-        <Image src={src} alt={alt} fill className={styles.image} />
+        <Image src={src} alt={alt} fill sizes={size === 'lg' ? '48px' : size === 'md' ? '36px' : '28px'} className={styles.image} />
       </div>
     )
   }
