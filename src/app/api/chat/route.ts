@@ -130,6 +130,24 @@ function extractConnectedContextSeed(messages: Array<{ role: string; content: st
         asksForPriorities: false,
       }
     }
+
+    if (/drive:/i.test(content) || /fichiers drive|drive files/i.test(content)) {
+      return {
+        sources: ['google_drive'],
+        timeframe: 'recent',
+        asksForAvailability: false,
+        asksForPriorities: false,
+      }
+    }
+
+    if (/notion:/i.test(content) || /pages notion|notion pages/i.test(content)) {
+      return {
+        sources: ['notion'],
+        timeframe: 'recent',
+        asksForAvailability: false,
+        asksForPriorities: false,
+      }
+    }
   }
 
   return null

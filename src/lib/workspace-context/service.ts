@@ -38,6 +38,36 @@ interface GmailMessageMetadata {
   unread: boolean
 }
 
+interface CalendarEventMetadata {
+  title: string
+  startTime: string | null
+  endTime: string | null
+  attendees: string[]
+  location: string | null
+  meetLink: string | null
+  status: string | null
+}
+
+interface AvailabilityWindowMetadata {
+  startTime: string
+  endTime: string
+}
+
+interface DriveFileMetadata {
+  name: string
+  mimeType: string
+  modifiedTime: string | null
+  owners: string[]
+  webViewLink: string | null
+}
+
+interface NotionPageMetadata {
+  title: string
+  lastEditedTime: string | null
+  preview: string
+  url: string | null
+}
+
 export interface ConnectedWorkspaceContextResult {
   request: ConnectedContextRequest
   workspaceContext: string
@@ -183,6 +213,19 @@ async function buildCalendarContext(params: {
       source: 'calendar',
       eventCount: events.length,
       availabilityCount: availability.length,
+      events: events.slice(0, 8).map((event) => ({
+        title: event.title,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        attendees: event.attendees,
+        location: event.location,
+        meetLink: event.meetLink,
+        status: event.status,
+      } satisfies CalendarEventMetadata)),
+      availability: availability.slice(0, 8).map((window) => ({
+        startTime: window.startTime,
+        endTime: window.endTime,
+      } satisfies AvailabilityWindowMetadata)),
     },
   } satisfies SourceContextBlock
 }
@@ -208,6 +251,13 @@ async function buildDriveContext(params: {
       source: 'google_drive',
       connectedAccount: params.connectedAccount,
       fileCount: files.length,
+      files: files.slice(0, 8).map((file) => ({
+        name: file.name,
+        mimeType: file.mimeType,
+        modifiedTime: file.modifiedTime,
+        owners: file.owners,
+        webViewLink: file.webViewLink,
+      } satisfies DriveFileMetadata)),
     },
   } satisfies SourceContextBlock
 }
@@ -241,6 +291,12 @@ async function buildNotionContext(params: {
       connectedAccount: params.connectedAccount,
       workspaceName: params.workspaceName,
       pageCount: pages.length,
+      pages: enrichedPages.map((page) => ({
+        title: page.title,
+        lastEditedTime: page.lastEditedTime,
+        preview: page.preview,
+        url: page.url,
+      } satisfies NotionPageMetadata)),
     },
   } satisfies SourceContextBlock
 }
