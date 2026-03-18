@@ -2,6 +2,9 @@ import { z } from 'zod'
 import { analyzeUserRequest } from '@/lib/ai/client'
 import { executiveAssistantSkills, type AssistantProfile } from '@/lib/assistant/profile'
 import { extractRecipientName, findContactByName, type KnownContact } from '@/lib/contacts'
+import { prepareActionParameters } from '@/lib/agent/data-prep'
+import { getToolByActionType, listMcpTools } from '@/lib/mcp/registry'
+import { isEmailSendIntent, isReadOnlyWorkspaceQuestion } from '@/lib/workspace-context/intents'
 
 export const agentActionTypeSchema = z.enum([
   'send_email',
@@ -31,6 +34,14 @@ export interface AgentTurnResult {
 export type AgentExecutionMode = 'ask' | 'auto'
 
 const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,})/
+const actionIntentPattern =
+  /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|envoie|envoyer|rédige|redige|écris|ecris|crée|cree|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|déconnecte|deconnecte|actualise|rafraichis)/i
+const appIntentPattern =
+  /(gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|visio|réunion|reunion|dossier|folder|fichier|file|page|doc\b)/i
+const greetingOnlyPattern =
+  /^(bonjour|salut|hello|hey|yo|coucou|bonsoir|good morning|good evening|hi|ça va|ca va)\b[ !?.]*$/i
+const conversationalPattern =
+  /^(bonjour|salut|hello|hey|coucou|bonsoir|hi|parle moi|parle-moi|on peut parler|tu peux m'aider|tu peux m’aider|j'ai une question|j’ai une question|comment ca va|comment ça va|qui es tu|qui es-tu|explique moi|explique-moi|ça va|ca va)\b/i
 
 function hasPlaceholderRecipient(parameters: Record<string, unknown>) {
   const recipients = Array.isArray(parameters.to) ? parameters.to : []
@@ -49,6 +60,45 @@ function requestNeedsMeetLink(input: string) {
   return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams)/.test(
     normalizeInput(input)
   )
+}
+
+function isActionRequest(input: string) {
+  const normalized = input.trim()
+  if (!normalized) return false
+  if (isReadOnlyWorkspaceQuestion(normalized)) return false
+  return actionIntentPattern.test(normalized) || appIntentPattern.test(normalized) || emailPattern.test(normalized)
+}
+
+function isGreetingOnly(input: string) {
+  return greetingOnlyPattern.test(input.trim())
+}
+
+function isConversationalInput(input: string) {
+  const normalized = input.trim()
+  if (!normalized) return true
+  if (isGreetingOnly(normalized)) return true
+  return !isActionRequest(normalized) && conversationalPattern.test(normalized)
+}
+
+function buildConversationalResponse(input: string, profile?: AssistantProfile) {
+  const language = profile?.defaultLanguage || 'fr'
+  const normalized = normalizeInput(input)
+
+  if (isGreetingOnly(input)) {
+    return language === 'en'
+      ? 'Hello. You can talk to me normally, ask a question, or ask me to act through Gmail, Calendar, Notion, Google Docs, or Google Drive.'
+      : 'Bonjour. Tu peux me parler normalement, me poser une question, ou me demander d’agir via Gmail, Calendar, Notion, Google Docs ou Google Drive.'
+  }
+
+  if (/parle moi|parle-moi/.test(normalized)) {
+    return language === 'en'
+      ? 'Of course. Talk to me normally. I can answer, help you think through something, or prepare actions when you want to use an integration.'
+      : 'Bien sûr. Tu peux me parler normalement. Je peux répondre, t’aider à réfléchir, ou préparer des actions quand tu veux utiliser une intégration.'
+  }
+
+  return language === 'en'
+    ? 'I can answer normally and also help you act through Gmail, Calendar, Notion, Google Docs, or Google Drive when needed.'
+    : 'Je peux répondre normalement et aussi t’aider à agir via Gmail, Calendar, Notion, Google Docs ou Google Drive quand c’est utile.'
 }
 
 function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
@@ -334,7 +384,7 @@ function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
-  if (/(gmail|email|e-mail|mail|send|envoie|envoyer|courriel)/.test(normalized)) {
+  if (isEmailSendIntent(normalized)) {
     const matchedEmail = input.match(emailPattern)?.[1]
     if (!matchedEmail) {
       if (maybeRecipient) {
@@ -402,8 +452,33 @@ export async function runAgentTurn(
   input: string,
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
   knownContacts: KnownContact[] = [],
-  assistantProfile?: AssistantProfile
+  assistantProfile?: AssistantProfile,
+  allowedActionTypes: AgentActionType[] = agentActionTypeSchema.options,
+  options: {
+    workspaceContext?: string
+  } = {}
 ): Promise<AgentTurnResult> {
+  const availableTools = listMcpTools().filter((tool) =>
+    allowedActionTypes.includes(tool.actionType as AgentActionType)
+  )
+
+  if (isConversationalInput(input)) {
+    return {
+      response: buildConversationalResponse(input, assistantProfile),
+      proposals: [],
+    }
+  }
+
+  if (availableTools.length === 0) {
+    return {
+      response:
+        assistantProfile?.defaultLanguage === 'en'
+          ? 'I can answer questions normally, but this workspace role is not allowed to execute connected app actions.'
+          : 'Je peux répondre normalement, mais ce rôle workspace n’est pas autorisé à exécuter des actions sur les applications connectées.',
+      proposals: [],
+    }
+  }
+
   if (process.env.OPENAI_API_KEY) {
     try {
       const aiResult = await analyzeUserRequest(
@@ -415,18 +490,28 @@ export async function runAgentTurn(
           skills: executiveAssistantSkills.filter((skill) =>
             assistantProfile?.enabledSkills?.includes(skill.id) ?? true
           ),
+          tools: availableTools,
+          workspaceContext: options.workspaceContext,
         }
       )
       const proposals = aiResult.proposals
         .map((proposal) => {
           const parsed = agentActionTypeSchema.safeParse(proposal.type)
           if (!parsed.success) return null
+          if (!allowedActionTypes.includes(parsed.data)) return null
+
+          const tool = getToolByActionType(parsed.data)
+          if (!tool) return null
+
+          const preparedParameters = prepareActionParameters(parsed.data, proposal.parameters)
+          const validatedParameters = tool.inputSchema.safeParse(preparedParameters)
+          if (!validatedParameters.success) return null
 
           return {
             type: parsed.data,
             title: proposal.title,
             description: proposal.description,
-            parameters: proposal.parameters,
+            parameters: validatedParameters.data,
             confidenceScore:
               typeof proposal.confidenceScore === 'number'
                 ? proposal.confidenceScore
@@ -503,14 +588,46 @@ export async function runAgentTurn(
         }
       })
 
+      const allowProposals = isActionRequest(input)
+      const deniedByRole = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
+
       return {
-        response: aiResult.response,
-        proposals: safeProposals,
+        response:
+          deniedByRole
+            ? assistantProfile?.defaultLanguage === 'en'
+              ? 'I understood the request, but your workspace role is not allowed to use that tool.'
+              : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
+            : !allowProposals && safeProposals.length > 0
+            ? buildConversationalResponse(input, assistantProfile)
+            : aiResult.response,
+        proposals: allowProposals ? safeProposals : [],
       }
     } catch {
-      return buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
+      const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
+      const filteredProposals = fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type))
+
+      return {
+        response:
+          fallback.proposals.length > 0 && filteredProposals.length === 0
+            ? assistantProfile?.defaultLanguage === 'en'
+              ? 'I understood the request, but your workspace role is not allowed to use that tool.'
+              : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
+            : fallback.response,
+        proposals: filteredProposals,
+      }
     }
   }
 
-  return buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
+  const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
+  const filteredProposals = fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type))
+
+  return {
+    response:
+      fallback.proposals.length > 0 && filteredProposals.length === 0
+        ? assistantProfile?.defaultLanguage === 'en'
+          ? 'I understood the request, but your workspace role is not allowed to use that tool.'
+          : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
+        : fallback.response,
+    proposals: filteredProposals,
+  }
 }

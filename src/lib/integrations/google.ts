@@ -9,8 +9,10 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/documents',
   'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.metadata.readonly',
 ]
 
 const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive'] as const
@@ -229,6 +231,124 @@ function decodeMimeWords(value: string) {
   )
 }
 
+function getHeaderValue(headers: Array<{ name?: string; value?: string }>, name: string) {
+  const header = headers.find((item) => item.name?.toLowerCase() === name.toLowerCase())
+  return decodeMimeWords(header?.value || '')
+}
+
+export interface GmailMessageSummary {
+  id: string
+  threadId: string | null
+  from: string
+  subject: string
+  snippet: string
+  internalDate: string | null
+  unread: boolean
+}
+
+export interface GmailThreadSummary {
+  threadId: string
+  subject: string
+  participants: string[]
+  messageCount: number
+  latestSnippet: string
+}
+
+export interface GoogleCalendarEventSummary {
+  id: string
+  title: string
+  startTime: string | null
+  endTime: string | null
+  attendees: string[]
+  location: string | null
+  htmlLink: string | null
+  meetLink: string | null
+  status: string | null
+}
+
+export interface GoogleCalendarAvailabilityWindow {
+  startTime: string
+  endTime: string
+}
+
+export interface GoogleDriveFileSummary {
+  id: string
+  name: string
+  mimeType: string
+  modifiedTime: string | null
+  owners: string[]
+  webViewLink: string | null
+}
+
+function getStartOfDay(date = new Date()) {
+  const start = new Date(date)
+  start.setHours(0, 0, 0, 0)
+  return start
+}
+
+async function listGmailMessageMetadata(accessToken: string, query: string, maxResults: number) {
+  const listResponse = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&q=${encodeURIComponent(query)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  )
+
+  if (!listResponse.ok) {
+    throw new Error(`Gmail inbox read failed: ${listResponse.status}`)
+  }
+
+  const listData = await listResponse.json() as {
+    messages?: Array<{ id: string; threadId?: string }>
+  }
+
+  const detailedMessages = await Promise.all(
+    (listData.messages || []).map(async (message) => {
+      const detailResponse = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (!detailResponse.ok) {
+        return null
+      }
+
+      const detailData = await detailResponse.json() as {
+        id: string
+        threadId?: string
+        internalDate?: string
+        snippet?: string
+        labelIds?: string[]
+        payload?: {
+          headers?: Array<{ name?: string; value?: string }>
+        }
+      }
+
+      const headers = detailData.payload?.headers || []
+
+      return {
+        id: detailData.id,
+        threadId: detailData.threadId || message.threadId || null,
+        from: getHeaderValue(headers, 'From'),
+        subject: getHeaderValue(headers, 'Subject'),
+        snippet: decodeMimeWords(detailData.snippet || ''),
+        internalDate: detailData.internalDate || null,
+        unread: Array.isArray(detailData.labelIds) ? detailData.labelIds.includes('UNREAD') : false,
+      } satisfies GmailMessageSummary
+    })
+  )
+
+  return detailedMessages
+    .filter((message): message is GmailMessageSummary => message !== null)
+    .sort((left, right) => Number(right.internalDate || 0) - Number(left.internalDate || 0))
+}
+
 export async function sendGmailMessage(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
   const recipients = Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')
   const subject = String(parameters.subject || 'Kova message')
@@ -334,6 +454,211 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
   }
 
   return null
+}
+
+export async function listTodayGmailMessages(
+  accessToken: string,
+  options: {
+    maxResults?: number
+  } = {}
+) {
+  const maxResults = Math.max(1, Math.min(options.maxResults || 12, 25))
+  const startOfDay = getStartOfDay()
+  return listGmailMessageMetadata(accessToken, `in:inbox after:${Math.floor(startOfDay.getTime() / 1000)}`, maxResults)
+}
+
+export async function searchGmailMessages(
+  accessToken: string,
+  options: {
+    query: string
+    maxResults?: number
+  }
+) {
+  const maxResults = Math.max(1, Math.min(options.maxResults || 10, 20))
+  const query = options.query.trim()
+  if (!query) {
+    return []
+  }
+
+  return listGmailMessageMetadata(accessToken, query, maxResults)
+}
+
+export async function summarizeGmailThreads(messages: GmailMessageSummary[]) {
+  const byThread = new Map<string, GmailThreadSummary>()
+
+  for (const message of messages) {
+    const threadId = message.threadId || message.id
+    const existing = byThread.get(threadId)
+    const participants = Array.from(new Set([...(existing?.participants || []), message.from].filter(Boolean)))
+
+    byThread.set(threadId, {
+      threadId,
+      subject: existing?.subject || message.subject || '(sans objet)',
+      participants,
+      messageCount: (existing?.messageCount || 0) + 1,
+      latestSnippet: existing?.latestSnippet || message.snippet,
+    })
+  }
+
+  return Array.from(byThread.values())
+}
+
+export async function listGoogleCalendarEvents(
+  accessToken: string,
+  options: {
+    timeMin: string
+    timeMax: string
+    maxResults?: number
+    query?: string
+  }
+) {
+  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
+  url.searchParams.set('singleEvents', 'true')
+  url.searchParams.set('orderBy', 'startTime')
+  url.searchParams.set('timeMin', options.timeMin)
+  url.searchParams.set('timeMax', options.timeMax)
+  url.searchParams.set('maxResults', String(Math.max(1, Math.min(options.maxResults || 20, 50))))
+
+  if (options.query?.trim()) {
+    url.searchParams.set('q', options.query.trim())
+  }
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Calendar read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    items?: Array<{
+      id: string
+      summary?: string
+      status?: string
+      location?: string
+      htmlLink?: string
+      attendees?: Array<{ email?: string }>
+      start?: { dateTime?: string; date?: string }
+      end?: { dateTime?: string; date?: string }
+      hangoutLink?: string
+      conferenceData?: {
+        entryPoints?: Array<{ entryPointType?: string; uri?: string }>
+      }
+    }>
+  }
+
+  return (data.items || []).map((item) => ({
+    id: item.id,
+    title: item.summary || '(untitled event)',
+    startTime: item.start?.dateTime || item.start?.date || null,
+    endTime: item.end?.dateTime || item.end?.date || null,
+    attendees: (item.attendees || []).map((attendee) => attendee.email || '').filter(Boolean),
+    location: item.location || null,
+    htmlLink: item.htmlLink || null,
+    meetLink:
+      item.hangoutLink ||
+      item.conferenceData?.entryPoints?.find((entryPoint) => entryPoint.entryPointType === 'video')?.uri ||
+      null,
+    status: item.status || null,
+  } satisfies GoogleCalendarEventSummary))
+}
+
+export function computeCalendarAvailability(
+  events: GoogleCalendarEventSummary[],
+  options: {
+    rangeStart: string
+    rangeEnd: string
+  }
+) {
+  const windows: GoogleCalendarAvailabilityWindow[] = []
+  const sortedEvents = events
+    .filter((event) => event.startTime && event.endTime)
+    .sort((left, right) => new Date(left.startTime || 0).getTime() - new Date(right.startTime || 0).getTime())
+  let cursor = new Date(options.rangeStart)
+  const rangeEnd = new Date(options.rangeEnd)
+
+  for (const event of sortedEvents) {
+    const eventStart = new Date(event.startTime || cursor.toISOString())
+    const eventEnd = new Date(event.endTime || eventStart.toISOString())
+
+    if (eventStart > cursor) {
+      windows.push({
+        startTime: cursor.toISOString(),
+        endTime: eventStart.toISOString(),
+      })
+    }
+
+    if (eventEnd > cursor) {
+      cursor = eventEnd
+    }
+  }
+
+  if (cursor < rangeEnd) {
+    windows.push({
+      startTime: cursor.toISOString(),
+      endTime: rangeEnd.toISOString(),
+    })
+  }
+
+  return windows.filter((window) => new Date(window.endTime).getTime() > new Date(window.startTime).getTime())
+}
+
+function escapeDriveQueryValue(value: string) {
+  return value.replace(/'/g, "\\'")
+}
+
+export async function searchGoogleDriveFiles(
+  accessToken: string,
+  options: {
+    query?: string
+    maxResults?: number
+  } = {}
+) {
+  const url = new URL('https://www.googleapis.com/drive/v3/files')
+  const clauses = ["trashed=false"]
+
+  if (options.query?.trim()) {
+    const escapedQuery = escapeDriveQueryValue(options.query.trim())
+    clauses.push(`(name contains '${escapedQuery}' or fullText contains '${escapedQuery}')`)
+  }
+
+  url.searchParams.set('q', clauses.join(' and '))
+  url.searchParams.set('orderBy', 'modifiedTime desc')
+  url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 12, 30))))
+  url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress),webViewLink)')
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    files?: Array<{
+      id: string
+      name?: string
+      mimeType?: string
+      modifiedTime?: string
+      webViewLink?: string
+      owners?: Array<{ displayName?: string; emailAddress?: string }>
+    }>
+  }
+
+  return (data.files || []).map((file) => ({
+    id: file.id,
+    name: file.name || 'Untitled',
+    mimeType: file.mimeType || 'application/octet-stream',
+    modifiedTime: file.modifiedTime || null,
+    owners: (file.owners || []).map((owner) => owner.displayName || owner.emailAddress || '').filter(Boolean),
+    webViewLink: file.webViewLink || null,
+  } satisfies GoogleDriveFileSummary))
 }
 
 export async function createGoogleCalendarEvent(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {

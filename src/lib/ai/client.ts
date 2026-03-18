@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 type ConversationMessage = {
   role: 'user' | 'assistant'
   content: string
@@ -5,7 +7,19 @@ type ConversationMessage = {
 
 interface AnalyzeOptions {
   knownContacts?: Array<{ name: string; email: string }>
+  tools?: Array<{
+    name: string
+    actionType: string
+    provider: string
+    title: string
+    description: string
+    riskLevel: 'low' | 'medium' | 'high'
+    deterministic: boolean
+    zeroDataMovement: boolean
+    inputSchema: Record<string, unknown>
+  }>
   assistantProfile?: {
+    executiveMode?: boolean
     assistantName: string
     roleDescription: string
     defaultLanguage: 'fr' | 'en'
@@ -22,6 +36,7 @@ interface AnalyzeOptions {
     title: string
     instructions: string
   }>
+  workspaceContext?: string
 }
 
 export interface ActionProposal {
@@ -32,38 +47,90 @@ export interface ActionProposal {
   confidenceScore?: number
 }
 
-const systemPrompt = `You are Kova, an executive-grade AI operator.
+const actionProposalSchema = z.object({
+  type: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  confidenceScore: z.number().min(0).max(1),
+  parameters: z.record(z.unknown()),
+})
 
-Act like a highly qualified chief of staff and executive secretary:
-- professional, precise, calm, discreet, and proactive
-- excellent at handling Gmail, Google Calendar, Google Drive, Notion, and Google Docs
-- focused on producing actions that are executable, not vague
-- never casual, sloppy, robotic, or overlong
+const analysisResponseSchema = z.object({
+  response: z.string().min(1),
+  proposals: z.array(actionProposalSchema),
+})
+
+const responseFormatJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['response', 'proposals'],
+  properties: {
+    response: {
+      type: 'string',
+      description: 'Short, polished assistant reply in the user language.',
+    },
+    proposals: {
+      type: 'array',
+      description: 'Operational actions to prepare. Use an empty array when no action is appropriate.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['type', 'title', 'description', 'confidenceScore', 'parameters'],
+        properties: {
+          type: {
+            type: 'string',
+          },
+          title: {
+            type: 'string',
+          },
+          description: {
+            type: 'string',
+          },
+          confidenceScore: {
+            type: 'number',
+          },
+          parameters: {
+            type: 'object',
+            additionalProperties: true,
+          },
+        },
+      },
+    },
+  },
+} as const
+
+const systemPrompt = `You are Kova, an advanced AI assistant and operator.
+
+You must perform well in two situations:
+- natural conversation, explanation, brainstorming, and normal questions
+- operational execution through integrations when the user clearly asks for action
+
+When the profile is in executive mode, act like a highly qualified chief of staff and executive secretary:
+- professional, precise, calm, discreet, proactive, and polished
+- never sloppy, robotic, vague, or over-familiar
+- answer the user's actual question directly before falling back to generic helper language
+- avoid filler like "I can help with that" when a concrete answer is possible
 
 Primary rule:
 - If the user is asking you to perform or prepare work in one or more supported apps, return one or two high-quality action proposals depending on the request.
-- If the request is too ambiguous, ask one short clarifying question and return no proposal.
-- If the user is only conversing and no app action is appropriate, return no proposal.
+- If the request is too ambiguous, ask exactly one short clarifying question and return no proposal.
+- If the user is only conversing and no app action is appropriate, return no proposal but still answer naturally and usefully in "response".
+- Do not turn greetings, small talk, or general conversation into app actions.
+- If live workspace context is provided, treat it as trusted connected-app data and answer from it directly when it is sufficient.
+- When the user asks to read, summarize, inspect, or explain connected-app data, prefer a direct answer from the live workspace context and return no proposal.
+- When the user asks for a workflow across connected apps, use the live workspace context to ground the plan or proposal instead of inventing details.
 
-Available actions and required parameters:
-- send_email
-  required parameters: to (string[]), subject (string), body (string)
-- create_calendar_event
-  required parameters: title (string), startTime (ISO datetime), endTime (ISO datetime), attendees (string[])
-  optional parameters: description (string), notes (string)
-- create_notion_page
-  required parameters: title (string), content (string)
-  optional parameters: parentPageId (string)
-- update_notion_page
-  required parameters: pageId (string), content (string)
-- create_google_doc
-  required parameters: title (string)
-  preferred parameters: content (string) or sections (string[])
-- update_google_doc
-  required parameters: documentId (string), content (string)
-- create_google_drive_file
-  required parameters: name (string)
-  optional parameters: content (string), folderName (string), mimeType (string)
+Language and tone rules:
+- Match the user's language unless they explicitly ask for another.
+- Keep the response concise but professional.
+- Sound like a strong operator or executive assistant, not a chatbot.
+- For French, use natural business French.
+- For English, use natural business English.
+
+Tool rule:
+- Only propose action types that are explicitly listed in the runtime tool catalog below.
+- Match the tool input schema as closely as possible.
+- If a needed tool is not present in the runtime catalog, do not invent it.
 
 Behavior rules by app:
 - Gmail: write polished business emails with a clear subject, concise body, explicit next step, and no placeholders unless unavoidable.
@@ -73,6 +140,7 @@ Behavior rules by app:
 - Notion: create or update structured workspace content with clear headings and operational detail.
 - Google Docs: generate structured professional documents, summaries, briefs, or meeting notes.
 - Google Drive: create folders or save polished files that should live in Drive outside Docs.
+- Cross-app workflows: if live context spans multiple sources, synthesize the facts first, then decide whether the request is informational or operational.
 
 Risk rules:
 - Do not invent email recipients, page IDs, or document IDs if they are required and not inferable from context.
@@ -81,8 +149,10 @@ Risk rules:
 
 Output rules:
 - Respond with valid JSON only.
-- Do not wrap JSON in markdown fences.
-- Keep "response" short, polished, and action-oriented.
+- The JSON must match the required schema exactly.
+- Keep "response" polished and user-facing.
+- "response" must never be empty.
+- When no action is proposed, "response" should still be a direct answer to the user.
 - Each proposal must include a numeric "confidenceScore" from 0 to 1.
 
 Required JSON shape:
@@ -101,20 +171,188 @@ Required JSON shape:
 
 If no action is proposed, return an empty proposals array.`
 
-function extractJsonPayload(text: string) {
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    return null
+type ResponsesApiOutputItem = {
+  type?: string
+  content?: Array<{
+    type?: string
+    text?: string
+  }>
+}
+
+type ResponsesApiResponse = {
+  output?: ResponsesApiOutputItem[]
+  incomplete_details?: {
+    reason?: string
+  } | null
+  error?: {
+    message?: string
+  } | null
+}
+
+function buildNonEmptyResponse(userMessage: string, proposals: ActionProposal[]) {
+  if (proposals.length > 0) {
+    return 'J’ai préparé une réponse exploitable.'
   }
 
-  try {
-    return JSON.parse(jsonMatch[0]) as {
-      response?: string
-      proposals?: ActionProposal[]
-    }
-  } catch {
-    return null
+  const normalized = userMessage.trim()
+  if (!normalized) {
+    return 'Je suis prêt.'
   }
+
+  if (/^(bonjour|salut|hello|hey|hi|bonsoir|coucou)\b/i.test(normalized)) {
+    return 'Bonjour. Je peux répondre clairement, structurer une demande ou préparer une action sur tes intégrations.'
+  }
+
+  if (/[?]$/.test(normalized)) {
+    return 'Je peux t’aider sur ce point. Donne-moi si besoin le niveau de détail ou l’action attendue.'
+  }
+
+  return 'Bien reçu.'
+}
+
+function isLegacyModel(value: string) {
+  return value === 'gpt-4.1' || value === 'gpt-4o-mini'
+}
+
+function resolvePreferredModel() {
+  const configuredModel = process.env.OPENAI_MODEL?.trim()
+
+  if (!configuredModel || isLegacyModel(configuredModel)) {
+    return {
+      selected: 'gpt-5.4',
+      configured: configuredModel || null,
+      upgraded: true,
+    }
+  }
+
+  return {
+    selected: configuredModel,
+    configured: configuredModel,
+    upgraded: false,
+  }
+}
+
+function buildModelCandidates() {
+  const preferred = resolvePreferredModel()
+  const candidates = [
+    preferred.selected,
+    'gpt-5-mini',
+    preferred.configured,
+    'gpt-4.1',
+  ].filter((value): value is string => Boolean(value))
+
+  return Array.from(new Set(candidates))
+}
+
+function shouldUseGpt5Controls(model: string) {
+  return model.startsWith('gpt-5')
+}
+
+function resolveReasoningEffort() {
+  const configured = process.env.OPENAI_REASONING_EFFORT?.trim()
+  if (
+    configured === 'minimal' ||
+    configured === 'low' ||
+    configured === 'medium' ||
+    configured === 'high'
+  ) {
+    return configured
+  }
+
+  return 'minimal'
+}
+
+function resolveVerbosity() {
+  const configured = process.env.OPENAI_TEXT_VERBOSITY?.trim()
+  if (configured === 'low' || configured === 'medium' || configured === 'high') {
+    return configured
+  }
+
+  return 'medium'
+}
+
+function extractOutputText(payload: ResponsesApiResponse) {
+  for (const item of payload.output || []) {
+    for (const part of item.content || []) {
+      if (part.type === 'output_text' && typeof part.text === 'string' && part.text.trim()) {
+        return part.text
+      }
+    }
+  }
+
+  return ''
+}
+
+function buildResponsesInput(userMessage: string, conversationHistory: ConversationMessage[]) {
+  return [
+    ...conversationHistory.map((message) => ({
+      role: message.role,
+      content: [
+        {
+          type: 'input_text',
+          text: message.content,
+        },
+      ],
+    })),
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'input_text',
+          text: userMessage,
+        },
+      ],
+    },
+  ]
+}
+
+async function requestStructuredResponse(params: {
+  apiKey: string
+  model: string
+  userMessage: string
+  conversationHistory: ConversationMessage[]
+  effectiveSystemPrompt: string
+}) {
+  const body: Record<string, unknown> = {
+    model: params.model,
+    instructions: params.effectiveSystemPrompt,
+    input: buildResponsesInput(params.userMessage, params.conversationHistory),
+    max_output_tokens: 1200,
+    store: false,
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'kova_agent_turn',
+        schema: responseFormatJsonSchema,
+      },
+      ...(shouldUseGpt5Controls(params.model) ? { verbosity: resolveVerbosity() } : {}),
+    },
+  }
+
+  if (shouldUseGpt5Controls(params.model)) {
+    body.reasoning = {
+      effort: resolveReasoningEffort(),
+    }
+  } else {
+    body.temperature = 0.2
+  }
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.apiKey}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  const payload = await response.json().catch(() => null) as ResponsesApiResponse | null
+  if (!response.ok) {
+    const errorMessage = payload?.error?.message || `OpenAI Responses request failed: ${response.status}`
+    throw Object.assign(new Error(errorMessage), { status: response.status })
+  }
+
+  return payload
 }
 
 async function analyzeWithOpenAI(
@@ -123,59 +361,49 @@ async function analyzeWithOpenAI(
   effectiveSystemPrompt: string
 ): Promise<{ response: string; proposals: ActionProposal[] }> {
   const apiKey = process.env.OPENAI_API_KEY
-  const model = process.env.OPENAI_MODEL || 'gpt-4.1'
 
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is missing.')
   }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: effectiveSystemPrompt },
-        ...conversationHistory.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-        { role: 'user', content: userMessage },
-      ],
-    }),
-  })
+  const modelCandidates = buildModelCandidates()
+  const attemptErrors: string[] = []
 
-  if (!response.ok) {
-    throw new Error(`OpenAI request failed: ${response.status}`)
-  }
-
-  const data = await response.json() as {
-    choices?: Array<{
-      message?: {
-        content?: string
+  for (const model of modelCandidates) {
+    try {
+      const payload = await requestStructuredResponse({
+        apiKey,
+        model,
+        userMessage,
+        conversationHistory,
+        effectiveSystemPrompt,
+      })
+      if (!payload) {
+        throw new Error('OpenAI returned an empty payload.')
       }
-    }>
-  }
 
-  const content = data.choices?.[0]?.message?.content || ''
-  const parsed = extractJsonPayload(content)
+      const rawText = extractOutputText(payload)
+      if (!rawText) {
+        throw new Error(payload.incomplete_details?.reason || 'OpenAI returned an empty response.')
+      }
 
-  if (parsed) {
-    return {
-      response: parsed.response || content,
-      proposals: parsed.proposals || [],
+      const parsed = analysisResponseSchema.parse(JSON.parse(rawText))
+      return {
+        response: parsed.response.trim() || buildNonEmptyResponse(userMessage, parsed.proposals),
+        proposals: parsed.proposals,
+      }
+    } catch (error) {
+      const status = typeof error === 'object' && error && 'status' in error ? (error as { status?: number }).status : undefined
+      const message = error instanceof Error ? error.message : 'Unknown OpenAI error.'
+      attemptErrors.push(`${model}: ${message}`)
+
+      if (status && status !== 400 && status !== 404) {
+        break
+      }
     }
   }
 
-  return {
-    response: content || 'I could not parse the model response.',
-    proposals: [],
-  }
+  throw new Error(attemptErrors.join(' | '))
 }
 
 export async function analyzeUserRequest(
@@ -190,6 +418,7 @@ export async function analyzeUserRequest(
 
   const profileContext = options.assistantProfile
     ? `\nAssistant profile:
+- Executive mode: ${options.assistantProfile.executiveMode ? 'enabled' : 'disabled'}
 - Name: ${options.assistantProfile.assistantName}
 - Role: ${options.assistantProfile.roleDescription}
 - Default language: ${options.assistantProfile.defaultLanguage}
@@ -199,7 +428,12 @@ export async function analyzeUserRequest(
 - Signature block: ${options.assistantProfile.signatureBlock}
 - Execution policy: ${options.assistantProfile.executionPolicy}
 - Confidence threshold: ${options.assistantProfile.confidenceThreshold}
-- Auto resolve known contacts: ${options.assistantProfile.autoResolveKnownContacts}`
+- Auto resolve known contacts: ${options.assistantProfile.autoResolveKnownContacts}
+
+Behavior requirement:
+${options.assistantProfile.executiveMode
+  ? '- Keep an executive-grade tone, answer directly, and only propose actions when the request clearly implies one.'
+  : '- Behave like a strong general assistant first, and only propose actions when the user explicitly asks to use an integration.'}`
     : ''
 
   const skillsContext =
@@ -207,10 +441,30 @@ export async function analyzeUserRequest(
       ? `\nEnabled skills:\n${options.skills.map((skill) => `- ${skill.title}: ${skill.instructions}`).join('\n')}`
       : ''
 
+  const toolsContext =
+    options.tools && options.tools.length > 0
+      ? `\nRuntime tool catalog:\n${options.tools
+          .map(
+            (tool) =>
+              `- ${tool.actionType} (${tool.name}) via ${tool.provider}
+  title: ${tool.title}
+  description: ${tool.description}
+  risk: ${tool.riskLevel}
+  deterministic: ${tool.deterministic ? 'yes' : 'no'}
+  zero data movement: ${tool.zeroDataMovement ? 'yes' : 'no'}
+  input schema: ${JSON.stringify(tool.inputSchema)}`
+          )
+          .join('\n')}`
+      : ''
+
+  const workspaceContext = options.workspaceContext
+    ? `\nLive workspace context:\n${options.workspaceContext}`
+    : ''
+
   return analyzeWithOpenAI(
     userMessage,
     conversationHistory,
-    `${systemPrompt}${profileContext}${skillsContext}${contactsContext}`
+    `${systemPrompt}${profileContext}${skillsContext}${toolsContext}${contactsContext}${workspaceContext}`
   )
 }
 

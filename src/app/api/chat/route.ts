@@ -1,101 +1,24 @@
 import { NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
+import { analyzeUserRequest } from '@/lib/ai/client'
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
-import type { AssistantProfile } from '@/lib/assistant/profile'
-import { asActionParameters, injectExecutionOutputsIntoParameters } from '@/lib/actions/parameter-resolution'
-import { extractNameBeforeEmail, extractRecipientName, findContactByName, listKnownContacts, rememberContact } from '@/lib/contacts'
-import { executePersistedAction } from '@/lib/integrations/execute'
+import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
+import { getWorkspaceGovernance } from '@/lib/agent/governance'
+import { resolveExecutionDecision } from '@/lib/agent/policy'
+import { extractRecipientName, findContactByName, listKnownContacts, rememberContact } from '@/lib/contacts'
 import { findGoogleContactEmail, getValidGoogleAccessToken } from '@/lib/integrations/google'
+import { getErrorStatus } from '@/lib/http/errors'
+import { buildConnectedContextFallbackResponse, buildDeterministicConnectedResponse } from '@/lib/workspace-context/fallback'
+import { resolveConnectedWorkspaceContext } from '@/lib/workspace-context/service'
+import type { ConnectedContextSeed, ConnectedContextSource } from '@/lib/workspace-context/intents'
 
 const requestSchema = z.object({
   content: z.string().min(1).max(4000),
   executionMode: z.enum(['ask', 'auto']).default('ask'),
 })
-
-function getRecipientEmails(parameters: Prisma.JsonValue | Record<string, unknown>) {
-  const record = asActionParameters(parameters)
-  const recipients = Array.isArray(record.to) ? record.to : []
-  return recipients.filter((value): value is string => typeof value === 'string' && value.includes('@'))
-}
-
-function hasPlaceholderRecipient(parameters: Prisma.JsonValue | Record<string, unknown>) {
-  return getRecipientEmails(parameters).some((email) => {
-    const normalized = email.trim().toLowerCase()
-    return normalized === 'recipient@example.com' || normalized.endsWith('@example.com')
-  })
-}
-
-function resolveEffectiveExecutionMode(params: {
-  requestedMode: 'ask' | 'auto'
-  proposals: Array<{ type: string; confidenceScore: number; parameters: Record<string, unknown> }>
-  assistantProfile: AssistantProfile
-}) {
-  if (params.requestedMode === 'ask') {
-    return {
-      effectiveMode: 'ask' as const,
-      reason: 'manual_review',
-    }
-  }
-
-  if (params.assistantProfile.executionPolicy === 'always_ask') {
-    return {
-      effectiveMode: 'ask' as const,
-      reason: 'profile_requires_review',
-    }
-  }
-
-  const hasPlaceholderReviewRisk = params.proposals.some(
-    (proposal) => proposal.type === 'send_email' && hasPlaceholderRecipient(proposal.parameters)
-  )
-  if (hasPlaceholderReviewRisk) {
-    return {
-      effectiveMode: 'ask' as const,
-      reason: 'missing_recipient',
-    }
-  }
-
-  const lowestConfidence = params.proposals.reduce(
-    (current, proposal) => Math.min(current, proposal.confidenceScore),
-    1
-  )
-  if (params.proposals.length > 0 && lowestConfidence < params.assistantProfile.confidenceThreshold) {
-    return {
-      effectiveMode: 'ask' as const,
-      reason: 'confidence_below_threshold',
-    }
-  }
-
-  return {
-    effectiveMode: 'auto' as const,
-    reason: 'auto_approved',
-  }
-}
-
-async function rememberEmailRecipients(params: {
-  parameters: Prisma.JsonValue | Record<string, unknown>
-  content: string
-  userId: string
-  workspaceId: string
-}) {
-  const record = asActionParameters(params.parameters)
-  const recipients = getRecipientEmails(record)
-
-  for (const recipient of recipients) {
-    await rememberContact({
-      userId: params.userId,
-      workspaceId: params.workspaceId,
-      email: recipient,
-      name:
-        typeof record.resolvedContactName === 'string'
-          ? record.resolvedContactName
-          : extractNameBeforeEmail(params.content, recipient),
-    })
-  }
-}
 
 async function resolveEmailContactFromGoogle(params: {
   content: string
@@ -159,6 +82,59 @@ function buildWelcomeMessage() {
   }
 }
 
+function extractConnectedContextSeed(messages: Array<{ role: string; content: string; metadata: unknown }>): ConnectedContextSeed | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'assistant') {
+      continue
+    }
+
+    if (message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata)) {
+      const metadata = message.metadata as Record<string, unknown>
+      const sources = Array.isArray(metadata.connectedContextSources)
+        ? metadata.connectedContextSources.filter(
+            (value): value is ConnectedContextSource =>
+              value === 'gmail' || value === 'calendar' || value === 'google_drive' || value === 'notion'
+          )
+        : []
+      const timeframe = metadata.connectedContextTimeframe
+
+      if (
+        sources.length > 0 &&
+        (timeframe === 'today' || timeframe === 'week' || timeframe === 'recent')
+      ) {
+        return {
+          sources,
+          timeframe,
+          asksForAvailability: metadata.connectedContextAvailabilityMode === true,
+          asksForPriorities: metadata.connectedContextPriorityMode === true,
+        }
+      }
+    }
+
+    const content = String(message.content || '')
+    if (/gmail:/i.test(content)) {
+      return {
+        sources: ['gmail'],
+        timeframe: /aujourd'hui|today/i.test(content) ? 'today' : 'recent',
+        asksForAvailability: false,
+        asksForPriorities: false,
+      }
+    }
+
+    if (/calendar:/i.test(content) || /creneaux libres|free windows/i.test(content)) {
+      return {
+        sources: ['calendar'],
+        timeframe: /cette semaine|this week/i.test(content) ? 'week' : 'today',
+        asksForAvailability: /creneaux libres|free windows/i.test(content),
+        asksForPriorities: false,
+      }
+    }
+  }
+
+  return null
+}
+
 export async function GET() {
   try {
     const { dbUserId, workspaceId } = await getAppContext()
@@ -193,17 +169,8 @@ export async function GET() {
       })),
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-
-    return NextResponse.json(
-      {
-        messages: [buildWelcomeMessage()],
-        proposals: [],
-        fallback: true,
-        error: message,
-      },
-      { status: 200 }
-    )
+    const { status, message } = getErrorStatus(error)
+    return NextResponse.json({ error: message }, { status })
   }
 }
 
@@ -221,13 +188,91 @@ export async function POST(request: Request) {
       take: 20,
     })
 
-    const [knownContacts, assistantProfile] = await Promise.all([
+    const [knownContacts, assistantProfile, governance] = await Promise.all([
       listKnownContacts({
         userId: dbUserId,
         workspaceId,
       }),
       getAssistantProfile(workspaceId),
+      getWorkspaceGovernance({
+        workspaceId,
+        userId: dbUserId,
+      }),
     ])
+
+    const conversationHistory = previousMessages.map((message) => ({
+      role: message.role as 'user' | 'assistant',
+      content: message.content,
+    }))
+    const connectedContextSeed = extractConnectedContextSeed(previousMessages)
+
+    const connectedContextResult = await resolveConnectedWorkspaceContext({
+      content: body.content,
+      userId: dbUserId,
+      workspaceId,
+      contextSeed: connectedContextSeed,
+    })
+
+    if (connectedContextResult?.request.mode === 'read') {
+      let liveResponse =
+        buildDeterministicConnectedResponse(
+          body.content,
+          connectedContextResult,
+          assistantProfile.defaultLanguage
+        ) || ''
+
+      if (!liveResponse) {
+        try {
+          const aiResult = await analyzeUserRequest(
+            body.content,
+            conversationHistory,
+            {
+              assistantProfile,
+              workspaceContext: connectedContextResult.workspaceContext,
+            }
+          )
+          liveResponse = aiResult.response
+        } catch {
+          liveResponse = buildConnectedContextFallbackResponse(
+            connectedContextResult,
+            assistantProfile.defaultLanguage
+          )
+        }
+      }
+
+      const userMessage = await prisma.message.create({
+        data: {
+          content: body.content,
+          role: 'user',
+          userId: dbUserId,
+          workspaceId,
+        },
+      })
+
+      const assistantMessage = await prisma.message.create({
+        data: {
+          content: liveResponse,
+          role: 'assistant',
+          metadata: {
+            ...connectedContextResult.metadata,
+            proposalCount: 0,
+            workspaceRole: governance.role,
+          },
+          userId: dbUserId,
+          workspaceId,
+        },
+      })
+
+      return NextResponse.json({
+        userMessage,
+        assistantMessage,
+        proposals: [],
+        executionMessages: [],
+        effectiveExecutionMode: 'ask',
+        executionModeReason: 'connected_workspace_read',
+        workspaceRole: governance.role,
+      })
+    }
 
     const googleResolvedContact =
       assistantProfile.autoResolveKnownContacts
@@ -248,18 +293,23 @@ export async function POST(request: Request) {
 
     const agentResult = await runAgentTurn(
       body.content,
-      previousMessages.map((message) => ({
-        role: message.role as 'user' | 'assistant',
-        content: message.content,
-      })),
+      conversationHistory,
       effectiveKnownContacts,
-      assistantProfile
+      assistantProfile,
+      governance.allowedActionTypes,
+      {
+        workspaceContext: connectedContextResult?.workspaceContext,
+      }
     )
 
     const proposals = agentResult.proposals
-    const executionDecision = resolveEffectiveExecutionMode({
+    const executionDecision = resolveExecutionDecision({
       requestedMode: body.executionMode,
-      proposals,
+      proposals: proposals.map((proposal) => ({
+        type: proposal.type,
+        confidenceScore: proposal.confidenceScore,
+        parameters: proposal.parameters,
+      })),
       assistantProfile,
     })
     const effectiveExecutionMode = executionDecision.effectiveMode
@@ -279,6 +329,8 @@ export async function POST(request: Request) {
         role: 'assistant',
         metadata: {
           proposalCount: agentResult.proposals.length,
+          workspaceRole: governance.role,
+          ...(connectedContextResult?.metadata || {}),
         },
         userId: dbUserId,
         workspaceId,
@@ -313,130 +365,61 @@ export async function POST(request: Request) {
 
     let executionMessages: Array<Awaited<ReturnType<typeof prisma.message.create>>> = []
     let autoExecutionFailed = false
-
-    for (const createdAction of createdActions) {
-      if (createdAction.type === 'send_email') {
-        await rememberEmailRecipients({
-          parameters: createdAction.parameters,
-          content: body.content,
-          userId: dbUserId,
-          workspaceId,
-        })
-      }
-    }
+    let reviewableActions = createdActions
 
     if (createdActions.length > 0 && effectiveExecutionMode === 'auto') {
-      try {
-        const priorOutputs: Array<Record<string, unknown>> = []
+      const batchResult = await executePersistedActionBatch({
+        actions: createdActions.map((action) => ({
+          id: action.id,
+          type: action.type,
+          title: action.title,
+          description: action.description,
+          parameters: action.parameters,
+          workspaceId,
+          userId: dbUserId,
+        })),
+        trigger: 'auto',
+      })
 
-        for (const createdAction of createdActions) {
-          const effectiveParameters = injectExecutionOutputsIntoParameters(createdAction.parameters, priorOutputs)
-
-          const execution = await executePersistedAction({
-            action: {
-              id: createdAction.id,
-              type: createdAction.type as Parameters<typeof executePersistedAction>[0]['action']['type'],
-              title: createdAction.title,
-              description: createdAction.description,
-              parameters: effectiveParameters as Prisma.JsonObject,
-              workspaceId,
-              userId: dbUserId,
+      if (batchResult.completed.length > 0) {
+        const executionMessage = await prisma.message.create({
+          data: {
+            content:
+              batchResult.completed.length === 1
+                ? `C'est bon. "${batchResult.completed[0].action.title}" a ete execute automatiquement. ${batchResult.completed[0].execution.details}`
+                : `C'est bon. ${batchResult.completed.length} actions ont ete executees automatiquement.`,
+            role: 'assistant',
+            metadata: {
+              actionStatus: 'completed',
+              actionCount: batchResult.completed.length,
+              executionMode: 'auto',
+              executionReason: executionDecision.reason,
             },
-          })
+            userId: dbUserId,
+            workspaceId,
+          },
+        })
 
-          priorOutputs.push(execution.output)
+        executionMessages.push(executionMessage)
+      }
 
-          await prisma.action.update({
-            where: { id: createdAction.id },
-            data: {
-              status: 'completed',
-              executedAt: new Date(),
-              parameters: effectiveParameters as Prisma.JsonObject,
-              result: {
-                confidenceScore:
-                  typeof asActionParameters(createdAction.parameters).confidenceScore === 'number'
-                    ? asActionParameters(createdAction.parameters).confidenceScore
-                    : 0.85,
-                details: execution.details,
-                output: execution.output as Prisma.JsonObject,
-                autoApproved: true,
-              } as Prisma.JsonObject,
-            },
-          })
-
-          await prisma.executionLog.create({
-            data: {
-              actionType: createdAction.type,
-              status: 'success',
-              details: execution.output as Prisma.JsonObject,
-              actionId: createdAction.id,
-              workspaceId,
-              userId: dbUserId,
-            },
-          })
-
-          const executionMessage = await prisma.message.create({
-            data: {
-              content: `C'est bon. "${createdAction.title}" a ete execute automatiquement. ${execution.details}`,
-              role: 'assistant',
-              metadata: {
-                actionId: createdAction.id,
-                actionStatus: 'completed',
-                executionMode: 'auto',
-                executionReason: executionDecision.reason,
-              },
-              userId: dbUserId,
-              workspaceId,
-            },
-          })
-
-          executionMessages.push(executionMessage)
-        }
-      } catch (error) {
+      if (batchResult.failed) {
         autoExecutionFailed = true
-        const message = error instanceof Error ? error.message : 'Automatic execution failed.'
-
-        await Promise.all(
-          createdActions.map((createdAction) =>
-            prisma.action.update({
-              where: { id: createdAction.id },
-              data: {
-                status: 'pending',
-                result: {
-                  confidenceScore:
-                    typeof asActionParameters(createdAction.parameters).confidenceScore === 'number'
-                      ? asActionParameters(createdAction.parameters).confidenceScore
-                      : 0.85,
-                  autoApproved: false,
-                  autoExecutionAttempted: true,
-                  autoExecutionError: message,
-                } as Prisma.JsonObject,
-              },
-            })
-          )
-        )
-
-        await Promise.all(
-          createdActions.map((createdAction) =>
-            prisma.executionLog.create({
-              data: {
-                actionType: createdAction.type,
-                status: 'failure',
-                error: message,
-                actionId: createdAction.id,
-                workspaceId,
-                userId: dbUserId,
-              },
-            })
-          )
+        reviewableActions = createdActions.filter((createdAction) =>
+          batchResult.blocked.some((blockedAction) => blockedAction.action.id === createdAction.id)
         )
 
         const executionMessage = await prisma.message.create({
           data: {
-            content: `Je n'ai pas pu executer la demande automatiquement: ${message}. J'ai garde les actions en attente de validation.`,
+            content:
+              batchResult.blocked.length > 0
+                ? `L'execution automatique s'est arretee sur "${batchResult.failed.action.title}": ${batchResult.failed.error}. ${batchResult.blocked.length} action(s) restent en attente de validation.`
+                : `L'execution automatique s'est arretee sur "${batchResult.failed.action.title}": ${batchResult.failed.error}.`,
             role: 'assistant',
             metadata: {
-              actionStatus: 'pending',
+              actionId: batchResult.failed.action.id,
+              actionStatus: 'failed',
+              blockedActionCount: batchResult.blocked.length,
               executionMode: 'auto',
               autoExecutionFailed: true,
               executionReason: executionDecision.reason,
@@ -446,7 +429,7 @@ export async function POST(request: Request) {
           },
         })
 
-        executionMessages = [executionMessage]
+        executionMessages.push(executionMessage)
       }
     }
 
@@ -454,8 +437,8 @@ export async function POST(request: Request) {
       userMessage,
       assistantMessage,
       proposals:
-        createdActions.length > 0 && (effectiveExecutionMode === 'ask' || autoExecutionFailed)
-          ? createdActions.map((createdAction) => ({
+        reviewableActions.length > 0 && (effectiveExecutionMode === 'ask' || autoExecutionFailed)
+          ? reviewableActions.map((createdAction) => ({
               id: createdAction.id,
               type: createdAction.type,
               title: createdAction.title,
@@ -466,13 +449,14 @@ export async function POST(request: Request) {
       executionMessages,
       effectiveExecutionMode: autoExecutionFailed ? 'ask' : effectiveExecutionMode,
       executionModeReason: autoExecutionFailed ? 'auto_execution_failed' : executionDecision.reason,
+      workspaceRole: governance.role,
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
     }
 
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const { status, message } = getErrorStatus(error)
+    return NextResponse.json({ error: message }, { status })
   }
 }

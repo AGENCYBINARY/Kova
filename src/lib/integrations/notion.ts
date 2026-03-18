@@ -120,6 +120,115 @@ async function notionFetch(path: string, token: string, init?: RequestInit) {
   return response.json()
 }
 
+export interface NotionPageSummary {
+  id: string
+  title: string
+  url: string | null
+  lastEditedTime: string | null
+  preview: string
+}
+
+function extractNotionTitle(properties: Record<string, unknown> | undefined) {
+  if (!properties) {
+    return 'Untitled'
+  }
+
+  for (const value of Object.values(properties)) {
+    if (!value || typeof value !== 'object') {
+      continue
+    }
+
+    const property = value as {
+      type?: string
+      title?: Array<{ plain_text?: string }>
+      rich_text?: Array<{ plain_text?: string }>
+    }
+
+    if (property.type === 'title' && Array.isArray(property.title)) {
+      const title = property.title.map((item) => item.plain_text || '').join('').trim()
+      if (title) {
+        return title
+      }
+    }
+  }
+
+  return 'Untitled'
+}
+
+function extractPlainText(richText: Array<{ plain_text?: string }> | undefined) {
+  return (richText || []).map((item) => item.plain_text || '').join('').trim()
+}
+
+function blockToPreview(block: Record<string, unknown>) {
+  const type = typeof block.type === 'string' ? block.type : ''
+  const content = block[type]
+
+  if (!content || typeof content !== 'object') {
+    return ''
+  }
+
+  const richText = (content as { rich_text?: Array<{ plain_text?: string }> }).rich_text
+  return extractPlainText(richText)
+}
+
+export async function searchNotionPages(
+  token: string,
+  options: {
+    query?: string
+    maxResults?: number
+  } = {}
+) {
+  const data = await notionFetch('/search', token, {
+    method: 'POST',
+    body: JSON.stringify({
+      query: options.query?.trim() || undefined,
+      filter: {
+        property: 'object',
+        value: 'page',
+      },
+      sort: {
+        direction: 'descending',
+        timestamp: 'last_edited_time',
+      },
+      page_size: Math.max(1, Math.min(options.maxResults || 10, 20)),
+    }),
+  }) as {
+    results?: Array<{
+      id: string
+      url?: string
+      last_edited_time?: string
+      properties?: Record<string, unknown>
+    }>
+  }
+
+  return (data.results || []).map((page) => ({
+    id: page.id,
+    title: extractNotionTitle(page.properties),
+    url: page.url || null,
+    lastEditedTime: page.last_edited_time || null,
+    preview: '',
+  } satisfies NotionPageSummary))
+}
+
+export async function readNotionPagePreview(
+  token: string,
+  pageId: string,
+  options: {
+    maxBlocks?: number
+  } = {}
+) {
+  const data = await notionFetch(`/blocks/${pageId}/children?page_size=${Math.max(1, Math.min(options.maxBlocks || 6, 20))}`, token) as {
+    results?: Array<Record<string, unknown>>
+  }
+
+  return (data.results || [])
+    .map(blockToPreview)
+    .filter(Boolean)
+    .slice(0, options.maxBlocks || 6)
+    .join(' ')
+    .trim()
+}
+
 export async function createNotionPage(token: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
   const parentPageId = process.env.NOTION_PARENT_PAGE_ID || String(parameters.parentPageId || '')
 
