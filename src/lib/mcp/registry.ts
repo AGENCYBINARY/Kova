@@ -300,18 +300,50 @@ export function getToolByName(name: string) {
   return tools.find((tool) => tool.name === name) || null
 }
 
+export function prepareAndValidateToolInputByActionType(
+  actionType: DashboardAction['type'],
+  parameters: Record<string, unknown>
+) {
+  const tool = getToolByActionType(actionType)
+  if (!tool) {
+    throw new Error(`No MCP tool registered for action type "${actionType}".`)
+  }
+
+  const prepared = prepareActionParameters(actionType, parameters)
+  const validated = tool.inputSchema.parse(prepared)
+
+  return {
+    tool,
+    prepared,
+    validated,
+  }
+}
+
+export function prepareAndValidateToolInputByName(
+  name: string,
+  parameters: Record<string, unknown>
+) {
+  const tool = getToolByName(name)
+  if (!tool) {
+    throw new Error(`Unknown tool "${name}".`)
+  }
+
+  const prepared = prepareActionParameters(tool.actionType, parameters)
+  const validated = tool.inputSchema.parse(prepared)
+
+  return {
+    tool,
+    prepared,
+    validated,
+  }
+}
+
 export async function executeToolByActionType(params: {
   actionType: DashboardAction['type']
   parameters: Record<string, unknown>
   context: McpExecutionContext
 }): Promise<IntegrationExecutionResult> {
-  const tool = getToolByActionType(params.actionType)
-  if (!tool) {
-    throw new Error(`No MCP tool registered for action type "${params.actionType}".`)
-  }
-
-  const prepared = prepareActionParameters(params.actionType, params.parameters)
-  const validated = tool.inputSchema.parse(prepared)
+  const { tool, validated } = prepareAndValidateToolInputByActionType(params.actionType, params.parameters)
   const execution = await tool.execute(params.context, validated)
 
   return {

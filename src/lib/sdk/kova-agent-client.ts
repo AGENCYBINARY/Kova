@@ -16,6 +16,13 @@ export interface ExecuteAgentActionInput {
   requireApproval?: boolean
 }
 
+export interface McpRequestInput {
+  jsonrpc?: '2.0'
+  id?: string | number
+  method: 'initialize' | 'tools/list' | 'tools/call'
+  params?: Record<string, unknown>
+}
+
 export class KovaAgentClient {
   private readonly baseUrl: string
   private readonly headers: Record<string, string>
@@ -41,6 +48,52 @@ export class KovaAgentClient {
     return this.request('/api/agent/execute', {
       method: 'POST',
       body: JSON.stringify(input),
+    })
+  }
+
+  async initializeMcp(id: string | number = 'init') {
+    return this.mcpRequest({
+      jsonrpc: '2.0',
+      id,
+      method: 'initialize',
+    })
+  }
+
+  async listMcpTools(id: string | number = 'tools') {
+    return this.mcpRequest({
+      jsonrpc: '2.0',
+      id,
+      method: 'tools/list',
+    })
+  }
+
+  async callMcpTool(params: {
+    name: string
+    arguments?: Record<string, unknown>
+    requireApproval?: boolean
+    id?: string | number
+  }) {
+    return this.mcpRequest({
+      jsonrpc: '2.0',
+      id: params.id || 'call',
+      method: 'tools/call',
+      params: {
+        name: params.name,
+        arguments: params.arguments || {},
+        ...(typeof params.requireApproval === 'boolean' ? { requireApproval: params.requireApproval } : {}),
+      },
+    })
+  }
+
+  async mcpRequest(input: McpRequestInput) {
+    return this.request('/api/mcp', {
+      method: 'POST',
+      body: JSON.stringify({
+        jsonrpc: input.jsonrpc || '2.0',
+        id: input.id ?? null,
+        method: input.method,
+        params: input.params || {},
+      }),
     })
   }
 

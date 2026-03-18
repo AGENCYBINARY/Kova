@@ -3,11 +3,12 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { analyzeUserRequest, isLowValueAssistantResponse } from '@/lib/ai/client'
+import { createAuditLog } from '@/lib/audit/service'
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import { getWorkspaceGovernance } from '@/lib/agent/governance'
-import { resolveExecutionDecision } from '@/lib/agent/policy'
+import { inferRiskLevel, resolveExecutionDecision } from '@/lib/agent/policy'
 import { extractRecipientName, findContactByName, listKnownContacts, rememberContact } from '@/lib/contacts'
 import { findGoogleContactEmail, getValidGoogleAccessToken } from '@/lib/integrations/google'
 import { getErrorStatus } from '@/lib/http/errors'
@@ -387,6 +388,29 @@ export async function POST(request: Request) {
           )
         )
       : []
+
+    if (createdActions.length > 0 && effectiveExecutionMode === 'ask') {
+      await Promise.all(
+        createdActions.map((action) =>
+          createAuditLog({
+            actionType: action.type,
+            status: 'review_required',
+            actionId: action.id,
+            workspaceId,
+            userId: dbUserId,
+            riskLevel: inferRiskLevel(
+              action.type as typeof proposals[number]['type'],
+              action.parameters as Record<string, unknown>
+            ),
+            executionReason: executionDecision.reason,
+            executionTrigger: 'review',
+            details: {
+              source: 'chat',
+            },
+          })
+        )
+      )
+    }
 
     let executionMessages: Array<Awaited<ReturnType<typeof prisma.message.create>>> = []
     let autoExecutionFailed = false

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { asActionParameters } from '@/lib/actions/parameter-resolution'
+import { createAuditLog } from '@/lib/audit/service'
 import { getErrorStatus } from '@/lib/http/errors'
 
 export async function POST(
@@ -63,18 +64,17 @@ export async function POST(
 
     await Promise.all(
       actionsToReject.map((item) =>
-        prisma.executionLog.create({
-          data: {
-            actionType: item.type,
-            status: 'failure',
-            details: {
-              reason: 'Rejected before execution',
-              actionCount: actionsToReject.length,
-            } as Prisma.JsonObject,
-            error: 'User rejected action',
-            actionId: item.id,
-            workspaceId,
-            userId: dbUserId,
+        createAuditLog({
+          actionType: item.type,
+          status: 'rejected',
+          actionId: item.id,
+          workspaceId,
+          userId: dbUserId,
+          error: 'User rejected action',
+          executionTrigger: 'review',
+          details: {
+            reason: 'Rejected before execution',
+            actionCount: actionsToReject.length,
           },
         })
       )

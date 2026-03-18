@@ -26,6 +26,11 @@ export const agentPlatformManifest = {
       execute: '/api/agent/execute',
       manifest: '/api/agent/manifest',
     },
+    mcp: {
+      endpoint: '/api/mcp',
+      protocolVersion: '2024-11-05',
+      methods: ['initialize', 'tools/list', 'tools/call'],
+    },
     sdk: {
       javascript: '@/lib/sdk/v1',
       version: '1.0.0',
@@ -41,8 +46,18 @@ export const agentPlatformManifest = {
   governanceCapabilities: [
     'approval_routing',
     'workspace_scoping',
+    'tool_visibility_filtering',
+    'role_based_tool_permissions',
     'risk_labelling',
     'execution_logging',
+  ],
+  runtimeCapabilities: [
+    'conversation',
+    'connected_context_reads',
+    'tool_preparation',
+    'tool_validation',
+    'provider_execution',
+    'audit_trails',
   ],
 } as const
 

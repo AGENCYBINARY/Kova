@@ -8,7 +8,13 @@ export function getErrorStatus(error: unknown) {
     }
   }
 
-  if (message === 'Workspace not found.' || message === 'Action not found.' || message === 'Integration not found.') {
+  if (
+    message === 'Workspace not found.' ||
+    message === 'Action not found.' ||
+    message === 'Integration not found.' ||
+    message === 'Tool not found.' ||
+    message.startsWith('Unknown tool "')
+  ) {
     return {
       status: 404,
       message,

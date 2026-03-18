@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { executeBatch, type BatchAction } from '@/lib/actions/batch-execution'
 import { asActionParameters, injectExecutionOutputsIntoParameters } from '@/lib/actions/parameter-resolution'
+import { createAuditLog } from '@/lib/audit/service'
 import { extractNameBeforeEmail, rememberContact } from '@/lib/contacts'
 import { executePersistedAction } from '@/lib/integrations/execute'
 
@@ -112,15 +113,23 @@ export async function executePersistedActionBatch(params: {
         },
       })
 
-      await prisma.executionLog.create({
-        data: {
-          actionType: persistedAction.type,
-          status: 'success',
-          details: execution.output as Prisma.JsonObject,
-          actionId: persistedAction.id,
-          workspaceId: persistedAction.workspaceId,
-          userId: persistedAction.userId,
-        },
+      await createAuditLog({
+        actionType: persistedAction.type,
+        status: 'success',
+        actionId: persistedAction.id,
+        workspaceId: persistedAction.workspaceId,
+        userId: persistedAction.userId,
+        details: execution.output,
+        provider:
+          typeof execution.output.provider === 'string'
+            ? (execution.output.provider as 'gmail' | 'calendar' | 'google_docs' | 'google_drive' | 'notion')
+            : undefined,
+        toolName: typeof execution.output.toolName === 'string' ? execution.output.toolName : undefined,
+        toolVersion: typeof execution.output.toolVersion === 'string' ? execution.output.toolVersion : undefined,
+        deterministic: typeof execution.output.deterministic === 'boolean' ? execution.output.deterministic : undefined,
+        zeroDataMovement:
+          typeof execution.output.zeroDataMovement === 'boolean' ? execution.output.zeroDataMovement : undefined,
+        executionTrigger: params.trigger,
       })
 
       await rememberSuccessfulEmailRecipients({
@@ -149,14 +158,16 @@ export async function executePersistedActionBatch(params: {
         },
       })
 
-      await prisma.executionLog.create({
-        data: {
-          actionType: persistedAction.type,
-          status: 'failure',
-          error,
-          actionId: persistedAction.id,
-          workspaceId: persistedAction.workspaceId,
-          userId: persistedAction.userId,
+      await createAuditLog({
+        actionType: persistedAction.type,
+        status: 'failure',
+        actionId: persistedAction.id,
+        workspaceId: persistedAction.workspaceId,
+        userId: persistedAction.userId,
+        error,
+        executionTrigger: params.trigger,
+        details: {
+          failedDuring: 'batch_execution',
         },
       })
     },

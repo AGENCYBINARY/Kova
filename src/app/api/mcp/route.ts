@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 import { z } from 'zod'
-import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
-import { getAssistantProfile } from '@/lib/assistant/store'
-import { assertActionAllowed, getWorkspaceGovernance } from '@/lib/agent/governance'
+import { executeAgentToolRequest } from '@/lib/agent/tool-execution'
+import { getWorkspaceGovernance } from '@/lib/agent/governance'
 import { buildAgentManifest } from '@/lib/agent/manifest'
-import { inferRiskLevel, resolveExecutionDecision } from '@/lib/agent/policy'
-import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
-import { getToolByName, listMcpTools } from '@/lib/mcp/registry'
+import { listMcpTools } from '@/lib/mcp/registry'
+import { getErrorStatus } from '@/lib/http/errors'
 
 const mcpRequestSchema = z.object({
   jsonrpc: z.literal('2.0'),
@@ -37,13 +34,10 @@ export async function POST(request: Request) {
   try {
     const payload = mcpRequestSchema.parse(await request.json())
     const { dbUserId, workspaceId } = await getAppContext()
-    const [governance, assistantProfile] = await Promise.all([
-      getWorkspaceGovernance({
-        workspaceId,
-        userId: dbUserId,
-      }),
-      getAssistantProfile(workspaceId),
-    ])
+    const governance = await getWorkspaceGovernance({
+      workspaceId,
+      userId: dbUserId,
+    })
 
     if (payload.method === 'initialize') {
       return buildSuccess(payload.id, {
@@ -69,10 +63,12 @@ export async function POST(request: Request) {
           description: tool.description,
           inputSchema: tool.inputSchema,
           annotations: {
+            actionType: tool.actionType,
             provider: tool.provider,
             riskLevel: tool.riskLevel,
             deterministic: tool.deterministic,
             zeroDataMovement: tool.zeroDataMovement,
+            version: tool.version,
           },
         }))
 
@@ -89,107 +85,46 @@ export async function POST(request: Request) {
         arguments: z.record(z.unknown()).default({}),
         requireApproval: z.boolean().optional(),
       }).parse(payload.params || {})
-
-      const tool = getToolByName(params.name)
-      if (!tool) {
-        return buildError(payload.id, -32602, `Unknown tool "${params.name}".`)
-      }
-
-      assertActionAllowed({
-        role: governance.role,
-        allowedActionTypes: governance.allowedActionTypes,
-        actionType: tool.actionType,
-      })
-
-      const executionDecision = resolveExecutionDecision({
-        requestedMode: params.requireApproval ? 'ask' : 'auto',
-        proposals: [
-          {
-            type: tool.actionType,
-            confidenceScore:
-              typeof params.arguments.confidenceScore === 'number'
-                ? params.arguments.confidenceScore
-                : assistantProfile.confidenceThreshold,
-            parameters: params.arguments,
-          },
-        ],
-        assistantProfile,
-      })
-
-      const action = await prisma.action.create({
-        data: {
-          type: tool.actionType,
-          title: tool.title,
-          description: tool.description,
-          parameters: params.arguments as Prisma.JsonObject,
-          status: 'pending',
+      const result = await executeAgentToolRequest({
+        toolName: params.name,
+        parameters: params.arguments,
+        requireApproval: params.requireApproval,
+        context: {
           workspaceId,
           userId: dbUserId,
         },
+        trigger: 'api',
       })
 
-      if (executionDecision.effectiveMode === 'ask') {
+      if (result.mode === 'pending_review') {
         return buildSuccess(payload.id, {
           content: [
             {
               type: 'text',
-              text: `Action queued for approval: ${tool.title}`,
+              text: `Action queued for approval: ${result.action.title}`,
             },
           ],
-          actionId: action.id,
-          governance: {
-            workspaceRole: governance.role,
-            riskLevel: inferRiskLevel(tool.actionType, params.arguments),
-            deterministic: tool.deterministic,
-            zeroDataMovement: tool.zeroDataMovement,
-            executionReason: executionDecision.reason,
-          },
+          actionId: result.action.id,
+          governance: result.governance,
         })
       }
-
-      const batchResult = await executePersistedActionBatch({
-        actions: [
-          {
-            id: action.id,
-            type: action.type,
-            title: action.title,
-            description: action.description,
-            parameters: action.parameters,
-            workspaceId,
-            userId: dbUserId,
-          },
-        ],
-        trigger: 'api',
-      })
-
-      if (batchResult.failed || batchResult.completed.length === 0) {
-        return buildError(payload.id, -32000, batchResult.failed?.error || 'Action execution requires manual review.')
-      }
-
-      const execution = batchResult.completed[0].execution
 
       return buildSuccess(payload.id, {
         content: [
           {
             type: 'text',
-            text: execution.details,
+            text: result.execution.details,
           },
         ],
-        actionId: action.id,
-        structuredContent: execution.output,
-        governance: {
-          workspaceRole: governance.role,
-          riskLevel: inferRiskLevel(tool.actionType, params.arguments),
-          deterministic: tool.deterministic,
-          zeroDataMovement: tool.zeroDataMovement,
-          executionReason: executionDecision.reason,
-        },
+        actionId: result.action.id,
+        structuredContent: result.execution.output,
+        governance: result.governance,
       })
     }
 
     return buildError(payload.id, -32601, `Method "${payload.method}" not found.`)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown MCP error.'
+    const { message } = getErrorStatus(error)
     return buildError(null, -32000, message)
   }
 }
