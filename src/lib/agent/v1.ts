@@ -356,6 +356,7 @@ function buildFallbackResponseWithContactsAndProfile(
     /(confirmation|confirm|confirmer|lien|link|visio|meet|invite)/.test(normalized)
   const explicitlyWantsSeparateEmail =
     /(send an email|send email|email recap|mail recap|follow-up email|envoie un mail|envoyer un mail|envoie un email|envoyer un email|courriel distinct)/.test(normalized)
+  const explicitEmailIntent = isEmailSendIntent(normalized)
 
   if (
     isMeetingRequest &&
@@ -374,7 +375,7 @@ function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
-  if (isMeetingRequest || (wantsMeetingConfirmation && knownContact)) {
+  if ((isMeetingRequest || (wantsMeetingConfirmation && knownContact)) && !explicitEmailIntent) {
     return {
       response:
         language === 'en'

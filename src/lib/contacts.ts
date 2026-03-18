@@ -134,7 +134,7 @@ export function findContactByName(input: string, contacts: KnownContact[]) {
 
 export function extractRecipientName(input: string) {
   const match = input.match(
-    /(?:to|for|a|à)\s+([A-Za-zÀ-ÿ' -]{2,80}?)(?:\s+(?:about|subject|with|saying|regarding|concernant|au sujet de|pour dire|et tu lui dis|et dis lui)\b|[,.!?]|$)/i
+    /(?:to|for|a|à|avec|with)\s+([A-Za-zÀ-ÿ' -]{2,80}?)(?:\s+(?:about|subject|with|saying|regarding|concernant|au sujet de|pour dire|et tu lui dis|et dis lui)\b|[,.!?]|$)/i
   )
 
   return match?.[1]?.trim() || null
