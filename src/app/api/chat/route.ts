@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
-import { analyzeUserRequest } from '@/lib/ai/client'
+import { analyzeUserRequest, isLowValueAssistantResponse } from '@/lib/ai/client'
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
@@ -232,30 +232,37 @@ export async function POST(request: Request) {
     })
 
     if (connectedContextResult?.request.mode === 'read') {
-      let liveResponse =
-        buildDeterministicConnectedResponse(
+      let liveResponse = ''
+
+      try {
+        const aiResult = await analyzeUserRequest(
           body.content,
-          connectedContextResult,
-          assistantProfile.defaultLanguage
-        ) || ''
+          conversationHistory,
+          {
+            assistantProfile,
+            workspaceContext: connectedContextResult.workspaceContext,
+            behaviorMode: 'connected_read',
+          }
+        )
+
+        if (aiResult.proposals.length === 0 && !isLowValueAssistantResponse(aiResult.response)) {
+          liveResponse = aiResult.response
+        }
+      } catch {
+        // Fall back to deterministic connected summaries when the model is unavailable.
+      }
 
       if (!liveResponse) {
-        try {
-          const aiResult = await analyzeUserRequest(
+        liveResponse =
+          buildDeterministicConnectedResponse(
             body.content,
-            conversationHistory,
-            {
-              assistantProfile,
-              workspaceContext: connectedContextResult.workspaceContext,
-            }
-          )
-          liveResponse = aiResult.response
-        } catch {
-          liveResponse = buildConnectedContextFallbackResponse(
+            connectedContextResult,
+            assistantProfile.defaultLanguage
+          ) ||
+          buildConnectedContextFallbackResponse(
             connectedContextResult,
             assistantProfile.defaultLanguage
           )
-        }
       }
 
       const userMessage = await prisma.message.create({

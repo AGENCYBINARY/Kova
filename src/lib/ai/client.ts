@@ -37,6 +37,7 @@ interface AnalyzeOptions {
     instructions: string
   }>
   workspaceContext?: string
+  behaviorMode?: 'default' | 'conversation' | 'connected_read'
 }
 
 export interface ActionProposal {
@@ -126,6 +127,9 @@ Language and tone rules:
 - Sound like a strong operator or executive assistant, not a chatbot.
 - For French, use natural business French.
 - For English, use natural business English.
+- Answer the user's actual question first.
+- Do not list capabilities unless the user explicitly asks what you can do.
+- Do not fall back to generic helper language when a direct answer is possible.
 
 Tool rule:
 - Only propose action types that are explicitly listed in the runtime tool catalog below.
@@ -171,6 +175,19 @@ Required JSON shape:
 
 If no action is proposed, return an empty proposals array.`
 
+const lowValueResponsePatterns = [
+  /^bonjour\.\s+tu peux me parler normalement/i,
+  /^hello\.\s+you can talk to me normally/i,
+  /^je peux transformer cela en action/i,
+  /^i can convert that into an action/i,
+  /^je peux répondre normalement/i,
+  /^i can answer normally/i,
+  /^je peux t[’']aider sur ce point/i,
+  /^i can help with that/i,
+  /^bien reçu\.?$/i,
+  /^understood\.?$/i,
+]
+
 type ResponsesApiOutputItem = {
   type?: string
   content?: Array<{
@@ -200,14 +217,23 @@ function buildNonEmptyResponse(userMessage: string, proposals: ActionProposal[])
   }
 
   if (/^(bonjour|salut|hello|hey|hi|bonsoir|coucou)\b/i.test(normalized)) {
-    return 'Bonjour. Je peux répondre clairement, structurer une demande ou préparer une action sur tes intégrations.'
+    return 'Bonjour.'
   }
 
   if (/[?]$/.test(normalized)) {
-    return 'Je peux t’aider sur ce point. Donne-moi si besoin le niveau de détail ou l’action attendue.'
+    return 'Je n’ai pas assez de matière pour répondre proprement.'
   }
 
-  return 'Bien reçu.'
+  return 'Je suis prêt.'
+}
+
+export function isLowValueAssistantResponse(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (!normalized) {
+    return true
+  }
+
+  return lowValueResponsePatterns.some((pattern) => pattern.test(normalized))
 }
 
 function isLegacyModel(value: string) {
@@ -461,10 +487,26 @@ ${options.assistantProfile.executiveMode
     ? `\nLive workspace context:\n${options.workspaceContext}`
     : ''
 
+  const behaviorContext =
+    options.behaviorMode === 'conversation'
+      ? `\nConversation mode:
+- This turn is plain conversation, not an app workflow.
+- Answer directly and naturally.
+- Return no proposals.
+- Do not enumerate tools or capabilities unless the user explicitly asks for them.`
+      : options.behaviorMode === 'connected_read'
+        ? `\nConnected read mode:
+- This turn is a read-only question about connected app data.
+- Use the live workspace context directly.
+- Answer with the concrete facts that matter most instead of meta-commentary.
+- If the context is sufficient, return no proposals.
+- If a source needs reconnect or data is missing, say that plainly in one sentence.`
+        : ''
+
   return analyzeWithOpenAI(
     userMessage,
     conversationHistory,
-    `${systemPrompt}${profileContext}${skillsContext}${toolsContext}${contactsContext}${workspaceContext}`
+    `${systemPrompt}${behaviorContext}${profileContext}${skillsContext}${toolsContext}${contactsContext}${workspaceContext}`
   )
 }
 

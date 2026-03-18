@@ -12,6 +12,8 @@ interface MessageBubbleProps {
 export function MessageBubble({ role, content, isStreaming, thinking, userFallback }: MessageBubbleProps) {
   const isUser = role === 'user'
   const lines = content.split('\n')
+  const hasVisibleContent = lines.some((line) => line.trim().length > 0)
+  const shouldRenderBubble = hasVisibleContent || (isStreaming && !thinking)
 
   return (
     <div className={`${styles.message} ${isUser ? styles.user : styles.assistant}`}>
@@ -44,28 +46,27 @@ export function MessageBubble({ role, content, isStreaming, thinking, userFallba
             </div>
             {thinking ? (
               <span className={styles.avatarThinkingDots} aria-hidden="true">
-                ...
+                <span className={styles.avatarThinkingDot} />
+                <span className={styles.avatarThinkingDot} />
+                <span className={styles.avatarThinkingDot} />
               </span>
             ) : null}
           </div>
         )}
       </div>
       <div className={styles.content}>
-        <div className={styles.bubble}>
-          <div className={styles.text}>
-            {lines.map((line, index) => (
-              <p key={`${role}-${index}`} className={styles.textLine}>
-                {line || '\u00A0'}
-              </p>
-            ))}
+        {shouldRenderBubble ? (
+          <div className={styles.bubble}>
+            <div className={styles.text}>
+              {lines.map((line, index) => (
+                <p key={`${role}-${index}`} className={styles.textLine}>
+                  {line || '\u00A0'}
+                </p>
+              ))}
+            </div>
+            {isStreaming && <span className={styles.cursor} />}
           </div>
-          {thinking ? (
-            <span className={styles.thinkingDots} aria-hidden="true">
-              ...
-            </span>
-          ) : null}
-          {isStreaming && <span className={styles.cursor} />}
-        </div>
+        ) : null}
       </div>
     </div>
   )

@@ -85,20 +85,24 @@ function buildConversationalResponse(input: string, profile?: AssistantProfile) 
   const normalized = normalizeInput(input)
 
   if (isGreetingOnly(input)) {
-    return language === 'en'
-      ? 'Hello. You can talk to me normally, ask a question, or ask me to act through Gmail, Calendar, Notion, Google Docs, or Google Drive.'
-      : 'Bonjour. Tu peux me parler normalement, me poser une question, ou me demander d’agir via Gmail, Calendar, Notion, Google Docs ou Google Drive.'
+    return language === 'en' ? 'Hello.' : 'Bonjour.'
   }
 
   if (/parle moi|parle-moi/.test(normalized)) {
     return language === 'en'
-      ? 'Of course. Talk to me normally. I can answer, help you think through something, or prepare actions when you want to use an integration.'
-      : 'Bien sûr. Tu peux me parler normalement. Je peux répondre, t’aider à réfléchir, ou préparer des actions quand tu veux utiliser une intégration.'
+      ? 'Of course. What do you want to work through?'
+      : 'Bien sûr. Tu veux qu’on travaille sur quoi ?'
+  }
+
+  if (/comment ca va|comment ça va|ca va|ça va/.test(normalized)) {
+    return language === 'en'
+      ? 'I am here and ready. What do you want to handle?'
+      : 'Oui. Je suis prêt. Tu veux traiter quoi ?'
   }
 
   return language === 'en'
-    ? 'I can answer normally and also help you act through Gmail, Calendar, Notion, Google Docs, or Google Drive when needed.'
-    : 'Je peux répondre normalement et aussi t’aider à agir via Gmail, Calendar, Notion, Google Docs ou Google Drive quand c’est utile.'
+    ? 'Tell me what you need.'
+    : 'Dis-moi ce qu’il te faut.'
 }
 
 function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
@@ -463,6 +467,30 @@ export async function runAgentTurn(
   )
 
   if (isConversationalInput(input)) {
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const aiResult = await analyzeUserRequest(
+          input,
+          conversationHistory,
+          {
+            assistantProfile,
+            skills: executiveAssistantSkills.filter((skill) =>
+              assistantProfile?.enabledSkills?.includes(skill.id) ?? true
+            ),
+            workspaceContext: options.workspaceContext,
+            behaviorMode: 'conversation',
+          }
+        )
+
+        return {
+          response: aiResult.response,
+          proposals: [],
+        }
+      } catch {
+        // Fall back to deterministic conversation if the model is unavailable.
+      }
+    }
+
     return {
       response: buildConversationalResponse(input, assistantProfile),
       proposals: [],
