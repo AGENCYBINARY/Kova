@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { asActionParameters } from '@/lib/actions/parameter-resolution'
+import { getErrorStatus } from '@/lib/http/errors'
 
 export async function POST(
   _request: Request,
@@ -22,6 +23,10 @@ export async function POST(
       return NextResponse.json({ error: 'Action not found.' }, { status: 404 })
     }
 
+    if (action.status !== 'pending') {
+      return NextResponse.json({ error: 'Action is no longer pending.' }, { status: 409 })
+    }
+
     const actionParameters = asActionParameters(action.parameters)
     const requestGroupId =
       typeof actionParameters.requestGroupId === 'string' ? actionParameters.requestGroupId : null
@@ -29,6 +34,7 @@ export async function POST(
     const groupedActions = requestGroupId
       ? await prisma.action.findMany({
           where: {
+            status: 'pending',
             userId: dbUserId,
             workspaceId,
             parameters: {
@@ -96,7 +102,7 @@ export async function POST(
       assistantMessage,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const { status, message } = getErrorStatus(error)
+    return NextResponse.json({ error: message }, { status })
   }
 }

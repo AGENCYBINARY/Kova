@@ -8,6 +8,8 @@ coverage
 *.log
 .DS_Store
 *.bak
+.archive
+.claude/launch.json
 .claude/settings.local.json
 prisma/dev.db
 .playwright-cli

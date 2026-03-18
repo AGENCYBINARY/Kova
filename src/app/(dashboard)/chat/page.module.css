@@ -8,15 +8,22 @@
 }
 
 .header {
-  padding: var(--space-lg);
-  border-bottom: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(14, 19, 28, 0.96), rgba(11, 15, 22, 0.92)),
-    var(--bg-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  min-height: 58px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(11, 15, 22, 0.52), rgba(11, 15, 22, 0.2));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.headerInner {
+  padding: 18px 18px 14px;
 }
 
 .eyebrow {
-  margin-bottom: 6px;
+  margin: 0 0 6px;
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -24,26 +31,23 @@
 }
 
 .title {
+  margin: 0;
   font-size: 30px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: var(--space-xs);
 }
 
 .subtitle {
+  margin: 8px 0 0;
   font-size: 14px;
   color: var(--text-secondary);
-  max-width: 720px;
+  max-width: 760px;
 }
 
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-md) 0 var(--space-md);
-}
-
-@media (max-width: 860px) {
-  .header {
-    padding: var(--space-md);
-  }
+  padding: 0 0 var(--space-md);
+  margin-top: -58px;
+  padding-top: 58px;
 }

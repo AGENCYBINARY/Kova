@@ -2,6 +2,40 @@
 
 Kova is a Next.js operator console for AI-assisted execution across Gmail, Google Calendar, Google Meet, Google Docs, Google Drive, and Notion.
 
+## Agent Platform Direction
+
+Kova is being upgraded into an agent platform with:
+
+- AI agents for data prep
+- zero data movement
+- governance-first security
+- deterministic tool execution
+- APIs and SDKs for embedding
+- MCP-style integration tooling
+
+Architecture notes:
+
+- [docs/agent-platform.md](/Users/agencybinary/Documents/CODEX/docs/agent-platform.md)
+
+Key agent endpoints:
+
+- `GET /api/agent/manifest`
+- `GET /api/agent/execute`
+- `POST /api/agent/execute`
+- `POST /api/mcp`
+
+Quick MCP test:
+
+```bash
+npm run mcp:test -- tools/list
+```
+
+Authenticated MCP test from terminal:
+
+```bash
+KOVA_COOKIE='__session=...' npm run mcp:test -- tools/list
+```
+
 ## Stack
 
 - Next.js 14
@@ -45,6 +79,15 @@ This project relies on local `.env` / `.env.local` files for:
 - Google OAuth
 - Notion OAuth
 - `NEXT_PUBLIC_APP_URL`
+- `OPENAI_API_KEY`
+
+Recommended AI defaults:
+
+```env
+OPENAI_MODEL="gpt-5.4"
+OPENAI_REASONING_EFFORT="minimal"
+OPENAI_TEXT_VERBOSITY="medium"
+```
 
 For Clerk redirects, use:
 

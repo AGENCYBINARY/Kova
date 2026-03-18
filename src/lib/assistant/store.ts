@@ -103,10 +103,19 @@ export async function getAssistantProfile(workspaceId: string) {
 }
 
 export async function updateAssistantProfile(workspaceId: string, profile: AssistantProfile) {
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { preferences: true },
+  })
+  const preferences = asObject(workspace?.preferences)
+
   await prisma.workspace.update({
     where: { id: workspaceId },
     data: {
-      preferences: profile as unknown as Prisma.JsonObject,
+      preferences: {
+        ...preferences,
+        ...profile,
+      } as unknown as Prisma.JsonObject,
     },
   })
 

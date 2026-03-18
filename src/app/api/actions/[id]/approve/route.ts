@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
-import { asActionParameters, injectExecutionOutputsIntoParameters } from '@/lib/actions/parameter-resolution'
-import { extractNameBeforeEmail, rememberContact } from '@/lib/contacts'
-import { executePersistedAction } from '@/lib/integrations/execute'
+import { asActionParameters } from '@/lib/actions/parameter-resolution'
+import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
+import { getErrorStatus } from '@/lib/http/errors'
 
 export async function POST(
   _request: Request,
@@ -24,6 +23,10 @@ export async function POST(
       return NextResponse.json({ error: 'Action not found.' }, { status: 404 })
     }
 
+    if (action.status !== 'pending') {
+      return NextResponse.json({ error: 'Action is no longer pending.' }, { status: 409 })
+    }
+
     const actionParameters = asActionParameters(action.parameters)
     const requestGroupId =
       typeof actionParameters.requestGroupId === 'string' ? actionParameters.requestGroupId : null
@@ -31,6 +34,7 @@ export async function POST(
     const groupedActions = requestGroupId
       ? await prisma.action.findMany({
           where: {
+            status: 'pending',
             userId: dbUserId,
             workspaceId,
             parameters: {
@@ -43,98 +47,44 @@ export async function POST(
       : [action]
 
     const actionsToExecute = groupedActions.length > 0 ? groupedActions : [action]
-
-    await prisma.action.updateMany({
-      where: {
-        id: { in: actionsToExecute.map((item) => item.id) },
-      },
-      data: { status: 'approved' },
+    const batchResult = await executePersistedActionBatch({
+      actions: actionsToExecute.map((pendingAction) => ({
+        id: pendingAction.id,
+        type: pendingAction.type,
+        title: pendingAction.title,
+        description: pendingAction.description,
+        parameters: pendingAction.parameters,
+        workspaceId,
+        userId: dbUserId,
+      })),
+      trigger: 'approval',
     })
-    const priorOutputs: Array<Record<string, unknown>> = []
-    const completedActions = []
 
-    for (const pendingAction of actionsToExecute) {
-      const pendingParameters = asActionParameters(pendingAction.parameters)
-      const confidenceScore =
-        typeof pendingParameters.confidenceScore === 'number' ? pendingParameters.confidenceScore : 0.85
-      const effectiveParameters = injectExecutionOutputsIntoParameters(pendingAction.parameters, priorOutputs)
-
-      const execution = await executePersistedAction({
-        action: {
-          id: pendingAction.id,
-          type: pendingAction.type as Parameters<typeof executePersistedAction>[0]['action']['type'],
-          title: pendingAction.title,
-          description: pendingAction.description,
-          parameters: effectiveParameters as Prisma.JsonObject,
-          workspaceId,
-          userId: dbUserId,
+    const updatedActions = await prisma.action.findMany({
+      where: {
+        id: {
+          in: actionsToExecute.map((item) => item.id),
         },
-      })
-
-      priorOutputs.push(execution.output)
-
-      const completedAction = await prisma.action.update({
-        where: { id: pendingAction.id },
-        data: {
-          status: 'completed',
-          executedAt: new Date(),
-          parameters: effectiveParameters as Prisma.JsonObject,
-          result: {
-            confidenceScore,
-            details: execution.details,
-            output: execution.output as Prisma.JsonObject,
-          } as Prisma.JsonObject,
-        },
-      })
-
-      await prisma.executionLog.create({
-        data: {
-          actionType: completedAction.type,
-          status: 'success',
-          details: execution.output as Prisma.JsonObject,
-          actionId: completedAction.id,
-          workspaceId,
-          userId: dbUserId,
-        },
-      })
-
-      if (completedAction.type === 'send_email') {
-        const recipients =
-          Array.isArray(effectiveParameters.to)
-            ? effectiveParameters.to.filter((value): value is string => typeof value === 'string')
-            : []
-
-        for (const recipient of recipients) {
-          if (!recipient.includes('@')) continue
-          await rememberContact({
-            userId: dbUserId,
-            workspaceId,
-            email: recipient,
-            name:
-              typeof effectiveParameters.resolvedContactName === 'string'
-                ? effectiveParameters.resolvedContactName
-                : extractNameBeforeEmail(completedAction.description, recipient),
-          })
-        }
-      }
-
-      completedActions.push({
-        action: completedAction,
-        details: execution.details,
-      })
-    }
+      },
+      orderBy: { createdAt: 'asc' },
+    })
 
     const assistantMessage = await prisma.message.create({
       data: {
         content:
-          completedActions.length > 1
-            ? `C'est bon. ${completedActions.length} actions ont ete executees avec succes.`
-            : `C'est bon. "${completedActions[0].action.title}" a ete execute. ${completedActions[0].details}`,
+          batchResult.failed
+            ? batchResult.blocked.length > 0
+              ? `${batchResult.completed.length} action(s) executee(s). Echec sur "${batchResult.failed.action.title}": ${batchResult.failed.error}. ${batchResult.blocked.length} action(s) restent en attente.`
+              : `Echec sur "${batchResult.failed.action.title}": ${batchResult.failed.error}.`
+            : batchResult.completed.length > 1
+              ? `C'est bon. ${batchResult.completed.length} actions ont ete executees avec succes.`
+              : `C'est bon. "${batchResult.completed[0].action.title}" a ete execute. ${batchResult.completed[0].execution.details}`,
         role: 'assistant',
         metadata: {
           actionId: action.id,
-          actionStatus: 'completed',
-          actionCount: completedActions.length,
+          actionStatus: batchResult.failed ? 'partial_failure' : 'completed',
+          actionCount: updatedActions.length,
+          blockedActionCount: batchResult.blocked.length,
         },
         workspaceId,
         userId: dbUserId,
@@ -142,11 +92,12 @@ export async function POST(
     })
 
     return NextResponse.json({
-      actions: completedActions.map((item) => item.action),
+      actions: updatedActions,
       assistantMessage,
+      partialFailure: Boolean(batchResult.failed),
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const { status, message } = getErrorStatus(error)
+    return NextResponse.json({ error: message }, { status })
   }
 }
