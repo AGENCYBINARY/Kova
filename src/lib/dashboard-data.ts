@@ -42,6 +42,8 @@ export interface DashboardIntegration {
   connectedAccount: string | null
   lastSync: string | null
   health: 'healthy' | 'warning' | 'attention'
+  warnings?: string[]
+  needsReconnect?: boolean
 }
 
 export const dashboardActions: DashboardAction[] = [

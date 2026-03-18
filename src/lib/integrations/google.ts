@@ -16,6 +16,29 @@ const GOOGLE_SCOPES = [
 ]
 
 const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive'] as const
+const GOOGLE_REQUIRED_SCOPES = {
+  gmail: [
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.readonly',
+  ],
+  calendar: [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.readonly',
+  ],
+  google_docs: [
+    'https://www.googleapis.com/auth/documents',
+  ],
+  google_drive: [
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.metadata.readonly',
+  ],
+} as const
+
+export interface GoogleIntegrationCapabilityState {
+  grantedScopes: string[]
+  missingScopes: string[]
+  needsReconnect: boolean
+}
 
 function getGoogleRedirectUri() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -129,6 +152,7 @@ export async function persistGoogleTokens(params: {
   refreshToken?: string
   expiresIn: number
   connectedAccount: string | null
+  grantedScopes?: string[]
 }) {
   const encryptedAccessToken = encryptSecret(params.accessToken)
   const encryptedRefreshToken = params.refreshToken ? encryptSecret(params.refreshToken) : null
@@ -151,11 +175,40 @@ export async function persistGoogleTokens(params: {
           metadata: {
             connectedAccount: params.connectedAccount,
             provider: 'google',
+            grantedScopes: params.grantedScopes || [],
           },
         },
       })
     )
   )
+}
+
+export function getGoogleGrantedScopes(metadata: unknown) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return []
+  }
+
+  const grantedScopes = (metadata as Record<string, unknown>).grantedScopes
+  if (!Array.isArray(grantedScopes)) {
+    return []
+  }
+
+  return grantedScopes.filter((scope): scope is string => typeof scope === 'string')
+}
+
+export function getGoogleIntegrationCapabilityState(
+  provider: typeof GOOGLE_PROVIDER_TYPES[number],
+  metadata: unknown
+): GoogleIntegrationCapabilityState {
+  const grantedScopes = getGoogleGrantedScopes(metadata)
+  const requiredScopes = GOOGLE_REQUIRED_SCOPES[provider] || []
+  const missingScopes = requiredScopes.filter((scope) => !grantedScopes.includes(scope))
+
+  return {
+    grantedScopes,
+    missingScopes,
+    needsReconnect: missingScopes.length > 0,
+  }
 }
 
 export async function getValidGoogleAccessToken(integration: {

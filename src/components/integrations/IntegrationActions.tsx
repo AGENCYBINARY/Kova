@@ -6,9 +6,10 @@ import { Button } from '@/components/ui'
 interface IntegrationActionsProps {
   provider: 'google' | 'notion' | 'slack'
   status: 'connected' | 'disconnected' | 'error'
+  needsReconnect?: boolean
 }
 
-export function IntegrationActions({ provider, status }: IntegrationActionsProps) {
+export function IntegrationActions({ provider, status, needsReconnect }: IntegrationActionsProps) {
   const router = useRouter()
 
   const handleRefresh = async () => {
@@ -32,6 +33,13 @@ export function IntegrationActions({ provider, status }: IntegrationActionsProps
   if (status === 'connected') {
     return (
       <>
+        {needsReconnect ? (
+          <a href={`/api/integrations/connect/${provider}`}>
+            <Button variant="primary" size="sm">
+              Reconnect
+            </Button>
+          </a>
+        ) : null}
         <Button variant="secondary" size="sm" onClick={handleRefresh}>
           Refresh
         </Button>

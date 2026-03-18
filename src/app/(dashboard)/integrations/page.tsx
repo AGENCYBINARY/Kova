@@ -107,6 +107,15 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                       Last sync: {new Date(integration.lastSync!).toLocaleString()}
                     </span>
                   </div>
+                  {integration.warnings && integration.warnings.length > 0 ? (
+                    <div className={styles.warningList}>
+                      {integration.warnings.map((warning) => (
+                        <div key={warning} className={styles.warningItem}>
+                          {warning}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className={styles.disconnectedInfo}>
@@ -124,6 +133,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                         : 'slack'
                   }
                   status={integration.status}
+                  needsReconnect={integration.needsReconnect}
                 />
               </div>
             </Card>

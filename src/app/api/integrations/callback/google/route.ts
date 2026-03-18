@@ -29,6 +29,7 @@ export async function GET(request: Request) {
     refreshToken: tokens.refresh_token,
     expiresIn: tokens.expires_in,
     connectedAccount,
+    grantedScopes: tokens.scope.split(/\s+/).filter(Boolean),
   })
 
   const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/integrations?connected=google`)

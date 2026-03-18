@@ -1,13 +1,8 @@
 import { prisma } from '@/lib/db/prisma'
-import {
-  approvalActivity,
-  dashboardIntegrations as fallbackIntegrations,
-  dashboardMetrics as fallbackMetrics,
-  executionHistory as fallbackHistory,
-  pendingActions as fallbackPendingActions,
-  type DashboardAction,
-  type DashboardIntegration,
-} from '@/lib/dashboard-data'
+import { getAppContext } from '@/lib/app-context'
+import type { DashboardAction, DashboardIntegration } from '@/lib/dashboard-data'
+import { buildDashboardScopeWhere } from '@/lib/dashboard/query'
+import { getGoogleIntegrationCapabilityState } from '@/lib/integrations/google'
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -117,6 +112,19 @@ function mapIntegration(record: {
     slack: 'S',
   }
 
+  const googleCapabilityState =
+    record.type === 'gmail' ||
+    record.type === 'calendar' ||
+    record.type === 'google_docs' ||
+    record.type === 'google_drive'
+      ? getGoogleIntegrationCapabilityState(record.type, record.metadata)
+      : null
+
+  const warnings =
+    googleCapabilityState?.needsReconnect
+      ? ['Reconnect Google to grant the latest read and write permissions for this surface.']
+      : []
+
   return {
     id: record.type as DashboardIntegration['id'],
     name: appName,
@@ -130,9 +138,13 @@ function mapIntegration(record: {
     health:
       record.status === 'error'
         ? 'attention'
+        : googleCapabilityState?.needsReconnect
+          ? 'warning'
         : record.lastSyncAt && Date.now() - record.lastSyncAt.getTime() < 1000 * 60 * 60 * 24
           ? 'healthy'
           : 'warning',
+    warnings,
+    needsReconnect: googleCapabilityState?.needsReconnect || false,
   }
 }
 
@@ -177,77 +189,87 @@ export interface DashboardBundle {
   pendingActions: DashboardAction[]
   executionHistory: DashboardAction[]
   integrations: DashboardIntegration[]
-  approvalActivity: typeof approvalActivity
+  approvalActivity: Array<{
+    id: string
+    label: string
+    description: string
+    at: string
+  }>
   metrics: {
     pending: number
     connectedIntegrations: number
     completedToday: number
     failureRate: number
   }
-  source: 'database' | 'mock'
+  source: 'database'
 }
 
 export async function getDashboardBundle(): Promise<DashboardBundle> {
-  try {
-    const [actions, integrations] = await Promise.all([
-      prisma.action.findMany({
-        orderBy: [{ createdAt: 'desc' }],
-        take: 50,
-      }),
-      prisma.integration.findMany({
-        orderBy: [{ updatedAt: 'desc' }],
-        take: 20,
-      }),
-    ])
+  const { dbUserId, workspaceId } = await getAppContext()
+  const scopeWhere = buildDashboardScopeWhere({
+    workspaceId,
+    userId: dbUserId,
+  })
+  const [actions, integrations] = await Promise.all([
+    prisma.action.findMany({
+      where: scopeWhere,
+      orderBy: [{ createdAt: 'desc' }],
+      take: 50,
+    }),
+    prisma.integration.findMany({
+      where: scopeWhere,
+      orderBy: [{ updatedAt: 'desc' }],
+      take: 20,
+    }),
+  ])
 
-    if (actions.length === 0 && integrations.length === 0) {
-      return {
-        pendingActions: fallbackPendingActions,
-        executionHistory: fallbackHistory,
-        integrations: fallbackIntegrations,
-        approvalActivity,
-        metrics: fallbackMetrics,
-        source: 'mock',
-      }
-    }
+  const mappedActions = actions.map(mapAction)
+  const mappedIntegrations = integrations.map(mapIntegration)
+  const pendingActions = mappedActions.filter((action) => action.status === 'pending')
+  const executionHistory = mappedActions.filter((action) => action.status !== 'pending')
+  const completedToday = mappedActions.filter((action) => {
+    if (action.status !== 'completed' || !action.executedAt) return false
+    const executed = new Date(action.executedAt)
+    const now = new Date()
+    return executed.toDateString() === now.toDateString()
+  }).length
 
-    const mappedActions = actions.map(mapAction)
-    const mappedIntegrations = integrations.map(mapIntegration)
-    const pendingActions = mappedActions.filter((action) => action.status === 'pending')
-    const executionHistory = mappedActions.filter((action) => action.status !== 'pending')
-    const completedToday = mappedActions.filter((action) => {
-      if (action.status !== 'completed' || !action.executedAt) return false
-      const executed = new Date(action.executedAt)
-      const now = new Date()
-      return executed.toDateString() === now.toDateString()
-    }).length
+  const approvalActivity = [
+    ...pendingActions.slice(0, 2).map((action) => ({
+      id: `pending-${action.id}`,
+      label: 'Approval queue updated',
+      description: `${action.title} is waiting for review.`,
+      at: action.createdAt,
+    })),
+    ...executionHistory.slice(0, 3).map((action) => ({
+      id: `history-${action.id}`,
+      label:
+        action.status === 'completed'
+          ? 'Action completed'
+          : action.status === 'failed'
+            ? 'Action failed'
+            : 'Action reviewed',
+      description: action.details || action.title,
+      at: action.executedAt || action.createdAt,
+    })),
+  ]
+    .sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime())
+    .slice(0, 5)
 
-    const visibleIntegrations = mappedIntegrations.length > 0 ? mappedIntegrations : fallbackIntegrations
-
-    return {
-      pendingActions,
-      executionHistory,
-      integrations: visibleIntegrations,
-      approvalActivity,
-      metrics: {
-        pending: pendingActions.length,
-        connectedIntegrations: visibleIntegrations.filter((integration) => integration.status === 'connected').length,
-        completedToday,
-        failureRate:
-          mappedActions.length > 0
-            ? Math.round((mappedActions.filter((action) => action.status === 'failed').length / mappedActions.length) * 100)
-            : 0,
-      },
-      source: 'database',
-    }
-  } catch {
-    return {
-      pendingActions: fallbackPendingActions,
-      executionHistory: fallbackHistory,
-      integrations: fallbackIntegrations,
-      approvalActivity,
-      metrics: fallbackMetrics,
-      source: 'mock',
-    }
+  return {
+    pendingActions,
+    executionHistory,
+    integrations: mappedIntegrations,
+    approvalActivity,
+    metrics: {
+      pending: pendingActions.length,
+      connectedIntegrations: mappedIntegrations.filter((integration) => integration.status === 'connected').length,
+      completedToday,
+      failureRate:
+        mappedActions.length > 0
+          ? Math.round((mappedActions.filter((action) => action.status === 'failed').length / mappedActions.length) * 100)
+          : 0,
+    },
+    source: 'database',
   }
 }

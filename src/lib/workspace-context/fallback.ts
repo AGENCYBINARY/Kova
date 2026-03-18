@@ -3,6 +3,8 @@ import type { ConnectedContextSource, ConnectedContextRequest } from '@/lib/work
 interface SourceMetadataSummary {
   source: ConnectedContextSource
   connected?: boolean
+  needsReconnect?: boolean
+  missingScopes?: string[]
   messageCount?: number
   unreadCount?: number
   messages?: Array<{
@@ -71,6 +73,12 @@ export function buildConnectedContextFallbackResponse(
       return language === 'en'
         ? [`${summary.source}: read failed`]
         : [`${summary.source}: lecture indisponible`]
+    }
+
+    if (summary.needsReconnect) {
+      return language === 'en'
+        ? [`${summary.source}: reconnect required for latest permissions`]
+        : [`${summary.source}: reconnexion requise pour les permissions recentes`]
     }
 
     if (summary.connected === false) {
@@ -225,6 +233,61 @@ export function buildDeterministicConnectedResponse(
   const shouldUseNotionContext =
     Boolean(notionSummary) &&
     (result.request.sources.includes('notion') && (requestHasSingleSource || asksPages))
+
+  if (result.request.asksForPriorities) {
+    const briefLines: string[] = []
+
+    if (gmailSummary) {
+      const messages = Array.isArray(gmailSummary.messages) ? gmailSummary.messages : []
+      const unreadMessages = messages.filter((message) => message.unread)
+      briefLines.push(
+        language === 'en'
+          ? `Inbox: ${gmailSummary.messageCount || 0} email(s), ${gmailSummary.unreadCount || 0} unread.`
+          : `Boite mail: ${gmailSummary.messageCount || 0} email(s), ${gmailSummary.unreadCount || 0} non lus.`
+      )
+      if (unreadMessages[0]) {
+        briefLines.push(
+          language === 'en'
+            ? `Top unread: ${formatGmailMessageLine(unreadMessages[0], 0, language)}`
+            : `Principal non lu: ${formatGmailMessageLine(unreadMessages[0], 0, language)}`
+        )
+      }
+    }
+
+    if (calendarSummary) {
+      const events = Array.isArray(calendarSummary.events) ? calendarSummary.events : []
+      if (events[0]) {
+        briefLines.push(
+          language === 'en'
+            ? `Next meeting: ${formatCalendarEventLine(events[0], 0, language)}`
+            : `Prochain rendez-vous: ${formatCalendarEventLine(events[0], 0, language)}`
+        )
+      } else {
+        briefLines.push(
+          language === 'en'
+            ? 'Agenda: no scheduled event in the loaded window.'
+            : "Agenda: aucun evenement programme dans la fenetre chargee."
+        )
+      }
+    }
+
+    if (notionSummary) {
+      const pages = Array.isArray(notionSummary.pages) ? notionSummary.pages : []
+      if (pages[0]) {
+        briefLines.push(
+          language === 'en'
+            ? `Most relevant page: ${formatNotionPageLine(pages[0], 0, language)}`
+            : `Page la plus pertinente: ${formatNotionPageLine(pages[0], 0, language)}`
+        )
+      }
+    }
+
+    if (briefLines.length > 0) {
+      return language === 'en'
+        ? `Daily priority brief:\n${briefLines.join('\n')}`
+        : `Brief priorites du jour:\n${briefLines.join('\n')}`
+    }
+  }
 
   if (shouldUseGmailContext && gmailSummary) {
     const messages = Array.isArray(gmailSummary.messages) ? gmailSummary.messages : []

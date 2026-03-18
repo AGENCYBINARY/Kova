@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import {
   computeCalendarAvailability,
+  getGoogleIntegrationCapabilityState,
   getValidGoogleAccessToken,
   listGoogleCalendarEvents,
   listTodayGmailMessages,
@@ -336,6 +337,26 @@ async function resolveSourceContext(params: {
       connectedAccount: getIntegrationConnectedAccount(integration.metadata),
       workspaceName: getIntegrationWorkspaceName(integration.metadata),
     })
+  }
+
+  if (
+    integrationType === 'gmail' ||
+    integrationType === 'calendar' ||
+    integrationType === 'google_drive'
+  ) {
+    const capabilityState = getGoogleIntegrationCapabilityState(integrationType, integration.metadata)
+    if (capabilityState.needsReconnect) {
+      return {
+        source: params.source,
+        lines: [`${params.source}: reconnect required`, '- latest permissions are not granted on this Google token'],
+        metadata: {
+          source: params.source,
+          connected: true,
+          needsReconnect: true,
+          missingScopes: capabilityState.missingScopes,
+        },
+      } satisfies SourceContextBlock
+    }
   }
 
   const accessToken = await getValidGoogleAccessToken(integration)
