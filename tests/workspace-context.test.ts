@@ -194,6 +194,34 @@ test('connected context fallback stays concise across multiple sources', () => {
   assert.match(summary, /notion: 4 pages correspondantes/)
 })
 
+test('connected context fallback surfaces reconnect-required permissions', () => {
+  const summary = buildConnectedContextFallbackResponse(
+    {
+      request: {
+        mode: 'read',
+        sources: ['gmail'],
+        timeframe: 'today',
+        asksForAvailability: false,
+        asksForPriorities: false,
+        searchQuery: null,
+      },
+      workspaceContext: 'unused',
+      metadata: {
+        connectedContextSummary: [
+          {
+            source: 'gmail',
+            needsReconnect: true,
+            missingScopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+          },
+        ],
+      },
+    },
+    'fr'
+  )
+
+  assert.match(summary, /reconnexion requise/)
+})
+
 test('deterministic calendar availability response lists free windows', () => {
   const response = buildDeterministicConnectedResponse(
     'quelles sont mes disponibilites aujourd hui ?',
@@ -469,4 +497,72 @@ test('deterministic gmail unread response isolates the unread email', () => {
   assert.match(response || '', /Le message non lu est/)
   assert.match(response || '', /Contrat Q2/)
   assert.doesNotMatch(response || '', /Point produit/)
+})
+
+test('deterministic priority brief combines gmail, calendar and notion', () => {
+  const response = buildDeterministicConnectedResponse(
+    'prepare-moi mes priorites du jour',
+    {
+      request: {
+        mode: 'read',
+        sources: ['gmail', 'calendar', 'notion'],
+        timeframe: 'today',
+        asksForAvailability: false,
+        asksForPriorities: true,
+        searchQuery: null,
+      },
+      workspaceContext: 'unused',
+      metadata: {
+        connectedContextSummary: [
+          {
+            source: 'gmail',
+            messageCount: 3,
+            unreadCount: 1,
+            messages: [
+              {
+                from: 'Alice <alice@client.com>',
+                subject: 'Contrat Q2',
+                snippet: 'Validation attendue avant 16h.',
+                unread: true,
+              },
+            ],
+          },
+          {
+            source: 'calendar',
+            eventCount: 2,
+            availabilityCount: 1,
+            events: [
+              {
+                title: 'Point equipe',
+                startTime: '2026-03-18T10:30:00.000Z',
+                endTime: '2026-03-18T11:00:00.000Z',
+                attendees: ['alice@company.com'],
+                location: null,
+                meetLink: 'https://meet.google.com/abc',
+                status: 'confirmed',
+              },
+            ],
+          },
+          {
+            source: 'notion',
+            pageCount: 1,
+            pages: [
+              {
+                title: 'Roadmap Q2',
+                lastEditedTime: '2026-03-18T07:30:00.000Z',
+                preview: 'Priorites produit et planning.',
+                url: 'https://notion.so/page1',
+              },
+            ],
+          },
+        ],
+      },
+    },
+    'fr'
+  )
+
+  assert.match(response || '', /Brief priorites du jour/)
+  assert.match(response || '', /Boite mail: 3 email\(s\), 1 non lus/)
+  assert.match(response || '', /Prochain rendez-vous/)
+  assert.match(response || '', /Page la plus pertinente/)
 })
