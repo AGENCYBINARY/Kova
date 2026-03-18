@@ -1,5 +1,6 @@
 'use client'
 
+import { useUser } from '@clerk/nextjs'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageBubble } from '@/components/chat/MessageBubble'
 import { ChatInput } from '@/components/chat/ChatInput'
@@ -23,6 +24,7 @@ interface ActionProposal {
 type ExecutionMode = 'ask' | 'auto'
 
 export default function ChatPage() {
+  const { user } = useUser()
   const [messages, setMessages] = useState<Message[]>([])
   const [proposals, setProposals] = useState<ActionProposal[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -52,6 +54,7 @@ export default function ChatPage() {
   }, [refreshChatState])
 
   const handleSend = useCallback(async (content: string, executionMode: ExecutionMode) => {
+    const startedAt = Date.now()
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -108,6 +111,10 @@ export default function ChatPage() {
         },
       ])
     } finally {
+      const elapsed = Date.now() - startedAt
+      if (elapsed < 900) {
+        await new Promise((resolve) => setTimeout(resolve, 900 - elapsed))
+      }
       setIsLoading(false)
       setIsStreaming(false)
     }
@@ -126,7 +133,10 @@ export default function ChatPage() {
       }
 
       const data = await response.json()
-      setProposals((prev) => prev.filter((proposal) => proposal.id !== id))
+      const handledIds = Array.isArray(data.actions)
+        ? new Set((data.actions as Array<{ id?: string }>).map((action) => action.id).filter(Boolean))
+        : new Set<string>([id])
+      setProposals((prev) => prev.filter((proposal) => !handledIds.has(proposal.id)))
       if (data.assistantMessage) {
         setMessages((prev) => [...prev, data.assistantMessage])
       }
@@ -148,7 +158,10 @@ export default function ChatPage() {
       }
 
       const data = await response.json()
-      setProposals((prev) => prev.filter((proposal) => proposal.id !== id))
+      const handledIds = Array.isArray(data.actions)
+        ? new Set((data.actions as Array<{ id?: string }>).map((action) => action.id).filter(Boolean))
+        : new Set<string>([id])
+      setProposals((prev) => prev.filter((proposal) => !handledIds.has(proposal.id)))
       if (data.assistantMessage) {
         setMessages((prev) => [...prev, data.assistantMessage])
       }
@@ -160,11 +173,13 @@ export default function ChatPage() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>Operator Console</p>
-        <h1 className={styles.title}>Chat</h1>
-        <p className={styles.subtitle}>
-          Draft Gmail actions, create Google Calendar invites with Meet, and decide when Kova should ask or act.
-        </p>
+        <div className={styles.headerInner}>
+          <p className={styles.eyebrow}>Operator Console</p>
+          <h1 className={styles.title}>Chat</h1>
+          <p className={styles.subtitle}>
+            Draft Gmail actions, create Google Calendar invites with Meet, and decide when Kova should ask or act.
+          </p>
+        </div>
       </header>
 
       <div className={styles.messages}>
@@ -173,14 +188,7 @@ export default function ChatPage() {
             role="assistant"
             content="Loading your operator workspace..."
             isStreaming
-          />
-        ) : null}
-
-        {isLoading ? (
-          <MessageBubble
-            role="assistant"
-            content="Thinking"
-            thinking
+            userFallback={user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || 'User'}
           />
         ) : null}
 
@@ -189,6 +197,7 @@ export default function ChatPage() {
             key={message.id}
             role={message.role}
             content={message.content}
+            userFallback={user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || 'User'}
             isStreaming={
               isStreaming &&
               message.role === 'assistant' &&
@@ -196,6 +205,15 @@ export default function ChatPage() {
             }
           />
         ))}
+
+        {isLoading ? (
+          <MessageBubble
+            role="assistant"
+            content=""
+            thinking
+            userFallback={user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || 'User'}
+          />
+        ) : null}
 
         {proposals.map((proposal) => (
           <ActionProposalCard

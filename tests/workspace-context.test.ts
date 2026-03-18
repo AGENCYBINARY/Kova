@@ -29,6 +29,17 @@ test('gmail count questions keep a today listing instead of a free-text search',
   })
 })
 
+test('gmail typo questions still resolve to mailbox read mode', () => {
+  assert.deepEqual(parseConnectedContextRequest("tu peux me dire combien j'ai de mal"), {
+    mode: 'read',
+    sources: ['gmail'],
+    timeframe: 'today',
+    asksForAvailability: false,
+    asksForPriorities: false,
+    searchQuery: null,
+  })
+})
+
 test('explicit send requests still stay in the email action path', () => {
   assert.equal(isEmailSendIntent('envoie un mail a paul pour confirmer le rendez-vous'), true)
   assert.equal(isReadOnlyWorkspaceQuestion('envoie un mail a paul pour confirmer le rendez-vous'), false)
@@ -495,6 +506,51 @@ test('deterministic gmail unread response isolates the unread email', () => {
   )
 
   assert.match(response || '', /Le message non lu est/)
+  assert.match(response || '', /Contrat Q2/)
+  assert.doesNotMatch(response || '', /Point produit/)
+})
+
+test('deterministic latest gmail response returns the latest message', () => {
+  const response = buildDeterministicConnectedResponse(
+    "dernier mail que j'ai eu",
+    {
+      request: {
+        mode: 'read',
+        sources: ['gmail'],
+        timeframe: 'today',
+        asksForAvailability: false,
+        asksForPriorities: false,
+        searchQuery: null,
+      },
+      workspaceContext: 'unused',
+      metadata: {
+        connectedContextSummary: [
+          {
+            source: 'gmail',
+            messageCount: 2,
+            unreadCount: 0,
+            messages: [
+              {
+                from: 'Alice <alice@client.com>',
+                subject: 'Contrat Q2',
+                snippet: 'Validation attendue avant 16h.',
+                unread: false,
+              },
+              {
+                from: 'Bob <bob@partner.com>',
+                subject: 'Point produit',
+                snippet: 'Je t envoie les remarques de l equipe produit.',
+                unread: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    'fr'
+  )
+
+  assert.match(response || '', /Ton dernier email est/)
   assert.match(response || '', /Contrat Q2/)
   assert.doesNotMatch(response || '', /Point produit/)
 })

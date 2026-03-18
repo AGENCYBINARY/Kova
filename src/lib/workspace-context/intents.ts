@@ -52,6 +52,8 @@ const followUpDetailPattern =
   /\b(detaille|detailles|detailler|detaille-les|explique|parle de quoi|de quoi|a quoi correspond|correspond|corresponds|non lu|unread|quel message|quel est|c'est quoi|cest quoi|ce message|ces messages|les messages|les mails|ce mail|ce mail-la|celui-la|celui la)\b/
 const followUpLeadPattern =
   /^(et|alors|du coup|ok|daccord|d'accord|je te demande|je veux dire|mais|le|la|les)\b/
+const mailboxCountPattern =
+  /\b(combien|detaille|detailler|decris|quel|quelle|quels|quelles|dernier|derniere|latest|last)\b/
 
 const stopWords = new Set([
   'a',
@@ -179,7 +181,8 @@ export function isEmailSendIntent(input: string) {
 export function parseConnectedContextRequest(input: string): ConnectedContextRequest | null {
   const normalized = normalizeInput(input)
   const sources: ConnectedContextSource[] = []
-  const mentionsGmail = gmailPattern.test(normalized)
+  const likelyMailTypo = /\bmal\b/.test(normalized) && /\b(combien|recu|recois|recu|ai eu|dernier|derniere)\b/.test(normalized)
+  const mentionsGmail = gmailPattern.test(normalized) || likelyMailTypo
   const mentionsCalendar = calendarPattern.test(normalized)
   const mentionsDrive = drivePattern.test(normalized)
   const mentionsNotion = notionPattern.test(normalized)
@@ -191,7 +194,7 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   const wantsMailboxListing =
     mentionsGmail &&
     (shouldReusePreviousListing(normalized) ||
-      /\b(combien|detaille|detailler|decris|quel|quelle|quels|quelles)\b/.test(normalized))
+      mailboxCountPattern.test(normalized))
 
   if (mentionsGmail) sources.push('gmail')
   if (mentionsCalendar) sources.push('calendar')

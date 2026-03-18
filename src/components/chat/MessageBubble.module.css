@@ -34,21 +34,21 @@
 
 .avatarThinkingDots {
   position: absolute;
-  left: calc(100% - 2px);
+  left: calc(100% + 4px);
   top: 50%;
   transform: translateY(-50%);
   z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  padding: 3px 7px 5px;
+  min-width: 34px;
+  padding: 4px 9px 6px;
   border-radius: 999px;
   background: rgba(11, 19, 30, 0.92);
   border: 1px solid rgba(79, 169, 205, 0.2);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
   color: var(--accent-gold);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.14em;
   line-height: 1;

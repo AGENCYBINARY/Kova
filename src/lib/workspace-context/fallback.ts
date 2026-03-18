@@ -216,6 +216,7 @@ export function buildDeterministicConnectedResponse(
   const asksUnread = /\b(non lu|unread)\b/.test(normalized)
   const asksDetails =
     /\b(detaille|detailles|detailler|decris|decrire|parle de quoi|de quoi|a quoi correspond|correspond|corresponds|quel message|quel est|c est quoi|cest quoi)\b/.test(normalized)
+  const asksLatest = /\b(dernier|derniere|latest|last|plus recent|most recent)\b/.test(normalized)
   const asksAvailability = /\b(dispo|disponibilite|disponibilites|availability|free time|free slots|creneaux|slots|libre)\b/.test(normalized)
   const asksNext = /\b(prochain|prochaine|next)\b/.test(normalized)
   const asksFiles = /\b(fichier|fichiers|file|files|drive|document|documents|doc|docs)\b/.test(normalized)
@@ -309,6 +310,18 @@ export function buildDeterministicConnectedResponse(
       return language === 'en'
         ? `The unread emails are:\n${unreadMessages.map((message, index) => formatGmailMessageLine(message, index, language)).join('\n')}`
         : `Les messages non lus sont:\n${unreadMessages.map((message, index) => formatGmailMessageLine(message, index, language)).join('\n')}`
+    }
+
+    if (asksLatest) {
+      if (messages.length === 0) {
+        return language === 'en'
+          ? 'I do not see any recent email in the loaded inbox window.'
+          : "Je ne vois pas d'email recent dans la fenetre de boite mail chargee."
+      }
+
+      return language === 'en'
+        ? `Your latest email is:\n${formatGmailMessageLine(messages[0], 0, language)}`
+        : `Ton dernier email est:\n${formatGmailMessageLine(messages[0], 0, language)}`
     }
 
     if (asksDetails) {
