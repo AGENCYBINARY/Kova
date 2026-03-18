@@ -28,8 +28,13 @@ export const agentPlatformManifest = {
     },
     mcp: {
       endpoint: '/api/mcp',
+      standalone: {
+        entrypoint: '/mcp',
+        manifest: '/manifest',
+        health: '/health',
+      },
       protocolVersion: '2024-11-05',
-      methods: ['initialize', 'tools/list', 'tools/call'],
+      methods: ['initialize', 'manifest/get', 'capabilities/get', 'tools/list', 'tools/call'],
     },
     sdk: {
       javascript: '@/lib/sdk/v1',

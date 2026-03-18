@@ -24,6 +24,12 @@ Key agent endpoints:
 - `POST /api/agent/execute`
 - `POST /api/mcp`
 
+Standalone MCP entrypoints:
+
+- `POST /mcp`
+- `GET /manifest`
+- `GET /health`
+
 Quick MCP test:
 
 ```bash
@@ -34,6 +40,23 @@ Authenticated MCP test from terminal:
 
 ```bash
 KOVA_COOKIE='__session=...' npm run mcp:test -- tools/list
+```
+
+Standalone MCP server:
+
+```bash
+npm run mcp:standalone
+```
+
+Standalone MCP test:
+
+```bash
+KOVA_BASE_URL='http://127.0.0.1:8787' \
+KOVA_MCP_PATH='/mcp' \
+KOVA_STANDALONE_SHARED_SECRET='replace-me' \
+KOVA_STANDALONE_WORKSPACE_ID='workspace_id' \
+KOVA_STANDALONE_USER_ID='user_id' \
+npm run mcp:test -- tools/list
 ```
 
 ## Stack
@@ -80,6 +103,7 @@ This project relies on local `.env` / `.env.local` files for:
 - Notion OAuth
 - `NEXT_PUBLIC_APP_URL`
 - `OPENAI_API_KEY`
+- `KOVA_STANDALONE_SHARED_SECRET` if you run the standalone MCP server
 
 Recommended AI defaults:
 
@@ -87,6 +111,15 @@ Recommended AI defaults:
 OPENAI_MODEL="gpt-5.4"
 OPENAI_REASONING_EFFORT="minimal"
 OPENAI_TEXT_VERBOSITY="medium"
+```
+
+Standalone MCP defaults:
+
+```env
+KOVA_STANDALONE_SHARED_SECRET="replace-me"
+KOVA_STANDALONE_WORKSPACE_ID=""
+KOVA_STANDALONE_USER_ID=""
+KOVA_MCP_STANDALONE_PORT="8787"
 ```
 
 For Clerk redirects, use:

@@ -1,6 +1,11 @@
 export interface KovaAgentClientOptions {
   baseUrl?: string
   headers?: Record<string, string>
+  agentManifestPath?: string
+  agentExecutePath?: string
+  mcpPath?: string
+  standaloneManifestPath?: string
+  standaloneHealthPath?: string
 }
 
 export interface ExecuteAgentActionInput {
@@ -19,33 +24,43 @@ export interface ExecuteAgentActionInput {
 export interface McpRequestInput {
   jsonrpc?: '2.0'
   id?: string | number
-  method: 'initialize' | 'tools/list' | 'tools/call'
+  method: 'initialize' | 'manifest/get' | 'capabilities/get' | 'tools/list' | 'tools/call'
   params?: Record<string, unknown>
 }
 
 export class KovaAgentClient {
   private readonly baseUrl: string
   private readonly headers: Record<string, string>
+  private readonly agentManifestPath: string
+  private readonly agentExecutePath: string
+  private readonly mcpPath: string
+  private readonly standaloneManifestPath: string
+  private readonly standaloneHealthPath: string
 
   constructor(options: KovaAgentClientOptions = {}) {
     this.baseUrl = (options.baseUrl || '').replace(/\/$/, '')
     this.headers = options.headers || {}
+    this.agentManifestPath = options.agentManifestPath || '/api/agent/manifest'
+    this.agentExecutePath = options.agentExecutePath || '/api/agent/execute'
+    this.mcpPath = options.mcpPath || '/api/mcp'
+    this.standaloneManifestPath = options.standaloneManifestPath || '/manifest'
+    this.standaloneHealthPath = options.standaloneHealthPath || '/health'
   }
 
   async getManifest() {
-    return this.request('/api/agent/manifest', {
+    return this.request(this.agentManifestPath, {
       method: 'GET',
     })
   }
 
   async listTools() {
-    return this.request('/api/agent/execute', {
+    return this.request(this.agentExecutePath, {
       method: 'GET',
     })
   }
 
   async execute(input: ExecuteAgentActionInput) {
-    return this.request('/api/agent/execute', {
+    return this.request(this.agentExecutePath, {
       method: 'POST',
       body: JSON.stringify(input),
     })
@@ -64,6 +79,34 @@ export class KovaAgentClient {
       jsonrpc: '2.0',
       id,
       method: 'tools/list',
+    })
+  }
+
+  async getMcpManifest(id: string | number = 'manifest') {
+    return this.mcpRequest({
+      jsonrpc: '2.0',
+      id,
+      method: 'manifest/get',
+    })
+  }
+
+  async getMcpCapabilities(id: string | number = 'capabilities') {
+    return this.mcpRequest({
+      jsonrpc: '2.0',
+      id,
+      method: 'capabilities/get',
+    })
+  }
+
+  async getStandaloneManifest() {
+    return this.request(this.standaloneManifestPath, {
+      method: 'GET',
+    })
+  }
+
+  async getStandaloneHealth() {
+    return this.request(this.standaloneHealthPath, {
+      method: 'GET',
     })
   }
 
@@ -86,7 +129,7 @@ export class KovaAgentClient {
   }
 
   async mcpRequest(input: McpRequestInput) {
-    return this.request('/api/mcp', {
+    return this.request(this.mcpPath, {
       method: 'POST',
       body: JSON.stringify({
         jsonrpc: input.jsonrpc || '2.0',
