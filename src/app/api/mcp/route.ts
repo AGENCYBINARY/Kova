@@ -94,6 +94,7 @@ export async function POST(request: Request) {
           userId: dbUserId,
         },
         trigger: 'api',
+        source: 'mcp',
       })
 
       if (result.mode === 'pending_review') {

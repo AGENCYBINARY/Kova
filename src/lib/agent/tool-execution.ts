@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import type { DashboardAction } from '@/lib/dashboard-data'
 import { getAssistantProfile } from '@/lib/assistant/store'
-import { createAuditLog } from '@/lib/audit/service'
+import { createAuditLog, createDecisionAuditLog, createPolicyDeniedAuditLog, createToolVisibilityAuditLog } from '@/lib/audit/service'
 import { assertActionAllowed, getWorkspaceGovernance } from '@/lib/agent/governance'
 import { inferRiskLevel, resolveExecutionDecision } from '@/lib/agent/policy'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
@@ -17,6 +17,7 @@ interface ExecutionContext {
 }
 
 type ExecutionTrigger = 'api' | 'review'
+type ExecutionSource = 'api' | 'mcp'
 
 interface ToolExecutionRequestByActionType {
   actionType: DashboardAction['type']
@@ -24,6 +25,7 @@ interface ToolExecutionRequestByActionType {
   requireApproval?: boolean
   context: ExecutionContext
   trigger?: ExecutionTrigger
+  source?: ExecutionSource
 }
 
 interface ToolExecutionRequestByName {
@@ -32,6 +34,7 @@ interface ToolExecutionRequestByName {
   requireApproval?: boolean
   context: ExecutionContext
   trigger?: ExecutionTrigger
+  source?: ExecutionSource
 }
 
 export type ToolExecutionRequest = ToolExecutionRequestByActionType | ToolExecutionRequestByName
@@ -87,6 +90,7 @@ function buildGovernanceSummary(params: {
 
 export async function executeAgentToolRequest(request: ToolExecutionRequest): Promise<ToolExecutionResult> {
   const { workspaceId, userId } = request.context
+  const source = request.source || 'api'
   const [governance, assistantProfile] = await Promise.all([
     getWorkspaceGovernance({
       workspaceId,
@@ -103,11 +107,35 @@ export async function executeAgentToolRequest(request: ToolExecutionRequest): Pr
   const actionType = resolved.tool.actionType
   const tool = resolved.tool
 
-  assertActionAllowed({
-    role: governance.role,
+  await createToolVisibilityAuditLog({
+    workspaceId,
+    userId,
+    source,
+    visibleTools: governance.allowedActionTypes,
     allowedActionTypes: governance.allowedActionTypes,
-    actionType,
   })
+
+  try {
+    assertActionAllowed({
+      role: governance.role,
+      allowedActionTypes: governance.allowedActionTypes,
+      actionType,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Policy denied.'
+    await createPolicyDeniedAuditLog({
+      workspaceId,
+      userId,
+      actionType,
+      source,
+      executionReason: 'role_not_allowed',
+      details: {
+        workspaceRole: governance.role,
+        requestedTool: tool.name,
+      },
+    })
+    throw new Error(message)
+  }
 
   const riskLevel = inferRiskLevel(actionType, resolved.validated)
   const executionDecision = resolveExecutionDecision({
@@ -145,6 +173,22 @@ export async function executeAgentToolRequest(request: ToolExecutionRequest): Pr
     deterministic: tool.deterministic,
     zeroDataMovement: tool.zeroDataMovement,
     executionReason: executionDecision.reason,
+  })
+
+  await createDecisionAuditLog({
+    workspaceId,
+    userId,
+    actionType,
+    actionId: action.id,
+    source,
+    executionMode: executionDecision.effectiveMode,
+    executionReason: executionDecision.reason,
+    proposalCount: 1,
+    riskLevel,
+    details: {
+      toolName: tool.name,
+      workspaceRole: governance.role,
+    },
   })
 
   if (executionDecision.effectiveMode === 'ask') {

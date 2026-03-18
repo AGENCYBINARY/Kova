@@ -48,6 +48,7 @@ export async function POST(request: Request) {
         userId: dbUserId,
       },
       trigger: 'api',
+      source: 'api',
     })
 
     if (result.mode === 'pending_review') {
