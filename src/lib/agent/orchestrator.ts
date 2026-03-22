@@ -544,7 +544,7 @@ function extractConnectedContextSeed(messages: PersistedMessageRecord[]): Connec
       const sources = Array.isArray(metadata.connectedContextSources)
         ? metadata.connectedContextSources.filter(
             (value): value is ConnectedContextSource =>
-              value === 'gmail' || value === 'calendar' || value === 'google_drive' || value === 'notion'
+              value === 'gmail' || value === 'calendar' || value === 'google_drive' || value === 'google_docs' || value === 'notion'
           )
         : []
       const timeframe = metadata.connectedContextTimeframe

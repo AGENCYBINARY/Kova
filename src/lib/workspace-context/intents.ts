@@ -1,4 +1,4 @@
-export type ConnectedContextSource = 'gmail' | 'calendar' | 'google_drive' | 'notion'
+export type ConnectedContextSource = 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'notion'
 
 export interface ConnectedContextRequest {
   mode: 'read' | 'action' | 'mixed'
@@ -29,7 +29,9 @@ const gmailPattern =
 const calendarPattern =
   /\b(calendar|agenda|calendrier|event|events|meeting|meetings|rendez-vous|rdv|reunion|reunions|visio|meet)\b/
 const drivePattern =
-  /\b(google drive|drive|google doc|google docs|doc|docs|document|documents|fichier|fichiers|file|files|folder|folders|dossier|dossiers)\b/
+  /\b(google drive|drive|fichier|fichiers|file|files|folder|folders|dossier|dossiers)\b/
+const docsPattern =
+  /\b(google doc|google docs|gdoc|gdocs|doc partagé|doc partage|document partagé|document partage)\b/
 const notionPattern =
   /\b(notion|wiki|knowledge base|base de connaissances|database|base de donnees|base de donnees|page notion)\b/
 const readVerbPattern =
@@ -185,6 +187,7 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   const mentionsGmail = gmailPattern.test(normalized) || likelyMailTypo
   const mentionsCalendar = calendarPattern.test(normalized)
   const mentionsDrive = drivePattern.test(normalized)
+  const mentionsDocs = docsPattern.test(normalized)
   const mentionsNotion = notionPattern.test(normalized)
   const asksForAvailability = availabilityPattern.test(normalized)
   const asksForPriorities = priorityPattern.test(normalized)
@@ -199,6 +202,7 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   if (mentionsGmail) sources.push('gmail')
   if (mentionsCalendar) sources.push('calendar')
   if (mentionsDrive) sources.push('google_drive')
+  if (mentionsDocs) sources.push('google_docs')
   if (mentionsNotion) sources.push('notion')
 
   if (referencesAllApps) {

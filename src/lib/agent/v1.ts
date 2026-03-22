@@ -8,12 +8,16 @@ import { isEmailSendIntent, isReadOnlyWorkspaceQuestion } from '@/lib/workspace-
 
 export const agentActionTypeSchema = z.enum([
   'send_email',
+  'reply_to_email',
   'create_calendar_event',
+  'update_calendar_event',
+  'delete_calendar_event',
   'update_notion_page',
   'create_notion_page',
   'create_google_doc',
   'update_google_doc',
   'create_google_drive_file',
+  'delete_google_drive_file',
 ])
 
 export type AgentActionType = z.infer<typeof agentActionTypeSchema>
@@ -143,14 +147,18 @@ function buildCalendarProposal(input: string, profile?: AssistantProfile, contac
   const start = new Date(now + 1000 * 60 * 60 * 24)
   const durationMinutes = profile?.meetingDefaultDurationMinutes || 30
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000)
-  const meetingTitle =
-    contact
-      ? profile?.defaultLanguage === 'en'
-        ? `Meeting with ${contact.name}`
-        : `Reunion avec ${contact.name}`
-      : input.length > 80
-        ? `${input.slice(0, 77)}...`
-        : input
+  const inferredTitle = (() => {
+    const n = normalizeInput(input)
+    if (/déjeuner|dejeuner|lunch/.test(n)) return contact ? `Déjeuner avec ${contact.name}` : 'Déjeuner'
+    if (/café|cafe|coffee/.test(n)) return contact ? `Café avec ${contact.name}` : 'Café'
+    if (/call|appel/.test(n)) return contact ? `Call avec ${contact.name}` : 'Call'
+    if (/point|sync|weekly|hebdo/.test(n)) return contact ? `Point avec ${contact.name}` : 'Point hebdo'
+    if (/debrief|debriefing/.test(n)) return contact ? `Debrief avec ${contact.name}` : 'Debrief'
+    if (/présentation|presentation/.test(n)) return contact ? `Présentation avec ${contact.name}` : 'Présentation'
+    if (contact) return profile?.defaultLanguage === 'en' ? `Meeting with ${contact.name}` : `Rendez-vous avec ${contact.name}`
+    return profile?.defaultLanguage === 'en' ? 'Meeting' : 'Rendez-vous'
+  })()
+  const meetingTitle = inferredTitle
 
   return {
     type: 'create_calendar_event',
@@ -363,53 +371,48 @@ function buildFallbackResponseWithContactsAndProfile(
     /(gmail|email|e-mail|mail|send|envoie|envoyer|courriel|lien|link)/.test(normalized) &&
     explicitlyWantsSeparateEmail
   ) {
+    const calProp = buildCalendarProposal(input, assistantProfile, knownContact)
     return {
       response:
         language === 'en'
-          ? 'I prepared the calendar event and the follow-up email with the meeting link.'
-          : "J'ai prepare l'evenement calendar et l'email avec le lien de reunion.",
+          ? `Got it. Calendar invite${knownContact ? ` for ${knownContact.name}` : ''} + follow-up email with the meeting link.`
+          : `C'est bon. J'ai préparé le RDV${knownContact ? ` avec ${knownContact.name}` : ''} et l'email avec le lien.`,
       proposals: [
-        buildCalendarProposal(input, assistantProfile, knownContact),
+        calProp,
         buildMeetingEmailFollowupProposal(input, knownContact, assistantProfile),
       ],
     }
   }
 
   if ((isMeetingRequest || (wantsMeetingConfirmation && knownContact)) && !explicitEmailIntent) {
+    const calProp = buildCalendarProposal(input, assistantProfile, knownContact)
+    const title = typeof calProp.parameters.title === 'string' ? calProp.parameters.title : ''
     return {
       response:
         language === 'en'
-          ? knownContact
-            ? `I prepared a Google Calendar invite with Google Meet for ${knownContact.name}.`
-            : 'I prepared a Google Calendar invite with a meeting link.'
-          : knownContact
-            ? `J'ai préparé une invitation Google Calendar avec Google Meet pour ${knownContact.name}.`
-            : "J'ai préparé une invitation Google Calendar avec lien de réunion.",
-      proposals: [buildCalendarProposal(input, assistantProfile, knownContact)],
+          ? `Done. "${title}" is ready with a Google Meet link.`
+          : `C'est prêt. "${title}" avec lien Google Meet.`,
+      proposals: [calProp],
     }
   }
 
   if (isEmailSendIntent(normalized)) {
     const matchedEmail = input.match(emailPattern)?.[1]
-    if (!matchedEmail) {
-      if (maybeRecipient) {
-        if (knownContact) {
-          return {
-            response:
-              language === 'en'
-                ? `I recognized ${knownContact.name} in your contacts and prepared the Gmail action using ${knownContact.email}.`
-                : `J’ai reconnu ${knownContact.name} dans vos contacts et préparé l’action Gmail avec ${knownContact.email}.`,
-            proposals: [buildResolvedEmailProposal(input, knownContact, assistantProfile)],
-          }
-        }
+    if (!matchedEmail && maybeRecipient && knownContact) {
+      return {
+        response:
+          language === 'en'
+            ? `Ready to send to ${knownContact.name}.`
+            : `Prêt à envoyer à ${knownContact.name}.`,
+        proposals: [buildResolvedEmailProposal(input, knownContact, assistantProfile)],
       }
     }
 
     return {
       response:
         language === 'en'
-          ? 'I prepared a Gmail action for review.'
-          : 'J’ai préparé une action Gmail à valider.',
+          ? 'Email ready. Check the details and confirm.'
+          : 'Email prêt. Vérifie les détails et confirme.',
       proposals: [buildEmailProposal(input, assistantProfile)],
     }
   }
@@ -418,8 +421,8 @@ function buildFallbackResponseWithContactsAndProfile(
     return {
       response:
         language === 'en'
-          ? 'I prepared a Google Docs action for review.'
-          : 'J’ai préparé une action Google Docs à valider.',
+          ? 'Document ready. Review and confirm.'
+          : 'Document prêt. Vérifie et confirme.',
       proposals: [buildGoogleDocProposal(input, assistantProfile)],
     }
   }
@@ -428,8 +431,8 @@ function buildFallbackResponseWithContactsAndProfile(
     return {
       response:
         language === 'en'
-          ? 'I prepared a Google Drive action for review.'
-          : 'J’ai préparé une action Google Drive à valider.',
+          ? 'Drive action ready.'
+          : 'Action Drive prête.',
       proposals: [buildGoogleDriveProposal(input, assistantProfile)],
     }
   }
@@ -438,8 +441,8 @@ function buildFallbackResponseWithContactsAndProfile(
     return {
       response:
         language === 'en'
-          ? 'I prepared a Notion action for review.'
-          : 'J’ai préparé une action Notion à valider.',
+          ? 'Notion page ready. Review and confirm.'
+          : 'Page Notion prête. Vérifie et confirme.',
       proposals: [buildNotionProposal(input, assistantProfile)],
     }
   }
@@ -447,8 +450,8 @@ function buildFallbackResponseWithContactsAndProfile(
   return {
     response:
       language === 'en'
-        ? 'I can convert that into an action for Gmail, Google Calendar, Google Drive, Notion, or Google Docs. Specify the target app or intended result and I will prepare it.'
-        : 'Je peux transformer cela en action pour Gmail, Google Calendar, Google Drive, Notion ou Google Docs. Précisez l’application cible ou le résultat attendu et je la préparerai.',
+        ? 'Tell me what you need — Gmail, Calendar, Drive, Notion, or Docs.'
+        : 'Dis-moi ce qu’il te faut — Gmail, Agenda, Drive, Notion ou Docs.',
     proposals: [],
   }
 }

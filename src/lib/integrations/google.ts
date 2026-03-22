@@ -714,6 +714,203 @@ export async function searchGoogleDriveFiles(
   } satisfies GoogleDriveFileSummary))
 }
 
+export async function replyToGmailMessage(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  const to = Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')
+  const subject = String(parameters.subject || '')
+  const body = String(parameters.body || '')
+
+  let inReplyTo = ''
+  let references = ''
+
+  if (threadId) {
+    const threadResponse = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+    if (threadResponse.ok) {
+      const threadData = await threadResponse.json() as {
+        messages?: Array<{ payload?: { headers?: Array<{ name?: string; value?: string }> } }>
+      }
+      const messages = threadData.messages || []
+      const lastMessage = messages[messages.length - 1]
+      if (lastMessage) {
+        const headers = lastMessage.payload?.headers || []
+        inReplyTo = getHeaderValue(headers, 'Message-ID')
+        const existingRefs = getHeaderValue(headers, 'References')
+        references = existingRefs ? `${existingRefs} ${inReplyTo}` : inReplyTo
+      }
+    }
+  }
+
+  const mime = [
+    `To: ${to}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: 8bit',
+    'MIME-Version: 1.0',
+    `Subject: ${encodeMimeHeader(subject)}`,
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
+    ...(references ? [`References: ${references}`] : []),
+    '',
+    body,
+  ].join('\r\n')
+
+  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      raw: toBase64Url(mime),
+      ...(threadId ? { threadId } : {}),
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Gmail reply failed: ${response.status}`)
+  }
+
+  const data = await response.json() as { id: string; threadId?: string }
+  return {
+    details: 'Reply sent via Gmail.',
+    output: {
+      provider: 'gmail',
+      messageId: data.id,
+      threadId: data.threadId || threadId,
+      to,
+      subject,
+    },
+  }
+}
+
+export async function readGmailMessageBody(accessToken: string, messageId: string): Promise<string> {
+  const response = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  )
+  if (!response.ok) throw new Error(`Gmail message read failed: ${response.status}`)
+
+  const data = await response.json() as {
+    payload?: {
+      mimeType?: string
+      body?: { data?: string }
+      parts?: Array<{
+        mimeType?: string
+        body?: { data?: string }
+        parts?: Array<{ mimeType?: string; body?: { data?: string } }>
+      }>
+    }
+  }
+
+  function extractText(payload: typeof data.payload): string {
+    if (!payload) return ''
+    if (payload.mimeType === 'text/plain' && payload.body?.data) {
+      return Buffer.from(payload.body.data, 'base64').toString('utf-8')
+    }
+    for (const part of payload.parts || []) {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        return Buffer.from(part.body.data, 'base64').toString('utf-8')
+      }
+      for (const sub of part.parts || []) {
+        if (sub.mimeType === 'text/plain' && sub.body?.data) {
+          return Buffer.from(sub.body.data, 'base64').toString('utf-8')
+        }
+      }
+    }
+    return ''
+  }
+
+  return extractText(data.payload).trim()
+}
+
+export async function updateGoogleCalendarEvent(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const eventId = String(parameters.eventId || '')
+  if (!eventId) throw new Error('eventId is required to update a calendar event.')
+
+  const body: Record<string, unknown> = {}
+  if (parameters.title) body.summary = parameters.title
+  if (parameters.description || parameters.notes) body.description = String(parameters.description || parameters.notes || '')
+  if (parameters.startTime) body.start = { dateTime: parameters.startTime }
+  if (parameters.endTime) body.end = { dateTime: parameters.endTime }
+  if (Array.isArray(parameters.attendees) && parameters.attendees.length > 0) {
+    body.attendees = parameters.attendees.map((email) => ({ email }))
+  }
+
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`)
+  if (Array.isArray(parameters.attendees) && parameters.attendees.length > 0) {
+    url.searchParams.set('sendUpdates', 'all')
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Calendar event update failed: ${response.status}`)
+  }
+
+  const data = await response.json() as { id: string; htmlLink?: string; summary?: string }
+  return {
+    details: 'Calendar event updated.',
+    output: {
+      provider: 'google_calendar',
+      eventId: data.id,
+      title: data.summary || null,
+      link: data.htmlLink || null,
+    },
+  }
+}
+
+export async function deleteGoogleCalendarEvent(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const eventId = String(parameters.eventId || '')
+  if (!eventId) throw new Error('eventId is required to delete a calendar event.')
+
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  )
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Calendar event deletion failed: ${response.status}`)
+  }
+
+  return {
+    details: 'Calendar event deleted.',
+    output: { provider: 'google_calendar', eventId, deleted: true },
+  }
+}
+
+export async function deleteGoogleDriveFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const fileId = String(parameters.fileId || '')
+  if (!fileId) throw new Error('fileId is required to delete a Drive file.')
+
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  )
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Google Drive file deletion failed: ${response.status}`)
+  }
+
+  return {
+    details: 'File deleted from Google Drive.',
+    output: { provider: 'google_drive', fileId, deleted: true },
+  }
+}
+
 export async function createGoogleCalendarEvent(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
   const shouldCreateMeetLink = Boolean(parameters.createMeetLink)
   const hasAttendees = Array.isArray(parameters.attendees) && parameters.attendees.length > 0
@@ -821,6 +1018,144 @@ async function insertTextIntoGoogleDoc(accessToken: string, documentId: string, 
   if (!updateResponse.ok) {
     throw new Error(`Google Docs write failed: ${updateResponse.status}`)
   }
+}
+
+export interface GoogleDocSummary {
+  id: string
+  title: string
+  modifiedTime: string | null
+  webViewLink: string | null
+  preview: string
+}
+
+export async function readGoogleDocContent(accessToken: string, documentId: string): Promise<string> {
+  const response = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Google Docs read failed: ${response.status}`)
+  }
+
+  const doc = await response.json() as {
+    title?: string
+    body?: {
+      content?: Array<{
+        paragraph?: {
+          elements?: Array<{
+            textRun?: { content?: string }
+          }>
+        }
+        table?: {
+          tableRows?: Array<{
+            tableCells?: Array<{
+              content?: Array<{
+                paragraph?: {
+                  elements?: Array<{ textRun?: { content?: string } }>
+                }
+              }>
+            }>
+          }>
+        }
+      }>
+    }
+  }
+
+  const lines: string[] = []
+  for (const block of doc.body?.content || []) {
+    if (block.paragraph) {
+      const text = (block.paragraph.elements || [])
+        .map((el) => el.textRun?.content || '')
+        .join('')
+        .trimEnd()
+      if (text) lines.push(text)
+    } else if (block.table) {
+      for (const row of block.table.tableRows || []) {
+        const cells = (row.tableCells || []).map((cell) =>
+          (cell.content || [])
+            .flatMap((p) => (p.paragraph?.elements || []).map((el) => el.textRun?.content || ''))
+            .join('')
+            .trim()
+        )
+        if (cells.some(Boolean)) lines.push(cells.join(' | '))
+      }
+    }
+  }
+
+  return lines.join('\n').trim()
+}
+
+export async function listRecentGoogleDocs(
+  accessToken: string,
+  options: { query?: string; maxResults?: number } = {}
+): Promise<GoogleDocSummary[]> {
+  const url = new URL('https://www.googleapis.com/drive/v3/files')
+  const clauses = [
+    "trashed=false",
+    "mimeType='application/vnd.google-apps.document'",
+  ]
+
+  if (options.query?.trim()) {
+    const escaped = escapeDriveQueryValue(options.query.trim())
+    clauses.push(`(name contains '${escaped}' or fullText contains '${escaped}')`)
+  }
+
+  url.searchParams.set('q', clauses.join(' and '))
+  url.searchParams.set('orderBy', 'modifiedTime desc')
+  url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 8, 20))))
+  url.searchParams.set('fields', 'files(id,name,modifiedTime,webViewLink)')
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive Docs list failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    files?: Array<{
+      id: string
+      name?: string
+      modifiedTime?: string
+      webViewLink?: string
+    }>
+  }
+
+  const files = data.files || []
+
+  const enriched = await Promise.all(
+    files.slice(0, 4).map(async (file) => {
+      let preview = ''
+      try {
+        const content = await readGoogleDocContent(accessToken, file.id)
+        preview = content.slice(0, 300).replace(/\n+/g, ' ').trim()
+      } catch {
+        preview = ''
+      }
+      return {
+        id: file.id,
+        title: file.name || 'Untitled',
+        modifiedTime: file.modifiedTime || null,
+        webViewLink: file.webViewLink || null,
+        preview,
+      } satisfies GoogleDocSummary
+    })
+  )
+
+  const rest = files.slice(4).map((file) => ({
+    id: file.id,
+    title: file.name || 'Untitled',
+    modifiedTime: file.modifiedTime || null,
+    webViewLink: file.webViewLink || null,
+    preview: '',
+  } satisfies GoogleDocSummary))
+
+  return [...enriched, ...rest]
 }
 
 export async function createGoogleDoc(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {

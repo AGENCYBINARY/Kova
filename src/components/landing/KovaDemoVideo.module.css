@@ -1,0 +1,436 @@
+/* ── Wrapper ───────────────────────────────────────────────────────── */
+.outer {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+/* ── Browser shell ─────────────────────────────────────────────────── */
+.browser {
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 50px 120px rgba(0,0,0,0.65),
+    0 0 60px rgba(106,140,255,0.07);
+  background: #0b0e14;
+}
+
+/* ── Chrome bar ────────────────────────────────────────────────────── */
+.chrome {
+  height: 38px;
+  background: #161b24;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+}
+
+.dots {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.dots span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: block;
+}
+
+.urlBar {
+  flex: 0 0 auto;
+  width: 200px;
+  height: 22px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.38);
+  letter-spacing: 0.01em;
+}
+
+/* ── Viewport ──────────────────────────────────────────────────────── */
+/* position:relative pour que le curseur soit positionné dedans */
+.viewport {
+  position: relative;
+  height: 500px;
+  overflow: hidden;
+  background: #07090d;
+}
+
+/* ── App frame (zoome via CSS transform) ───────────────────────────── */
+/* PAS de will-change → évite le stacking context qui masque le curseur */
+.appFrame {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Sidebar ───────────────────────────────────────────────────────── */
+.sidebar {
+  width: 192px;
+  flex-shrink: 0;
+  height: 100%;
+  background: #0b0e14;
+  border-right: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 10px;
+  gap: 1px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #f5f7fb;
+  padding: 8px 10px 18px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.38);
+  cursor: default;
+}
+.navItem.navActive {
+  background: rgba(106,140,255,0.1);
+  color: #8aa4ff;
+}
+.navGlyph {
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.intégrations {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.integLabel {
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.22);
+  padding: 0 10px;
+  margin-bottom: 6px;
+}
+.integRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+}
+.integDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  flex-shrink: 0;
+  transition: background 0.6s, box-shadow 0.6s;
+}
+.integGreen {
+  background: #3dd68c;
+  box-shadow: 0 0 6px rgba(61,214,140,0.55);
+}
+
+/* ── Chat area ─────────────────────────────────────────────────────── */
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chatHeader {
+  height: 46px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  flex-shrink: 0;
+}
+.chatTitle { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.75); }
+.modelPill {
+  font-size: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(106,140,255,0.12);
+  border: 1px solid rgba(106,140,255,0.22);
+  color: #8aa4ff;
+  letter-spacing: 0.06em;
+}
+
+/* ── Messages ──────────────────────────────────────────────────────── */
+/* Par défaut flex:1 → remplit tout le chat (pas de zone noire vide)
+   Quand la proposal est visible → max-height:140px pour lui faire de la place */
+.messages {
+  flex: 1;
+  overflow: hidden;
+  padding: 12px 18px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 500px; /* sans proposal : prend tout l'espace */
+  transition: max-height 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.messagesCompact {
+  max-height: 140px; /* avec proposal : se rétracte pour laisser la place */
+}
+
+.msg { display: flex; gap: 10px; }
+.msgUser { flex-direction: row-reverse; }
+
+.bubble {
+  max-width: 70%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.msgUser .bubble {
+  background: linear-gradient(135deg, #6a8cff, #8f7cff);
+  color: #fff;
+  border-bottom-right-radius: 3px;
+}
+.msgAI .bubble {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.78);
+  border-bottom-left-radius: 3px;
+}
+
+.avatar {
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6a8cff, #8f7cff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* Typing dots */
+.typingBubble { display: flex; gap: 5px; align-items: center; padding: 11px 14px; }
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+  animation: bounce 1.1s ease-in-out infinite;
+}
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-5px); }
+}
+
+/* ── Input row ─────────────────────────────────────────────────────── */
+.inputRow {
+  margin: 0 14px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.inputBox {
+  flex: 1;
+  height: 38px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+.inputPlaceholder { font-size: 11.5px; color: rgba(255,255,255,0.22); }
+.sendBtn {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #6a8cff, #8f7cff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* ── Proposal card ─────────────────────────────────────────────────── */
+.proposal {
+  margin: 0 14px 14px;
+  padding: 13px 15px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(106,140,255,0.22);
+  border-radius: 13px;
+  flex-shrink: 0;
+  transition: border-color 0.4s, box-shadow 0.4s;
+}
+.proposalOk {
+  border-color: rgba(106,140,255,0.5);
+  box-shadow: 0 0 18px rgba(106,140,255,0.09);
+}
+.proposalDone {
+  border-color: rgba(61,214,140,0.4);
+  box-shadow: 0 0 18px rgba(61,214,140,0.07);
+}
+
+.proposalTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.proposalBadge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.38);
+}
+.pulseDot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #6a8cff;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.35 } }
+.riskTag {
+  font-size: 9.5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(61,214,140,0.1);
+  border: 1px solid rgba(61,214,140,0.2);
+  color: #3dd68c;
+}
+
+.proposalTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.82);
+  margin-bottom: 8px;
+}
+.proposalMeta { display: flex; gap: 18px; margin-bottom: 10px; }
+.metaCol { display: flex; flex-direction: column; gap: 2px; }
+.metaKey { font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(255,255,255,0.28); }
+.metaVal { font-size: 11px; color: rgba(255,255,255,0.6); }
+
+.proposalBtns { display: flex; gap: 7px; }
+.btnApprove {
+  padding: 5px 15px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #6a8cff, #8f7cff);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.35s;
+}
+.btnApproved { background: linear-gradient(135deg, #3dd68c, #26bf79) !important; }
+.btnReject {
+  padding: 5px 13px;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.38);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.successBanner {
+  margin-top: 9px;
+  padding: 7px 11px;
+  border-radius: 7px;
+  background: rgba(61,214,140,0.09);
+  border: 1px solid rgba(61,214,140,0.22);
+  color: #3dd68c;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ── Curseur SVG (overlay sur le viewport) ─────────────────────────── */
+.cursor {
+  position: absolute;
+  /* left et top animés par Framer Motion */
+  pointer-events: none;
+  z-index: 100;
+  /* translate(-2px,-2px) aligne la pointe de la flèche sur le point left/top */
+  transform: translate(-2px, -2px);
+  filter: drop-shadow(0px 2px 5px rgba(0,0,0,0.7));
+}
+
+.cursorSvg {
+  display: block;
+  transition: transform 0.12s ease;
+}
+
+/* Ripple au clic */
+.ripple {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(106,140,255,0.8);
+  animation: rippleAnim 0.55s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes rippleAnim {
+  0%   { width: 10px; height: 10px; opacity: 1; top: 2px; left: 2px; }
+  100% { width: 42px; height: 42px; opacity: 0; top: -14px; left: -14px; }
+}
+
+/* ── Progress dots ─────────────────────────────────────────────────── */
+.progress {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.pip {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.14);
+  transition: all 0.35s;
+}
+.pipActive {
+  width: 20px;
+  border-radius: 3px;
+  background: #6a8cff;
+}
+.pipPast { background: rgba(106,140,255,0.3); }
+
+/* ── Scene label ───────────────────────────────────────────────────── */
+.sceneLabel {
+  font-size: 11.5px;
+  letter-spacing: 0.07em;
+  color: rgba(255,255,255,0.3);
+}

@@ -6,8 +6,13 @@ import {
   createGoogleCalendarEvent,
   createGoogleDoc,
   createGoogleDriveFile,
+  deleteGoogleCalendarEvent,
+  deleteGoogleDriveFile,
   getValidGoogleAccessToken,
+  readGmailMessageBody,
+  replyToGmailMessage,
   sendGmailMessage,
+  updateGoogleCalendarEvent,
   updateGoogleDoc,
 } from '@/lib/integrations/google'
 import {
@@ -62,6 +67,31 @@ const createNotionPageSchema = z.object({
 const updateNotionPageSchema = z.object({
   pageId: z.string().min(1),
   content: z.string().min(1),
+}).passthrough()
+
+const replyToEmailSchema = z.object({
+  threadId: z.string().min(1),
+  messageId: z.string().min(1),
+  to: z.array(z.string().email()).min(1),
+  subject: z.string().min(1),
+  body: z.string().min(1),
+}).passthrough()
+
+const updateCalendarEventSchema = z.object({
+  eventId: z.string().min(1),
+  title: z.string().optional(),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  attendees: z.array(z.string().email()).optional(),
+  description: z.string().optional(),
+}).passthrough()
+
+const deleteCalendarEventSchema = z.object({
+  eventId: z.string().min(1),
+}).passthrough()
+
+const deleteGoogleDriveFileSchema = z.object({
+  fileId: z.string().min(1),
 }).passthrough()
 
 async function getConnectedIntegration(context: McpExecutionContext, provider: string) {
@@ -273,6 +303,115 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'notion')
       const accessToken = getValidNotionAccessToken(integration)
       return updateNotionPage(accessToken, input)
+    },
+  },
+  {
+    name: 'gmail.reply_email',
+    actionType: 'reply_to_email',
+    provider: 'gmail',
+    title: 'Reply to email',
+    description: 'Reply to an existing Gmail thread, preserving conversation context.',
+    version: '2026-03-22',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+        messageId: { type: 'string' },
+        to: { type: 'array', items: { type: 'string', format: 'email' } },
+        subject: { type: 'string' },
+        body: { type: 'string' },
+      },
+      required: ['threadId', 'messageId', 'to', 'subject', 'body'],
+      additionalProperties: true,
+    },
+    inputSchema: replyToEmailSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return replyToGmailMessage(accessToken, input)
+    },
+  },
+  {
+    name: 'calendar.update_event',
+    actionType: 'update_calendar_event',
+    provider: 'calendar',
+    title: 'Update calendar event',
+    description: 'Modify an existing Google Calendar event (title, time, attendees, description).',
+    version: '2026-03-22',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        eventId: { type: 'string' },
+        title: { type: 'string' },
+        startTime: { type: 'string' },
+        endTime: { type: 'string' },
+        attendees: { type: 'array', items: { type: 'string', format: 'email' } },
+        description: { type: 'string' },
+      },
+      required: ['eventId'],
+      additionalProperties: true,
+    },
+    inputSchema: updateCalendarEventSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'calendar')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return updateGoogleCalendarEvent(accessToken, input)
+    },
+  },
+  {
+    name: 'calendar.delete_event',
+    actionType: 'delete_calendar_event',
+    provider: 'calendar',
+    title: 'Delete calendar event',
+    description: 'Permanently delete a Google Calendar event by its ID.',
+    version: '2026-03-22',
+    riskLevel: 'high',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        eventId: { type: 'string' },
+      },
+      required: ['eventId'],
+      additionalProperties: true,
+    },
+    inputSchema: deleteCalendarEventSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'calendar')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return deleteGoogleCalendarEvent(accessToken, input)
+    },
+  },
+  {
+    name: 'drive.delete_file',
+    actionType: 'delete_google_drive_file',
+    provider: 'google_drive',
+    title: 'Delete Drive file',
+    description: 'Permanently delete a Google Drive file or folder by its ID.',
+    version: '2026-03-22',
+    riskLevel: 'high',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+      },
+      required: ['fileId'],
+      additionalProperties: true,
+    },
+    inputSchema: deleteGoogleDriveFileSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return deleteGoogleDriveFile(accessToken, input)
     },
   },
 ]

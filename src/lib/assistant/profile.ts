@@ -159,9 +159,9 @@ export const defaultAssistantProfile: AssistantProfile = {
   signatureName: 'AGENCY BINARY',
   signatureBlock: 'AGENCY BINARY\nExecutive Operations',
   executionPolicy: 'auto_low_risk',
-  confidenceThreshold: 0.9,
+  confidenceThreshold: 0.75,
   autoResolveKnownContacts: true,
   schedulingBufferMinutes: 15,
   meetingDefaultDurationMinutes: 30,
-  enabledSkills: executiveAssistantSkills.map((skill) => skill.id),
+  enabledSkills: [],
 }

@@ -71,9 +71,13 @@ export function resolveExecutionDecision(params: {
     return { effectiveMode: 'ask' as const, reason: 'medium_risk_requires_review' as ExecutionDecisionReason }
   }
 
-  const lowestConfidence = params.proposals.reduce((current, proposal) => Math.min(current, proposal.confidenceScore), 1)
-  if (params.proposals.length > 0 && lowestConfidence < params.assistantProfile.confidenceThreshold) {
-    return { effectiveMode: 'ask' as const, reason: 'confidence_below_threshold' as ExecutionDecisionReason }
+  // Only gate on confidence when policy is explicitly auto_when_confident.
+  // When user explicitly chose auto mode with auto_low_risk, trust that choice.
+  if (params.assistantProfile.executionPolicy === 'auto_when_confident') {
+    const lowestConfidence = params.proposals.reduce((current, proposal) => Math.min(current, proposal.confidenceScore), 1)
+    if (params.proposals.length > 0 && lowestConfidence < params.assistantProfile.confidenceThreshold) {
+      return { effectiveMode: 'ask' as const, reason: 'confidence_below_threshold' as ExecutionDecisionReason }
+    }
   }
 
   return { effectiveMode: 'auto' as const, reason: 'auto_approved' as ExecutionDecisionReason }

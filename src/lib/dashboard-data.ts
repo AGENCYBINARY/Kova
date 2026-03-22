@@ -12,12 +12,16 @@ export interface DashboardAction {
   id: string
   type:
     | 'send_email'
+    | 'reply_to_email'
     | 'create_calendar_event'
+    | 'update_calendar_event'
+    | 'delete_calendar_event'
     | 'update_notion_page'
     | 'create_notion_page'
     | 'create_google_doc'
     | 'update_google_doc'
     | 'create_google_drive_file'
+    | 'delete_google_drive_file'
   title: string
   description: string
   parameters: Record<string, unknown>

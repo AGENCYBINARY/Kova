@@ -4,6 +4,7 @@ import {
   getGoogleIntegrationCapabilityState,
   getValidGoogleAccessToken,
   listGoogleCalendarEvents,
+  listRecentGoogleDocs,
   listTodayGmailMessages,
   searchGmailMessages,
   searchGoogleDriveFiles,
@@ -11,6 +12,7 @@ import {
   type GmailMessageSummary,
   type GoogleCalendarAvailabilityWindow,
   type GoogleCalendarEventSummary,
+  type GoogleDocSummary,
   type GoogleDriveFileSummary,
 } from '@/lib/integrations/google'
 import {
@@ -59,6 +61,13 @@ interface DriveFileMetadata {
   mimeType: string
   modifiedTime: string | null
   owners: string[]
+  webViewLink: string | null
+}
+
+interface GoogleDocMetadata {
+  title: string
+  modifiedTime: string | null
+  preview: string
   webViewLink: string | null
 }
 
@@ -111,6 +120,10 @@ function formatAvailabilityLine(window: GoogleCalendarAvailabilityWindow) {
 
 function formatDriveFileLine(file: GoogleDriveFileSummary) {
   return `${file.name} | ${file.mimeType} | modified ${file.modifiedTime || 'unknown'}${file.owners.length > 0 ? ` | owners: ${file.owners.join(', ')}` : ''}${file.webViewLink ? ` | link: ${file.webViewLink}` : ''}`
+}
+
+function formatGoogleDocLine(doc: GoogleDocSummary) {
+  return `${doc.title} | modified ${doc.modifiedTime || 'unknown'}${doc.preview ? ` | ${doc.preview}` : ''}${doc.webViewLink ? ` | ${doc.webViewLink}` : ''}`
 }
 
 function formatNotionPageLine(page: NotionPageSummary) {
@@ -263,6 +276,37 @@ async function buildDriveContext(params: {
   } satisfies SourceContextBlock
 }
 
+async function buildDocsContext(params: {
+  request: ConnectedContextRequest
+  accessToken: string
+  connectedAccount: string | null
+}) {
+  const docs = await listRecentGoogleDocs(params.accessToken, {
+    query: params.request.searchQuery || undefined,
+    maxResults: 8,
+  })
+
+  return {
+    source: 'google_docs' as const,
+    lines: [
+      `Google Docs${params.connectedAccount ? ` (${params.connectedAccount})` : ''}`,
+      `- documents loaded: ${docs.length}`,
+      ...(docs.length > 0 ? docs.map((doc) => `- ${formatGoogleDocLine(doc)}`) : ['- no matching documents']),
+    ],
+    metadata: {
+      source: 'google_docs',
+      connectedAccount: params.connectedAccount,
+      docCount: docs.length,
+      docs: docs.map((doc) => ({
+        title: doc.title,
+        modifiedTime: doc.modifiedTime,
+        preview: doc.preview,
+        webViewLink: doc.webViewLink,
+      } satisfies GoogleDocMetadata)),
+    },
+  } satisfies SourceContextBlock
+}
+
 async function buildNotionContext(params: {
   request: ConnectedContextRequest
   accessToken: string
@@ -308,7 +352,7 @@ async function resolveSourceContext(params: {
   userId: string
   workspaceId: string
 }) {
-  const integrationType = params.source === 'calendar' ? 'calendar' : params.source
+  const integrationType = params.source === 'google_docs' ? 'google_docs' : params.source === 'calendar' ? 'calendar' : params.source
   const integration = await prisma.integration.findFirst({
     where: {
       type: integrationType,
@@ -342,9 +386,10 @@ async function resolveSourceContext(params: {
   if (
     integrationType === 'gmail' ||
     integrationType === 'calendar' ||
-    integrationType === 'google_drive'
+    integrationType === 'google_drive' ||
+    integrationType === 'google_docs'
   ) {
-    const capabilityState = getGoogleIntegrationCapabilityState(integrationType, integration.metadata)
+    const capabilityState = getGoogleIntegrationCapabilityState(integrationType as 'gmail' | 'calendar' | 'google_drive' | 'google_docs', integration.metadata)
     if (capabilityState.needsReconnect) {
       return {
         source: params.source,
@@ -374,6 +419,14 @@ async function resolveSourceContext(params: {
     return buildCalendarContext({
       request: params.request,
       accessToken,
+    })
+  }
+
+  if (params.source === 'google_docs') {
+    return buildDocsContext({
+      request: params.request,
+      accessToken,
+      connectedAccount,
     })
   }
 

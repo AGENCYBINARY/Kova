@@ -37,7 +37,7 @@ const defaultProfile: Profile = {
   signatureName: 'AGENCY BINARY',
   signatureBlock: 'AGENCY BINARY\nExecutive Operations',
   executionPolicy: 'auto_low_risk',
-  confidenceThreshold: 0.9,
+  confidenceThreshold: 0.75,
   autoResolveKnownContacts: true,
   schedulingBufferMinutes: 15,
   meetingDefaultDurationMinutes: 30,
