@@ -187,3 +187,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.usageBadgeWrapper {
+  padding: 0 12px 12px;
+}

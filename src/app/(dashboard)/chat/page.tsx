@@ -75,6 +75,22 @@ export default function ChatPage() {
       })
 
       if (!response.ok) {
+        if (response.status === 429) {
+          const errData = await response.json().catch(() => ({}))
+          if (errData.error === 'quota_exceeded') {
+            const q = errData.quota
+            const planLabel = q?.plan === 'free' ? 'gratuit' : (q?.plan ?? 'free')
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: String(Date.now()),
+                role: 'assistant' as const,
+                content: 'Tu as atteint ta limite mensuelle de ' + (q?.limit ?? 50) + ' requetes (plan ' + planLabel + '). Pour continuer, mets a niveau ton abonnement depuis les Parametres.',
+              },
+            ])
+            return
+          }
+        }
         throw new Error('Failed to send message.')
       }
 

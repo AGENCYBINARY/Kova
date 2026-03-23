@@ -38,6 +38,8 @@ export async function POST(request: Request) {
       },
     })
 
+    // Incrémenter après succès
+    await incrementUsage(dbUserId)
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof z.ZodError) {

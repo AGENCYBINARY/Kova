@@ -12,16 +12,19 @@
     "mcp:standalone": "tsx src/lib/mcp/standalone-server.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "vercel-build": "prisma db push && next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@clerk/nextjs": "^5.7.0",
     "@prisma/client": "^6.19.2",
+    "@stripe/stripe-js": "^8.11.0",
     "framer-motion": "^12.38.0",
     "next": "14.2.24",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "stripe": "^20.4.1",
     "swr": "^2.3.0",
     "zod": "^3.24.1"
   },

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { UserButton, useUser } from '@clerk/nextjs'
 import styles from './Sidebar.module.css'
+import { UsageBadge } from '@/components/ui/UsageBadge'
 
 const navigation = [
   {
@@ -260,6 +261,9 @@ export function Sidebar() {
         </ul>
       </div>
 
+      <div className={styles.usageBadgeWrapper}>
+        <UsageBadge />
+      </div>
       <div className={styles.footer}>
         <div className={styles.user}>
           <UserButton

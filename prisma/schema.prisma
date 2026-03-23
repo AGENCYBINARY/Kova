@@ -20,6 +20,7 @@ model User {
   integrations  Integration[]
   messages      Message[]
   workspaces    Workspace[]
+  subscription  Subscription?
 }
 
 model Workspace {
@@ -120,3 +121,21 @@ model Contact {
 
   @@unique([workspaceId, userId, email])
 }
+
+model Subscription {
+  id                     String    @id @default(cuid())
+  userId                 String    @unique
+  stripeCustomerId       String?   @unique
+  stripeSubscriptionId   String?   @unique
+  stripePriceId          String?
+  plan                   String    @default("free") // free | plus | pro
+  status                 String    @default("active") // active | canceled | past_due | incomplete
+  currentPeriodEnd       DateTime?
+  requestsUsedThisMonth  Int       @default(0)
+  monthResetAt           DateTime  @default(now())
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
