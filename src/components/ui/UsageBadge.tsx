@@ -1,7 +1,5 @@
 "use client"
-
 import { useEffect, useState } from "react"
-import { Zap } from "lucide-react"
 
 type QuotaData = {
   plan: string
@@ -44,27 +42,41 @@ export function UsageBadge() {
 
   const planLabel = quota.plan.charAt(0).toUpperCase() + quota.plan.slice(1)
 
+  const counterColor = isAtLimit
+    ? "text-red-400"
+    : isNearLimit
+    ? "text-amber-400"
+    : "text-white/50"
+
+  const barColor = isAtLimit
+    ? "bg-red-500"
+    : isNearLimit
+    ? "bg-amber-400"
+    : "bg-indigo-500"
+
+  const barWidth = Math.min(pct, 100) + "%"
+
   return (
     <div className="p-3 mx-2 mb-2 rounded-xl bg-white/5 border border-white/10 text-sm">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 text-white/70">
-          <Zap className="w-3.5 h-3.5" />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
           <span>Plan {planLabel}</span>
         </div>
-        <span className={}>
+        <span className={counterColor}>
           {quota.used}/{quota.limit}
         </span>
       </div>
 
-      {/* Barre de progression */}
       <div className="h-1 bg-white/10 rounded-full overflow-hidden mb-2.5">
         <div
-          className={}
-          style={{ width:  }}
+          className={"h-full rounded-full transition-all " + barColor}
+          style={{ width: barWidth }}
         />
       </div>
 
-      {/* CTA */}
       {quota.plan === "free" && (
         <div className="flex gap-1.5">
           <button
@@ -81,6 +93,7 @@ export function UsageBadge() {
           </button>
         </div>
       )}
+
       {(quota.plan === "plus" || quota.plan === "pro") && (
         <button
           onClick={openPortal}

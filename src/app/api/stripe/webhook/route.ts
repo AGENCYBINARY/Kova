@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server"
 import { headers } from "next/headers"
 import { stripe } from "@/lib/stripe"
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/db/prisma"
 import Stripe from "stripe"
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getPeriodEnd(sub: any): Date | null {
+  const ts = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end
+  return ts ? new Date(ts * 1000) : null
+}
 
 export async function POST(req: Request) {
   const body = await req.text()
@@ -23,8 +29,9 @@ export async function POST(req: Request) {
 
   switch (event.type) {
     case "checkout.session.completed": {
-      const session = event.data.object as Stripe.CheckoutSession
-      const sub = await stripe.subscriptions.retrieve(session.subscription as string)
+      const session = event.data.object as Stripe.Checkout.Session
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sub: any = await stripe.subscriptions.retrieve(session.subscription as string)
       const priceId = sub.items.data[0].price.id
       const plan = getPlan(priceId)
       await prisma.subscription.update({
@@ -34,13 +41,14 @@ export async function POST(req: Request) {
           stripePriceId: priceId,
           plan,
           status: "active",
-          currentPeriodEnd: new Date(sub.current_period_end * 1000),
+          currentPeriodEnd: getPeriodEnd(sub),
         },
       })
       break
     }
     case "customer.subscription.updated": {
-      const sub = event.data.object as Stripe.Subscription
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sub = event.data.object as any
       const priceId = sub.items.data[0].price.id
       const plan = getPlan(priceId)
       await prisma.subscription.update({
@@ -49,7 +57,7 @@ export async function POST(req: Request) {
           plan,
           status: sub.status,
           stripePriceId: priceId,
-          currentPeriodEnd: new Date(sub.current_period_end * 1000),
+          currentPeriodEnd: getPeriodEnd(sub),
         },
       })
       break

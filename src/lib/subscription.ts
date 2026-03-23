@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/db/prisma"
 import { PLANS, PlanKey } from "@/lib/stripe"
 
 export async function getOrCreateSubscription(userId: string) {
@@ -35,7 +35,6 @@ export async function checkQuota(userId: string): Promise<{
   const plan = (sub.plan as PlanKey) in PLANS ? (sub.plan as PlanKey) : "free"
   const limit = PLANS[plan].requests
   const used = sub.requestsUsedThisMonth
-
   return {
     allowed: used < limit,
     plan,
