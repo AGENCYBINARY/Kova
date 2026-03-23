@@ -68,10 +68,10 @@ export default function HomePage() {
             <span>Kova</span>
           </Link>
           <div className={styles.navLinks}>
-            <a href="#features" className={styles.navLink}>Features</a>
-            <a href="#demo" className={styles.navLink}>Demo</a>
-            <Link href="/sign-in" className={styles.navSignIn}>Sign in</Link>
-            <Link href="/sign-up" className={styles.navCta}>Get started</Link>
+            <a href="#features" className={styles.navLink}>Fonctionnalités</a>
+            <a href="#demo" className={styles.navLink}>Démo</a>
+            <Link href="/sign-in" className={styles.navSignIn}>Connexion</Link>
+            <Link href="/sign-up" className={styles.navCta}>Commencer</Link>
           </div>
         </div>
       </header>
@@ -84,27 +84,27 @@ export default function HomePage() {
         </div>
 
         <h1 className={styles.heroTitle}>
-          Make operations
+          Les opérations,
           <br />
-          <span className={styles.heroGradient}>feel instant</span>
+          <span className={styles.heroGradient}>à la vitesse de la pensée</span>
         </h1>
 
         <p className={styles.heroSub}>
-          Connect your tools. Delegate to AI.
+          Connecte tes outils. Délègue à l&apos;IA.
           <br />
-          Approve before anything goes out.
+          Valide avant que rien ne parte.
         </p>
 
         <div className={styles.heroCtas}>
           <Link href="/sign-up" className={styles.ctaPrimary}>
-            Open your workspace
+            Ouvrir mon espace de travail
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="5" y1="12" x2="19" y2="12" />
               <polyline points="12 5 19 12 12 19" />
             </svg>
           </Link>
           <a href="#demo" className={styles.ctaGhost}>
-            Watch demo ↓
+            Voir la démo ↓
           </a>
         </div>
 
