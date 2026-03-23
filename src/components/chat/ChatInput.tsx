@@ -1,7 +1,7 @@
 'use client'
-
 import { useState, useRef, KeyboardEvent, useLayoutEffect, ChangeEvent } from 'react'
 import { Textarea } from '../ui'
+import { useLang } from '@/lib/lang-context'
 import styles from './ChatInput.module.css'
 
 interface ChatInputProps {
@@ -11,12 +11,8 @@ interface ChatInputProps {
   preferredMode: 'ask' | 'auto'
 }
 
-export function ChatInput({
-  onSend,
-  onModeChange,
-  disabled,
-  preferredMode,
-}: ChatInputProps) {
+export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: ChatInputProps) {
+  const { t } = useLang()
   const [message, setMessage] = useState('')
   const [attachments, setAttachments] = useState<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -25,7 +21,6 @@ export function ChatInput({
   useLayoutEffect(() => {
     const textarea = textareaRef.current
     if (!textarea) return
-
     textarea.style.height = 'auto'
     const nextHeight = Math.min(Math.max(textarea.scrollHeight, 52), 160)
     textarea.style.height = `${nextHeight}px`
@@ -36,17 +31,9 @@ export function ChatInput({
       onSend(message.trim(), preferredMode)
       setMessage('')
       setAttachments([])
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-      if (textareaRef.current) {
-        textareaRef.current.style.height = '52px'
-      }
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (textareaRef.current) textareaRef.current.style.height = '52px'
     }
-  }
-
-  const handlePickAttachment = () => {
-    fileInputRef.current?.click()
   }
 
   const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -65,10 +52,6 @@ export function ChatInput({
     }
   }
 
-  const handleModeChange = (mode: 'ask' | 'auto') => {
-    onModeChange(mode)
-  }
-
   return (
     <div className={styles.container}>
       <div className={styles.inputWrapper}>
@@ -82,9 +65,9 @@ export function ChatInput({
         <button
           type="button"
           className={styles.attachButton}
-          onClick={handlePickAttachment}
+          onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
-          aria-label="Add attachment"
+          aria-label={t.chatInput.addAttachment}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14" />
@@ -96,7 +79,7 @@ export function ChatInput({
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Écris ton message..."
+          placeholder={t.chatInput.placeholder}
           disabled={disabled}
           className={styles.textarea}
         />
@@ -104,7 +87,7 @@ export function ChatInput({
           className={styles.sendButton}
           onClick={handleSend}
           disabled={!message.trim() || disabled}
-          aria-label="Send message"
+          aria-label={t.chatInput.send}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M5 12h11" />
@@ -120,7 +103,7 @@ export function ChatInput({
               type="button"
               className={styles.attachmentChip}
               onClick={() => removeAttachment(attachment)}
-              title="Retirer la pièce jointe"
+              title={t.chatInput.removeAttachment}
             >
               <span>{attachment}</span>
               <span className={styles.attachmentRemove}>×</span>
@@ -133,21 +116,21 @@ export function ChatInput({
           <button
             type="button"
             className={`${styles.modeButton} ${preferredMode === 'ask' ? styles.modeButtonActive : ''}`}
-            onClick={() => handleModeChange('ask')}
+            onClick={() => onModeChange('ask')}
             disabled={disabled}
           >
-            Demander avant d&apos;agir
+            {t.chatInput.askMode}
           </button>
           <button
             type="button"
             className={`${styles.modeButton} ${preferredMode === 'auto' ? styles.modeButtonActive : ''}`}
-            onClick={() => handleModeChange('auto')}
+            onClick={() => onModeChange('auto')}
             disabled={disabled}
           >
-            Agir sans demander
+            {t.chatInput.autoMode}
           </button>
         </div>
-        <p className={styles.hint}>Entrée pour envoyer, Shift+Entrée pour une ligne.</p>
+        <p className={styles.hint}>{t.chatInput.hint}</p>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
-
 import { Badge, Button, Card } from '../ui'
+import { useLang } from '@/lib/lang-context'
 import styles from './ActionProposalCard.module.css'
 
 interface ActionProposalCardProps {
@@ -14,106 +14,83 @@ interface ActionProposalCardProps {
   loading?: boolean
 }
 
-function renderEmailPreview(parameters: Record<string, unknown>) {
+function renderEmailPreview(parameters: Record<string, unknown>, t: ReturnType<typeof useLang>['t']) {
   const recipients = Array.isArray(parameters.to) ? parameters.to.join(', ') : ''
   const subject = typeof parameters.subject === 'string' ? parameters.subject : ''
   const body = typeof parameters.body === 'string' ? parameters.body : ''
   const confidenceScore =
-    typeof parameters.confidenceScore === 'number' ? `${Math.round(parameters.confidenceScore * 100)}% confidence` : null
-
+    typeof parameters.confidenceScore === 'number'
+      ? `${Math.round(parameters.confidenceScore * 100)}% confidence`
+      : null
   return (
     <div className={styles.previewBlock}>
       <div className={styles.previewRow}>
-        <span className={styles.previewLabel}>A</span>
-        <span className={styles.previewValue}>{recipients || 'Destinataire manquant'}</span>
+        <span className={styles.previewLabel}>{t.proposal.to}</span>
+        <span className={styles.previewValue}>{recipients || t.proposal.noRecipient}</span>
       </div>
       <div className={styles.previewRow}>
-        <span className={styles.previewLabel}>Objet</span>
-        <span className={styles.previewValue}>{subject || 'Sans objet'}</span>
+        <span className={styles.previewLabel}>{t.proposal.subject}</span>
+        <span className={styles.previewValue}>{subject || t.proposal.noSubject}</span>
       </div>
-      {confidenceScore ? (
-        <div className={styles.previewMeta}>{confidenceScore}</div>
-      ) : null}
-      <div className={styles.previewBody}>{body || 'Contenu vide'}</div>
+      {confidenceScore ? <div className={styles.previewMeta}>{confidenceScore}</div> : null}
+      <div className={styles.previewBody}>{body || t.proposal.emptyBody}</div>
     </div>
   )
 }
 
-function renderCalendarPreview(parameters: Record<string, unknown>) {
+function renderCalendarPreview(parameters: Record<string, unknown>, t: ReturnType<typeof useLang>['t']) {
   const attendees = Array.isArray(parameters.attendees)
-    ? parameters.attendees.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    ? parameters.attendees.filter((v): v is string => typeof v === 'string' && v.length > 0)
     : []
   const hasMeet = Boolean(parameters.createMeetLink)
-
   return (
     <div className={styles.previewBlock}>
       <div className={styles.previewRow}>
-        <span className={styles.previewLabel}>Titre</span>
+        <span className={styles.previewLabel}>{t.proposal.title}</span>
         <span className={styles.previewValue}>{String(parameters.title || 'Meeting')}</span>
       </div>
       <div className={styles.previewRow}>
-        <span className={styles.previewLabel}>Début</span>
+        <span className={styles.previewLabel}>{t.proposal.start}</span>
         <span className={styles.previewValue}>{String(parameters.startTime || '-')}</span>
       </div>
       <div className={styles.previewRow}>
-        <span className={styles.previewLabel}>Fin</span>
+        <span className={styles.previewLabel}>{t.proposal.end}</span>
         <span className={styles.previewValue}>{String(parameters.endTime || '-')}</span>
       </div>
       <div className={styles.previewRow}>
-        <span className={styles.previewLabel}>Invités</span>
-        <span className={styles.previewValue}>{attendees.length > 0 ? attendees.join(', ') : 'Aucun invité résolu'}</span>
+        <span className={styles.previewLabel}>{t.proposal.attendees}</span>
+        <span className={styles.previewValue}>{attendees.length > 0 ? attendees.join(', ') : t.proposal.noAttendees}</span>
       </div>
-      <div className={styles.previewMeta}>{hasMeet ? 'Google Meet actif' : 'Sans lien de visio'}</div>
+      <div className={styles.previewMeta}>{hasMeet ? t.proposal.meetActive : t.proposal.noMeet}</div>
     </div>
   )
 }
 
-function renderDrivePreview(parameters: Record<string, unknown>) {
+function renderDrivePreview(parameters: Record<string, unknown>, t: ReturnType<typeof useLang>['t']) {
   const name = typeof parameters.name === 'string' ? parameters.name : 'Untitled file'
   const folderName = typeof parameters.folderName === 'string' ? parameters.folderName : null
   const mimeType = typeof parameters.mimeType === 'string' ? parameters.mimeType : 'text/plain'
   const content = typeof parameters.content === 'string' ? parameters.content : ''
   const isFolder = mimeType === 'application/vnd.google-apps.folder'
-
   return (
     <div className={styles.previewBlock}>
       <div className={styles.previewRow}>
-        <span className={styles.previewLabel}>{isFolder ? 'Dossier' : 'Nom'}</span>
+        <span className={styles.previewLabel}>{isFolder ? t.proposal.folder : t.proposal.name}</span>
         <span className={styles.previewValue}>{name}</span>
       </div>
       {!isFolder ? (
         <div className={styles.previewRow}>
-          <span className={styles.previewLabel}>Format</span>
+          <span className={styles.previewLabel}>{t.proposal.format}</span>
           <span className={styles.previewValue}>{mimeType}</span>
         </div>
       ) : null}
       {folderName ? (
         <div className={styles.previewRow}>
-          <span className={styles.previewLabel}>Emplacement</span>
+          <span className={styles.previewLabel}>{t.proposal.location}</span>
           <span className={styles.previewValue}>{folderName}</span>
         </div>
       ) : null}
       {content ? <div className={styles.previewBody}>{content}</div> : null}
-    </div>
-  )
-}
-
-function renderProposalPreview(type: string, parameters: Record<string, unknown>) {
-  if (type === 'send_email') {
-    return renderEmailPreview(parameters)
-  }
-
-  if (type === 'create_calendar_event') {
-    return renderCalendarPreview(parameters)
-  }
-
-  if (type === 'create_google_drive_file') {
-    return renderDrivePreview(parameters)
-  }
-
-  return (
-    <div className={styles.parametersCompact}>
-      <pre className={styles.paramsJson}>{JSON.stringify(parameters, null, 2)}</pre>
     </div>
   )
 }
@@ -141,46 +118,28 @@ const actionIcons: Record<string, JSX.Element> = {
       <line x1="9" y1="15" x2="15" y2="15" />
     </svg>
   ),
-  update_notion_page: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  ),
-  create_google_doc: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-      <path d="M14 3v5h5" />
-      <line x1="9" y1="13" x2="15" y2="13" />
-      <line x1="9" y1="17" x2="15" y2="17" />
-    </svg>
-  ),
-  update_google_doc: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-      <path d="M14 3v5h5" />
-      <path d="M9 16h6" />
-      <path d="M9 12h4" />
-    </svg>
-  ),
   create_google_drive_file: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M9 3h6l5 9-5 9H9l-5-9 5-9z" />
-      <path d="M9 3 4 12M15 3l5 9M9 21l-5-9m11 9 5-9M7 16h10" />
+      <path d="M9 3 4 12M15 3l5 9M7 16h10" />
     </svg>
   ),
 }
 
-export function ActionProposalCard({
-  id,
-  type,
-  title,
-  description,
-  parameters,
-  onApprove,
-  onReject,
-  loading,
-}: ActionProposalCardProps) {
+export function ActionProposalCard({ id, type, title, description, parameters, onApprove, onReject, loading }: ActionProposalCardProps) {
+  const { t } = useLang()
+
+  const renderPreview = () => {
+    if (type === 'send_email') return renderEmailPreview(parameters, t)
+    if (type === 'create_calendar_event') return renderCalendarPreview(parameters, t)
+    if (type === 'create_google_drive_file') return renderDrivePreview(parameters, t)
+    return (
+      <div className={styles.parametersCompact}>
+        <pre className={styles.paramsJson}>{JSON.stringify(parameters, null, 2)}</pre>
+      </div>
+    )
+  }
+
   return (
     <Card variant="bordered" className={styles.card}>
       <div className={styles.header}>
@@ -189,33 +148,17 @@ export function ActionProposalCard({
         </div>
         <div className={styles.headerContent}>
           <h3 className={styles.title}>{title}</h3>
-          <Badge variant="warning" size="sm">
-            Pending Approval
-          </Badge>
+          <Badge variant="warning" size="sm">{t.proposal.pendingApproval}</Badge>
         </div>
       </div>
-
       <p className={styles.description}>{description}</p>
-
-      {renderProposalPreview(type, parameters)}
-
+      {renderPreview()}
       <div className={styles.actions}>
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => onReject(id)}
-          disabled={loading}
-        >
-          Non
+        <Button variant="danger" size="sm" onClick={() => onReject(id)} disabled={loading}>
+          {t.proposal.reject}
         </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => onApprove(id)}
-          disabled={loading}
-          loading={loading}
-        >
-          Oui, exécuter
+        <Button variant="primary" size="sm" onClick={() => onApprove(id)} disabled={loading} loading={loading}>
+          {t.proposal.approve}
         </Button>
       </div>
     </Card>

@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { AssistantSettingsForm } from '@/components/settings/AssistantSettingsForm'
 import { Avatar, Button, Card } from '@/components/ui'
+import { useLang } from '@/lib/lang-context'
 import styles from './page.module.css'
 
 export default function SettingsPage() {
   const { user } = useUser()
+  const { t } = useLang()
   const [autoApproveActions, setAutoApproveActions] = useState(false)
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [approvalSummaryDigest, setApprovalSummaryDigest] = useState(true)
@@ -17,34 +19,26 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!toast) return
-
-    const timeout = window.setTimeout(() => {
-      setToast(null)
-    }, 3000)
-
+    const timeout = window.setTimeout(() => setToast(null), 3000)
     return () => window.clearTimeout(timeout)
   }, [toast])
 
-  const notify = (message: string) => {
-    setToast(message)
-  }
+  const notify = (message: string) => setToast(message)
 
   return (
     <div className={styles.container}>
       {toast ? <div className={styles.toast}>{toast}</div> : null}
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Workspace Preferences</p>
-          <h1 className={styles.title}>Settings</h1>
-          <p className={styles.subtitle}>
-            Tune approval behavior, notifications, and operator safeguards for this workspace.
-          </p>
+          <p className={styles.eyebrow}>{t.settings.eyebrow}</p>
+          <h1 className={styles.title}>{t.settings.title}</h1>
+          <p className={styles.subtitle}>{t.settings.subtitle}</p>
         </div>
       </header>
 
       <div className={styles.content}>
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Profile</h2>
+          <h2 className={styles.sectionTitle}>{t.settings.profile}</h2>
           <Card variant="bordered" className={styles.card}>
             <div className={styles.profile}>
               <Avatar
@@ -59,34 +53,32 @@ export default function SettingsPage() {
                 </p>
               </div>
               <Button variant="secondary" size="sm">
-                Edit Profile
+                {t.settings.editProfile}
               </Button>
             </div>
           </Card>
         </section>
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Executive Assistant</h2>
+          <h2 className={styles.sectionTitle}>{t.settings.assistant}</h2>
           <AssistantSettingsForm />
         </section>
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Preferences</h2>
+          <h2 className={styles.sectionTitle}>{t.settings.preferences}</h2>
           <Card variant="bordered" className={styles.card}>
             <div className={styles.setting}>
               <div className={styles.settingInfo}>
-                <h4 className={styles.settingTitle}>Auto-approve actions</h4>
-                <p className={styles.settingDescription}>
-                  Automatically approve low-risk actions without confirmation
-                </p>
+                <h4 className={styles.settingTitle}>{t.settings.autoApprove}</h4>
+                <p className={styles.settingDescription}>{t.settings.autoApproveDesc}</p>
               </div>
               <label className={styles.toggle}>
                 <input
                   type="checkbox"
                   checked={autoApproveActions}
-                  onChange={(event) => {
-                    setAutoApproveActions(event.target.checked)
-                    notify(`Auto-approve actions ${event.target.checked ? 'enabled' : 'disabled'}.`)
+                  onChange={(e) => {
+                    setAutoApproveActions(e.target.checked)
+                    notify(t.settings.autoApprove + ' ' + (e.target.checked ? '✓' : '✗'))
                   }}
                 />
                 <span className={styles.toggleSlider} />
@@ -97,18 +89,16 @@ export default function SettingsPage() {
 
             <div className={styles.setting}>
               <div className={styles.settingInfo}>
-                <h4 className={styles.settingTitle}>Email notifications</h4>
-                <p className={styles.settingDescription}>
-                  Receive email notifications for pending actions
-                </p>
+                <h4 className={styles.settingTitle}>{t.settings.emailNotifs}</h4>
+                <p className={styles.settingDescription}>{t.settings.emailNotifsDesc}</p>
               </div>
               <label className={styles.toggle}>
                 <input
                   type="checkbox"
                   checked={emailNotifications}
-                  onChange={(event) => {
-                    setEmailNotifications(event.target.checked)
-                    notify(`Email notifications ${event.target.checked ? 'enabled' : 'disabled'}.`)
+                  onChange={(e) => {
+                    setEmailNotifications(e.target.checked)
+                    notify(t.settings.emailNotifs + ' ' + (e.target.checked ? '✓' : '✗'))
                   }}
                 />
                 <span className={styles.toggleSlider} />
@@ -119,22 +109,20 @@ export default function SettingsPage() {
 
             <div className={styles.setting}>
               <div className={styles.settingInfo}>
-                <h4 className={styles.settingTitle}>Action timeout</h4>
-                <p className={styles.settingDescription}>
-                  Maximum time to wait for action execution (seconds)
-                </p>
+                <h4 className={styles.settingTitle}>{t.settings.actionTimeout}</h4>
+                <p className={styles.settingDescription}>{t.settings.actionTimeoutDesc}</p>
               </div>
               <select
                 className={styles.select}
                 value={actionTimeout}
-                onChange={(event) => {
-                  setActionTimeout(event.target.value)
-                  notify(`Action timeout set to ${event.target.value} seconds.`)
+                onChange={(e) => {
+                  setActionTimeout(e.target.value)
+                  notify(t.settings.actionTimeout + ': ' + e.target.value + 's')
                 }}
               >
-                <option value="30">30 seconds</option>
-                <option value="60">60 seconds</option>
-                <option value="120">120 seconds</option>
+                <option value="30">30 {t.settings.seconds}</option>
+                <option value="60">60 {t.settings.seconds}</option>
+                <option value="120">120 {t.settings.seconds}</option>
               </select>
             </div>
           </Card>
@@ -145,18 +133,16 @@ export default function SettingsPage() {
           <Card variant="bordered" className={styles.card}>
             <div className={styles.setting}>
               <div className={styles.settingInfo}>
-                <h4 className={styles.settingTitle}>Approval summary digest</h4>
-                <p className={styles.settingDescription}>
-                  Bundle low-priority proposals into a single review digest every hour.
-                </p>
+                <h4 className={styles.settingTitle}>{t.settings.approvalDigest}</h4>
+                <p className={styles.settingDescription}>{t.settings.approvalDigestDesc}</p>
               </div>
               <label className={styles.toggle}>
                 <input
                   type="checkbox"
                   checked={approvalSummaryDigest}
-                  onChange={(event) => {
-                    setApprovalSummaryDigest(event.target.checked)
-                    notify(`Approval summary digest ${event.target.checked ? 'enabled' : 'disabled'}.`)
+                  onChange={(e) => {
+                    setApprovalSummaryDigest(e.target.checked)
+                    notify(t.settings.approvalDigest + ' ' + (e.target.checked ? '✓' : '✗'))
                   }}
                 />
                 <span className={styles.toggleSlider} />
@@ -167,18 +153,16 @@ export default function SettingsPage() {
 
             <div className={styles.setting}>
               <div className={styles.settingInfo}>
-                <h4 className={styles.settingTitle}>Block external sends after failure</h4>
-                <p className={styles.settingDescription}>
-                  Pause outbound actions automatically when a provider authentication error is detected.
-                </p>
+                <h4 className={styles.settingTitle}>{t.settings.blockExternal}</h4>
+                <p className={styles.settingDescription}>{t.settings.blockExternalDesc}</p>
               </div>
               <label className={styles.toggle}>
                 <input
                   type="checkbox"
                   checked={blockExternalSends}
-                  onChange={(event) => {
-                    setBlockExternalSends(event.target.checked)
-                    notify(`Failure protection ${event.target.checked ? 'enabled' : 'disabled'}.`)
+                  onChange={(e) => {
+                    setBlockExternalSends(e.target.checked)
+                    notify(t.settings.blockExternal + ' ' + (e.target.checked ? '✓' : '✗'))
                   }}
                 />
                 <span className={styles.toggleSlider} />
@@ -192,13 +176,13 @@ export default function SettingsPage() {
           <Card variant="bordered" className={styles.card}>
             <div className={styles.dangerSetting}>
               <div className={styles.settingInfo}>
-                <h4 className={styles.settingTitle}>Delete all data</h4>
+                <h4 className={styles.settingTitle}>Supprimer toutes les données</h4>
                 <p className={styles.settingDescription}>
-                  Permanently delete all your data including messages, actions, and history
+                  Supprime définitivement tous vos messages, actions et historique
                 </p>
               </div>
               <Button variant="danger" size="sm">
-                Delete Data
+                Supprimer
               </Button>
             </div>
           </Card>

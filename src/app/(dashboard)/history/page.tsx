@@ -1,5 +1,6 @@
 import { Badge, Card } from '@/components/ui'
 import { getDashboardBundle } from '@/lib/dashboard/server'
+import { getT, getLang } from '@/lib/lang-server'
 import styles from './page.module.css'
 
 const statusColors = {
@@ -24,12 +25,6 @@ const actionIcons: Record<string, JSX.Element> = {
       <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   ),
-  update_notion_page: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  ),
   create_google_doc: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
@@ -38,58 +33,42 @@ const actionIcons: Record<string, JSX.Element> = {
       <line x1="9" y1="17" x2="15" y2="17" />
     </svg>
   ),
-  update_google_doc: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-      <path d="M14 3v5h5" />
-      <path d="M9 16h6" />
-      <path d="M9 12h4" />
-    </svg>
-  ),
-  create_google_drive_file: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M9 3h6l5 9-5 9H9l-5-9 5-9z" />
-      <path d="M9 3 4 12M15 3l5 9M7 16h10" />
-    </svg>
-  ),
 }
 
 export default async function HistoryPage() {
   const data = await getDashboardBundle()
+  const t = getT()
+  const lang = getLang()
   const { executionHistory } = data
 
   return (
     <div className={styles.container}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Audit Trail</p>
-          <h1 className={styles.title}>Execution History</h1>
-          <p className={styles.subtitle}>
-            Chronological log of every approved, rejected, completed, and failed action.
-          </p>
+          <p className={styles.eyebrow}>{t.history.eyebrow}</p>
+          <h1 className={styles.title}>{t.history.title}</h1>
+          <p className={styles.subtitle}>{t.history.subtitle}</p>
         </div>
         <div className={styles.headerBadges}>
-          <Badge variant="info">{executionHistory.length} records</Badge>
+          <Badge variant="info">{executionHistory.length} {t.history.records}</Badge>
           <Badge variant={data.source === 'database' ? 'success' : 'warning'}>{data.source}</Badge>
         </div>
       </header>
-
       <div className={styles.content}>
         <div className={styles.stats}>
           <Card className={styles.statCard}>
             <span className={styles.statValue}>{executionHistory.filter(e => e.status === 'completed').length}</span>
-            <span className={styles.statLabel}>Completed</span>
+            <span className={styles.statLabel}>{t.history.completed}</span>
           </Card>
           <Card className={styles.statCard}>
             <span className={styles.statValue}>{executionHistory.filter(e => e.status === 'failed').length}</span>
-            <span className={styles.statLabel}>Failed</span>
+            <span className={styles.statLabel}>{t.history.failed}</span>
           </Card>
           <Card className={styles.statCard}>
             <span className={styles.statValue}>{executionHistory.filter(e => e.status === 'rejected').length}</span>
-            <span className={styles.statLabel}>Rejected</span>
+            <span className={styles.statLabel}>{t.history.rejected}</span>
           </Card>
         </div>
-
         <div className={styles.list}>
           {executionHistory.map((item) => (
             <Card key={item.id} variant="bordered" className={styles.card}>
@@ -103,19 +82,17 @@ export default async function HistoryPage() {
                   <div className={styles.meta}>
                     <span>{item.targetApp}</span>
                     <span className={styles.metaDivider} />
-                    <span>Confidence {Math.round(item.confidenceScore * 100)}%</span>
+                    <span>{t.history.confidence} {Math.round(item.confidenceScore * 100)}%</span>
                   </div>
-                  {item.error && (
-                    <p className={styles.cardError}>{item.error}</p>
-                  )}
+                  {item.error && <p className={styles.cardError}>{item.error}</p>}
                 </div>
-                <Badge variant={statusColors[item.status as keyof typeof statusColors] as any}>
+                <Badge variant={statusColors[item.status as keyof typeof statusColors] as 'success' | 'danger' | 'warning' | 'info'}>
                   {item.status}
                 </Badge>
               </div>
               <div className={styles.cardFooter}>
                 <span className={styles.timestamp}>
-                  {new Date(item.executedAt || item.createdAt).toLocaleString()}
+                  {new Date(item.executedAt || item.createdAt).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')}
                 </span>
               </div>
             </Card>

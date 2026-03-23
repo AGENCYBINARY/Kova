@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import { Badge, Button, Card } from '@/components/ui'
 import { getDashboardBundle } from '@/lib/dashboard/server'
+import { getT, getLang } from '@/lib/lang-server'
 import styles from './page.module.css'
 
-function formatDate(date: string) {
-  return new Intl.DateTimeFormat('en-US', {
+function formatDate(date: string, lang: string) {
+  return new Intl.DateTimeFormat(lang === 'fr' ? 'fr-FR' : 'en-US', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -14,7 +15,9 @@ function formatDate(date: string) {
 
 export default async function DashboardOverviewPage() {
   const data = await getDashboardBundle()
-  const healthyIntegrations = data.integrations.filter((integration) => integration.health === 'healthy').length
+  const t = getT()
+  const lang = getLang()
+  const healthyIntegrations = data.integrations.filter((i) => i.health === 'healthy').length
   const topPending = data.pendingActions.slice(0, 2)
   const latestHistory = data.executionHistory.slice(0, 4)
 
@@ -23,18 +26,16 @@ export default async function DashboardOverviewPage() {
       <header className={styles.header}>
         <div className={styles.heroBlock}>
           <div className={styles.heroMeta}>
-            <p className={styles.eyebrow}>Workspace Overview</p>
+            <p className={styles.eyebrow}>{t.dashboard.eyebrow}</p>
             <Badge variant={data.source === 'database' ? 'success' : 'warning'}>
-              {data.source === 'database' ? 'Live Prisma Data' : 'Mock Fallback'}
+              {data.source === 'database' ? t.dashboard.liveData : t.dashboard.mockData}
             </Badge>
           </div>
-          <h1 className={styles.title}>Execution command center</h1>
-          <p className={styles.subtitle}>
-            Un seul écran pour piloter les approbations, surveiller la santé des intégrations et garder un audit propre.
-          </p>
+          <h1 className={styles.title}>{t.dashboard.title}</h1>
+          <p className={styles.subtitle}>{t.dashboard.subtitle}</p>
           <div className={styles.heroPreview}>
             <div className={styles.previewColumn}>
-              <span className={styles.previewLabel}>Queued now</span>
+              <span className={styles.previewLabel}>{t.dashboard.queuedNow}</span>
               {topPending.map((action) => (
                 <div key={action.id} className={styles.previewItem}>
                   <strong>{action.title}</strong>
@@ -43,7 +44,7 @@ export default async function DashboardOverviewPage() {
               ))}
             </div>
             <div className={styles.previewColumn}>
-              <span className={styles.previewLabel}>Latest result</span>
+              <span className={styles.previewLabel}>{t.dashboard.latestResult}</span>
               {latestHistory.slice(0, 2).map((action) => (
                 <div key={action.id} className={styles.previewItem}>
                   <strong>{action.title}</strong>
@@ -55,47 +56,43 @@ export default async function DashboardOverviewPage() {
         </div>
         <div className={styles.headerActions}>
           <Link href="/actions">
-            <Button variant="secondary" size="sm">Review queue</Button>
+            <Button variant="secondary" size="sm">{t.dashboard.reviewQueue}</Button>
           </Link>
           <Link href="/chat">
-            <Button size="sm">Open chat</Button>
+            <Button size="sm">{t.dashboard.openChat}</Button>
           </Link>
         </div>
       </header>
-
       <section className={styles.metrics}>
         <Card variant="bordered" className={styles.metricCard}>
-          <span className={styles.metricLabel}>Pending approvals</span>
+          <span className={styles.metricLabel}>{t.dashboard.pendingApprovals}</span>
           <strong className={styles.metricValue}>{data.metrics.pending}</strong>
-          <span className={styles.metricHint}>External actions waiting on review</span>
+          <span className={styles.metricHint}>{t.dashboard.pendingHint}</span>
         </Card>
         <Card variant="bordered" className={styles.metricCard}>
-          <span className={styles.metricLabel}>Connected apps</span>
+          <span className={styles.metricLabel}>{t.dashboard.connectedApps}</span>
           <strong className={styles.metricValue}>{data.metrics.connectedIntegrations}</strong>
-          <span className={styles.metricHint}>{healthyIntegrations} healthy, 1 needs attention</span>
+          <span className={styles.metricHint}>{healthyIntegrations} {lang === 'fr' ? 'saines' : 'healthy'}, 1 {lang === 'fr' ? 'nécessite attention' : 'needs attention'}</span>
         </Card>
         <Card variant="bordered" className={styles.metricCard}>
-          <span className={styles.metricLabel}>Completed today</span>
+          <span className={styles.metricLabel}>{t.dashboard.completedToday}</span>
           <strong className={styles.metricValue}>{data.metrics.completedToday}</strong>
-          <span className={styles.metricHint}>Executed successfully in the last run window</span>
+          <span className={styles.metricHint}>{t.dashboard.completedHint}</span>
         </Card>
         <Card variant="bordered" className={styles.metricCard}>
-          <span className={styles.metricLabel}>Failure rate</span>
+          <span className={styles.metricLabel}>{t.dashboard.failureRate}</span>
           <strong className={styles.metricValue}>{data.metrics.failureRate}%</strong>
-          <span className={styles.metricHint}>Based on the current audit sample</span>
+          <span className={styles.metricHint}>{t.dashboard.failureHint}</span>
         </Card>
       </section>
-
       <section className={styles.grid}>
         <Card variant="bordered" className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <h2 className={styles.panelTitle}>Approval queue</h2>
-              <p className={styles.panelSubtitle}>Most urgent actions waiting on a decision.</p>
+              <h2 className={styles.panelTitle}>{t.dashboard.approvalQueue}</h2>
+              <p className={styles.panelSubtitle}>{t.dashboard.approvalQueueSub}</p>
             </div>
-            <Link href="/actions" className={styles.inlineLink}>
-              View queue
-            </Link>
+            <Link href="/actions" className={styles.inlineLink}>{t.dashboard.viewQueue}</Link>
           </div>
           <div className={styles.stack}>
             {data.pendingActions.map((action) => (
@@ -103,26 +100,23 @@ export default async function DashboardOverviewPage() {
                 <div>
                   <p className={styles.rowTitle}>{action.title}</p>
                   <p className={styles.rowMeta}>
-                    {action.targetApp} · Confidence {Math.round(action.confidenceScore * 100)}%
+                    {action.targetApp} · {t.dashboard.confidence} {Math.round(action.confidenceScore * 100)}%
                   </p>
                 </div>
                 <Badge variant={action.riskLevel === 'high' ? 'danger' : action.riskLevel === 'medium' ? 'warning' : 'success'}>
-                  {action.riskLevel} risk
+                  {action.riskLevel} {t.dashboard.risk}
                 </Badge>
               </div>
             ))}
           </div>
         </Card>
-
         <Card variant="bordered" className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <h2 className={styles.panelTitle}>Integration health</h2>
-              <p className={styles.panelSubtitle}>Connection status for each execution surface.</p>
+              <h2 className={styles.panelTitle}>{t.dashboard.integrationHealth}</h2>
+              <p className={styles.panelSubtitle}>{t.dashboard.integrationHealthSub}</p>
             </div>
-            <Link href="/integrations" className={styles.inlineLink}>
-              Manage apps
-            </Link>
+            <Link href="/integrations" className={styles.inlineLink}>{t.dashboard.manageApps}</Link>
           </div>
           <div className={styles.stack}>
             {data.integrations.map((integration) => (
@@ -131,31 +125,20 @@ export default async function DashboardOverviewPage() {
                   <p className={styles.rowTitle}>{integration.name}</p>
                   <p className={styles.rowMeta}>{integration.shortDescription}</p>
                 </div>
-                <Badge
-                  variant={
-                    integration.status === 'connected'
-                      ? integration.health === 'warning'
-                        ? 'warning'
-                        : 'success'
-                      : 'default'
-                  }
-                >
+                <Badge variant={integration.status === 'connected' ? integration.health === 'warning' ? 'warning' : 'success' : 'default'}>
                   {integration.status}
                 </Badge>
               </div>
             ))}
           </div>
         </Card>
-
         <Card variant="bordered" className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <h2 className={styles.panelTitle}>Recent execution log</h2>
-              <p className={styles.panelSubtitle}>Latest completed, failed, or rejected actions.</p>
+              <h2 className={styles.panelTitle}>{t.dashboard.recentLog}</h2>
+              <p className={styles.panelSubtitle}>{t.dashboard.recentLogSub}</p>
             </div>
-            <Link href="/history" className={styles.inlineLink}>
-              Open history
-            </Link>
+            <Link href="/history" className={styles.inlineLink}>{t.dashboard.openHistory}</Link>
           </div>
           <div className={styles.stack}>
             {latestHistory.map((item) => (
@@ -164,27 +147,18 @@ export default async function DashboardOverviewPage() {
                   <p className={styles.rowTitle}>{item.title}</p>
                   <p className={styles.rowMeta}>{item.details}</p>
                 </div>
-                <Badge
-                  variant={
-                    item.status === 'completed'
-                      ? 'success'
-                      : item.status === 'failed'
-                        ? 'danger'
-                        : 'warning'
-                  }
-                >
+                <Badge variant={item.status === 'completed' ? 'success' : item.status === 'failed' ? 'danger' : 'warning'}>
                   {item.status}
                 </Badge>
               </div>
             ))}
           </div>
         </Card>
-
         <Card variant="bordered" className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <h2 className={styles.panelTitle}>Operator feed</h2>
-              <p className={styles.panelSubtitle}>Short events to keep the workspace readable.</p>
+              <h2 className={styles.panelTitle}>{t.dashboard.operatorFeed}</h2>
+              <p className={styles.panelSubtitle}>{t.dashboard.operatorFeedSub}</p>
             </div>
           </div>
           <div className={styles.activityList}>
@@ -194,7 +168,7 @@ export default async function DashboardOverviewPage() {
                 <div>
                   <p className={styles.rowTitle}>{item.label}</p>
                   <p className={styles.rowMeta}>{item.description}</p>
-                  <span className={styles.timestamp}>{formatDate(item.at)}</span>
+                  <span className={styles.timestamp}>{formatDate(item.at, lang)}</span>
                 </div>
               </div>
             ))}
