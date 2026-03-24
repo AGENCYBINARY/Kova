@@ -5,6 +5,7 @@ import { Badge, Button, Card } from '@/components/ui'
 import { useLang } from '@/lib/lang-context'
 import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from './page.module.css'
+import skeletonStyles from '../loading.module.css'
 
 function formatDate(date: string, locale: string) {
   return new Intl.DateTimeFormat(locale, {
@@ -21,7 +22,22 @@ export default function DashboardOverviewPage() {
     fetch('/api/dashboard').then(r => r.json()).then(setData).catch(() => null)
   }, [])
 
-  if (!data) return null
+  if (!data) return (
+    <div className={skeletonStyles.page}>
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.header}`} />
+      <div className={skeletonStyles.row}>
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.card}`} />
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.card}`} />
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.card}`} />
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.card}`} />
+      </div>
+      <div className={skeletonStyles.row}>
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.cardTall}`} />
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.cardTall}`} />
+      </div>
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.table}`} />
+    </div>
+  )
 
   const healthyIntegrations = data.integrations.filter(i => i.health === 'healthy').length
   const topPending = data.pendingActions.slice(0, 2)

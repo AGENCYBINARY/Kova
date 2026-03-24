@@ -4,6 +4,7 @@ import { Badge, Card } from '@/components/ui'
 import { useLang } from '@/lib/lang-context'
 import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from './page.module.css'
+import skeletonStyles from '../loading.module.css'
 
 const statusColors = { completed: 'success', failed: 'danger', rejected: 'warning', pending: 'info' }
 
@@ -22,7 +23,14 @@ export default function HistoryPage() {
     fetch('/api/dashboard').then(r => r.json()).then(setData).catch(() => null)
   }, [])
 
-  if (!data) return null
+  if (!data) return (
+    <div className={skeletonStyles.page}>
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.headerSm}`} />
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.block}`} />
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.block}`} />
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.table}`} />
+    </div>
+  )
 
   const { executionHistory } = data
 

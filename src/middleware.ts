@@ -16,9 +16,11 @@ const isProtectedRoute = createRouteMatcher([
   '/api/settings(.*)',
 ])
 
-export default clerkMiddleware(async (auth, req) => {
+// auth().protect() in Clerk v5 uses local JWT verification — no network call.
+// Removing async/await removes the unnecessary async overhead.
+export default clerkMiddleware((auth, req) => {
   if (isProtectedRoute(req)) {
-    await auth().protect()
+    auth().protect()
   }
 })
 

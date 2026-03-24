@@ -4,6 +4,7 @@ import { Badge, Button, Card } from '@/components/ui'
 import { useLang } from '@/lib/lang-context'
 import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from './page.module.css'
+import skeletonStyles from '../loading.module.css'
 
 const actionIcons: Record<string, JSX.Element> = {
   send_email: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>,
@@ -20,7 +21,13 @@ export default function ActionsPage() {
     fetch('/api/dashboard').then(r => r.json()).then(setData).catch(() => null)
   }, [])
 
-  if (!data) return null
+  if (!data) return (
+    <div className={skeletonStyles.page}>
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.headerSm}`} />
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.block}`} />
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.block}`} />
+    </div>
+  )
 
   const { pendingActions } = data
   const highRiskCount = pendingActions.filter(a => a.riskLevel === 'high').length

@@ -6,6 +6,7 @@ import { IntegrationActions } from '@/components/integrations/IntegrationActions
 import { useLang } from '@/lib/lang-context'
 import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from './page.module.css'
+import skeletonStyles from '../loading.module.css'
 
 export default function IntegrationsPage() {
   const { t, lang } = useLang()
@@ -17,7 +18,16 @@ export default function IntegrationsPage() {
     fetch('/api/dashboard').then(r => r.json()).then(setData).catch(() => null)
   }, [])
 
-  if (!data) return null
+  if (!data) return (
+    <div className={skeletonStyles.page}>
+      <div className={`${skeletonStyles.skeleton} ${skeletonStyles.headerSm}`} />
+      <div className={skeletonStyles.row}>
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.cardTall}`} />
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.cardTall}`} />
+        <div className={`${skeletonStyles.skeleton} ${skeletonStyles.cardTall}`} />
+      </div>
+    </div>
+  )
 
   const connectedParam = searchParams?.get('connected')
   const errorParam = searchParams?.get('error')
