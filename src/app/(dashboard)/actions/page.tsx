@@ -1,41 +1,32 @@
+'use client'
+import { useState, useEffect } from 'react'
 import { Badge, Button, Card } from '@/components/ui'
-import { getDashboardBundle } from '@/lib/dashboard/server'
-import { getT, getLang } from '@/lib/lang-server'
+import { useLang } from '@/lib/lang-context'
+import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from './page.module.css'
 
 const actionIcons: Record<string, JSX.Element> = {
-  send_email: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-      <polyline points="22,6 12,13 2,6" />
-    </svg>
-  ),
-  create_calendar_event: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  ),
-  create_google_drive_file: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M9 3h6l5 9-5 9H9l-5-9 5-9z" />
-      <path d="M9 3 4 12M15 3l5 9M7 16h10" />
-    </svg>
-  ),
+  send_email: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>,
+  create_calendar_event: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>,
+  create_google_drive_file: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3h6l5 9-5 9H9l-5-9 5-9z" /><path d="M9 3 4 12M15 3l5 9M7 16h10" /></svg>,
 }
 
-export default async function ActionsPage() {
-  const data = await getDashboardBundle()
-  const t = getT()
-  const lang = getLang()
+export default function ActionsPage() {
+  const { t, lang } = useLang()
+  const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
+  const [data, setData] = useState<DashboardBundle | null>(null)
+
+  useEffect(() => {
+    fetch('/api/dashboard').then(r => r.json()).then(setData).catch(() => null)
+  }, [])
+
+  if (!data) return null
+
   const { pendingActions } = data
-  const highRiskCount = pendingActions.filter((a) => a.riskLevel === 'high').length
-  const averageConfidence =
-    pendingActions.length > 0
-      ? Math.round((pendingActions.reduce((sum, a) => sum + a.confidenceScore, 0) / pendingActions.length) * 100)
-      : 0
+  const highRiskCount = pendingActions.filter(a => a.riskLevel === 'high').length
+  const averageConfidence = pendingActions.length > 0
+    ? Math.round((pendingActions.reduce((sum, a) => sum + a.confidenceScore, 0) / pendingActions.length) * 100)
+    : 0
 
   return (
     <div className={styles.container}>
@@ -75,7 +66,7 @@ export default async function ActionsPage() {
           </div>
         ) : (
           <div className={styles.list}>
-            {pendingActions.map((action) => (
+            {pendingActions.map(action => (
               <Card key={action.id} variant="bordered" className={styles.card}>
                 <div className={styles.cardHeader}>
                   <div className={styles.iconWrapper}>
@@ -86,7 +77,7 @@ export default async function ActionsPage() {
                     <p className={styles.cardDescription}>{action.description}</p>
                     <div className={styles.meta}>
                       <span className={styles.cardTime}>
-                        {t.actions.proposed} {new Date(action.createdAt).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')}
+                        {t.actions.proposed} {new Date(action.createdAt).toLocaleString(locale)}
                       </span>
                       <span className={styles.metaDivider} />
                       <span className={styles.metaText}>{action.targetApp}</span>

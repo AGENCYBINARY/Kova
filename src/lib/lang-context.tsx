@@ -1,6 +1,5 @@
 'use client'
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
 import { Lang, translations, Translations } from './i18n'
 
 interface LangContextValue {
@@ -17,7 +16,6 @@ const LangContext = createContext<LangContextValue>({
 
 export function LangProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>('fr')
-  const router = useRouter()
 
   useEffect(() => {
     const saved = document.cookie
@@ -32,7 +30,6 @@ export function LangProvider({ children }: { children: ReactNode }) {
   const setLang = (l: Lang) => {
     setLangState(l)
     document.cookie = `lang=${l};path=/;max-age=31536000;SameSite=Lax`
-    router.refresh() // re-render server components with new lang cookie
   }
 
   return (

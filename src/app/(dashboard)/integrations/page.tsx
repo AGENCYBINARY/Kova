@@ -1,35 +1,38 @@
+'use client'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Badge, Card } from '@/components/ui'
 import { IntegrationActions } from '@/components/integrations/IntegrationActions'
-import { getDashboardBundle } from '@/lib/dashboard/server'
-import { getT, getLang } from '@/lib/lang-server'
+import { useLang } from '@/lib/lang-context'
+import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from './page.module.css'
 
-interface IntegrationsPageProps {
-  searchParams?: { connected?: string; error?: string }
-}
+export default function IntegrationsPage() {
+  const { t, lang } = useLang()
+  const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
+  const searchParams = useSearchParams()
+  const [data, setData] = useState<DashboardBundle | null>(null)
 
-export default async function IntegrationsPage({ searchParams }: IntegrationsPageProps) {
-  const data = await getDashboardBundle()
-  const t = getT()
-  const lang = getLang()
-  const connectedCount = data.integrations.filter((i) => i.status === 'connected').length
-  const connectedParam = searchParams?.connected
-  const errorParam = searchParams?.error
+  useEffect(() => {
+    fetch('/api/dashboard').then(r => r.json()).then(setData).catch(() => null)
+  }, [])
 
-  const successMessage = connectedParam
-    ? `${t.integrations.connectedMsg} ${connectedParam}`
-    : null
-  const errorMessage = errorParam
-    ? `${t.integrations.errorMsg} ${errorParam.replace(/_/g, ' ')}`
-    : null
+  if (!data) return null
+
+  const connectedParam = searchParams?.get('connected')
+  const errorParam = searchParams?.get('error')
+  const connectedCount = data.integrations.filter(i => i.status === 'connected').length
+
+  const successMessage = connectedParam ? `${t.integrations.connectedMsg} ${connectedParam}` : null
+  const errorMessage = errorParam ? `${t.integrations.errorMsg} ${errorParam.replace(/_/g, ' ')}` : null
 
   return (
     <div className={styles.container}>
-      {successMessage || errorMessage ? (
+      {(successMessage || errorMessage) && (
         <div className={`${styles.alert} ${successMessage ? styles.alertSuccess : styles.alertError}`}>
           {successMessage ?? errorMessage}
         </div>
-      ) : null}
+      )}
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>{t.integrations.eyebrow}</p>
@@ -48,12 +51,12 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
             <span>{t.integrations.activeIntegrations}</span>
           </Card>
           <Card variant="bordered" className={styles.summaryCard}>
-            <strong>{data.integrations.filter((i) => i.health !== 'healthy').length}</strong>
+            <strong>{data.integrations.filter(i => i.health !== 'healthy').length}</strong>
             <span>{t.integrations.needAttention}</span>
           </Card>
         </div>
         <div className={styles.grid}>
-          {data.integrations.map((integration) => (
+          {data.integrations.map(integration => (
             <Card key={integration.id} variant="bordered" className={styles.card}>
               <div className={styles.cardHeader}>
                 <div className={styles.iconWrapper} style={{ backgroundColor: `${integration.color}20` }}>
@@ -82,16 +85,14 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                   <div className={styles.syncInfo}>
                     <Badge variant="success" size="sm">{lang === 'fr' ? 'Connecté' : 'Connected'}</Badge>
                     <span className={styles.lastSync}>
-                      {lang === 'fr' ? 'Dernière synchro :' : 'Last sync:'} {new Date(integration.lastSync!).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')}
+                      {lang === 'fr' ? 'Dernière synchro :' : 'Last sync:'} {new Date(integration.lastSync!).toLocaleString(locale)}
                     </span>
                   </div>
-                  {integration.warnings && integration.warnings.length > 0 ? (
+                  {integration.warnings && integration.warnings.length > 0 && (
                     <div className={styles.warningList}>
-                      {integration.warnings.map((warning) => (
-                        <div key={warning} className={styles.warningItem}>{warning}</div>
-                      ))}
+                      {integration.warnings.map(w => <div key={w} className={styles.warningItem}>{w}</div>)}
                     </div>
-                  ) : null}
+                  )}
                 </div>
               ) : (
                 <div className={styles.disconnectedInfo}>
@@ -102,10 +103,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 <IntegrationActions
                   provider={
                     integration.id === 'gmail' || integration.id === 'calendar' || integration.id === 'google_docs' || integration.id === 'google_drive'
-                      ? 'google'
-                      : integration.id === 'notion'
-                        ? 'notion'
-                        : 'slack'
+                      ? 'google' : integration.id === 'notion' ? 'notion' : 'slack'
                   }
                   status={integration.status}
                   needsReconnect={integration.needsReconnect}

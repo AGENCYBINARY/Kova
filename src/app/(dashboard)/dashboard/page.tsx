@@ -1,23 +1,29 @@
+'use client'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Badge, Button, Card } from '@/components/ui'
-import { getDashboardBundle } from '@/lib/dashboard/server'
-import { getT, getLang } from '@/lib/lang-server'
+import { useLang } from '@/lib/lang-context'
+import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from './page.module.css'
 
-function formatDate(date: string, lang: string) {
-  return new Intl.DateTimeFormat(lang === 'fr' ? 'fr-FR' : 'en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
+function formatDate(date: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
   }).format(new Date(date))
 }
 
-export default async function DashboardOverviewPage() {
-  const data = await getDashboardBundle()
-  const t = getT()
-  const lang = getLang()
-  const healthyIntegrations = data.integrations.filter((i) => i.health === 'healthy').length
+export default function DashboardOverviewPage() {
+  const { t, lang } = useLang()
+  const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
+  const [data, setData] = useState<DashboardBundle | null>(null)
+
+  useEffect(() => {
+    fetch('/api/dashboard').then(r => r.json()).then(setData).catch(() => null)
+  }, [])
+
+  if (!data) return null
+
+  const healthyIntegrations = data.integrations.filter(i => i.health === 'healthy').length
   const topPending = data.pendingActions.slice(0, 2)
   const latestHistory = data.executionHistory.slice(0, 4)
 
@@ -36,7 +42,7 @@ export default async function DashboardOverviewPage() {
           <div className={styles.heroPreview}>
             <div className={styles.previewColumn}>
               <span className={styles.previewLabel}>{t.dashboard.queuedNow}</span>
-              {topPending.map((action) => (
+              {topPending.map(action => (
                 <div key={action.id} className={styles.previewItem}>
                   <strong>{action.title}</strong>
                   <span>{action.targetApp}</span>
@@ -45,7 +51,7 @@ export default async function DashboardOverviewPage() {
             </div>
             <div className={styles.previewColumn}>
               <span className={styles.previewLabel}>{t.dashboard.latestResult}</span>
-              {latestHistory.slice(0, 2).map((action) => (
+              {latestHistory.slice(0, 2).map(action => (
                 <div key={action.id} className={styles.previewItem}>
                   <strong>{action.title}</strong>
                   <span>{action.status}</span>
@@ -55,12 +61,8 @@ export default async function DashboardOverviewPage() {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <Link href="/actions">
-            <Button variant="secondary" size="sm">{t.dashboard.reviewQueue}</Button>
-          </Link>
-          <Link href="/chat">
-            <Button size="sm">{t.dashboard.openChat}</Button>
-          </Link>
+          <Link href="/actions"><Button variant="secondary" size="sm">{t.dashboard.reviewQueue}</Button></Link>
+          <Link href="/chat"><Button size="sm">{t.dashboard.openChat}</Button></Link>
         </div>
       </header>
       <section className={styles.metrics}>
@@ -95,13 +97,11 @@ export default async function DashboardOverviewPage() {
             <Link href="/actions" className={styles.inlineLink}>{t.dashboard.viewQueue}</Link>
           </div>
           <div className={styles.stack}>
-            {data.pendingActions.map((action) => (
+            {data.pendingActions.map(action => (
               <div key={action.id} className={styles.row}>
                 <div>
                   <p className={styles.rowTitle}>{action.title}</p>
-                  <p className={styles.rowMeta}>
-                    {action.targetApp} · {t.dashboard.confidence} {Math.round(action.confidenceScore * 100)}%
-                  </p>
+                  <p className={styles.rowMeta}>{action.targetApp} · {t.dashboard.confidence} {Math.round(action.confidenceScore * 100)}%</p>
                 </div>
                 <Badge variant={action.riskLevel === 'high' ? 'danger' : action.riskLevel === 'medium' ? 'warning' : 'success'}>
                   {action.riskLevel} {t.dashboard.risk}
@@ -119,7 +119,7 @@ export default async function DashboardOverviewPage() {
             <Link href="/integrations" className={styles.inlineLink}>{t.dashboard.manageApps}</Link>
           </div>
           <div className={styles.stack}>
-            {data.integrations.map((integration) => (
+            {data.integrations.map(integration => (
               <div key={integration.id} className={styles.row}>
                 <div>
                   <p className={styles.rowTitle}>{integration.name}</p>
@@ -141,7 +141,7 @@ export default async function DashboardOverviewPage() {
             <Link href="/history" className={styles.inlineLink}>{t.dashboard.openHistory}</Link>
           </div>
           <div className={styles.stack}>
-            {latestHistory.map((item) => (
+            {latestHistory.map(item => (
               <div key={item.id} className={styles.row}>
                 <div>
                   <p className={styles.rowTitle}>{item.title}</p>
@@ -162,13 +162,13 @@ export default async function DashboardOverviewPage() {
             </div>
           </div>
           <div className={styles.activityList}>
-            {data.approvalActivity.map((item) => (
+            {data.approvalActivity.map(item => (
               <div key={item.id} className={styles.activityItem}>
                 <span className={styles.activityDot} />
                 <div>
                   <p className={styles.rowTitle}>{item.label}</p>
                   <p className={styles.rowMeta}>{item.description}</p>
-                  <span className={styles.timestamp}>{formatDate(item.at, lang)}</span>
+                  <span className={styles.timestamp}>{formatDate(item.at, locale)}</span>
                 </div>
               </div>
             ))}
