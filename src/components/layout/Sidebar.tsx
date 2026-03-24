@@ -179,7 +179,6 @@ export function Sidebar() {
           </div>
           <span className={styles.logoText}>Kova</span>
         </Link>
-        <LanguageSwitcher />
       </div>
       <nav className={styles.nav}>
         <ul className={styles.navList}>
@@ -217,6 +216,9 @@ export function Sidebar() {
       </div>
       <div className={styles.usageBadgeWrapper}>
         <UsageBadge />
+        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 4 }}>
+          <LanguageSwitcher />
+        </div>
       </div>
       <div className={styles.footer}>
         <div className={styles.user}>

@@ -23,6 +23,10 @@ export function UsageBadge() {
   const pct = Math.round((quota.used / quota.limit) * 100)
   const isNearLimit = pct >= 80
   const isAtLimit = !quota.allowed
+  const barWidth = Math.min(pct, 100) + "%"
+
+  const barColor = isAtLimit ? "#ef4444" : isNearLimit ? "#f59e0b" : "rgba(255,255,255,0.2)"
+  const textColor = isAtLimit ? "rgba(239,68,68,0.9)" : isNearLimit ? "rgba(245,158,11,0.9)" : "rgba(255,255,255,0.3)"
 
   const upgrade = async (plan: "plus" | "pro") => {
     const res = await fetch("/api/stripe/checkout", {
@@ -42,54 +46,32 @@ export function UsageBadge() {
 
   const planLabel = quota.plan.charAt(0).toUpperCase() + quota.plan.slice(1)
 
-  const counterColor = isAtLimit
-    ? "text-red-400"
-    : isNearLimit
-    ? "text-amber-400"
-    : "text-white/50"
-
-  const barColor = isAtLimit
-    ? "bg-red-500"
-    : isNearLimit
-    ? "bg-amber-400"
-    : "bg-indigo-500"
-
-  const barWidth = Math.min(pct, 100) + "%"
-
   return (
-    <div className="p-3 mx-2 mb-2 rounded-xl bg-white/5 border border-white/10 text-sm">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 text-white/70">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-          </svg>
-          <span>Plan {planLabel}</span>
-        </div>
-        <span className={counterColor}>
-          {quota.used}/{quota.limit}
+    <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+      {/* One-line compact badge */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 8 }}>
+        <span style={{ fontSize: 10, color: textColor, fontWeight: 500, letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
+          {planLabel} · {quota.used}/{quota.limit}
         </span>
+        <div style={{ flex: 1, height: 2, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ width: barWidth, height: "100%", background: barColor, borderRadius: 99, transition: "width 0.4s" }} />
+        </div>
       </div>
 
-      <div className="h-1 bg-white/10 rounded-full overflow-hidden mb-2.5">
-        <div
-          className={"h-full rounded-full transition-all " + barColor}
-          style={{ width: barWidth }}
-        />
-      </div>
-
+      {/* Upgrade buttons only if free */}
       {quota.plan === "free" && (
-        <div className="flex gap-1.5">
+        <div style={{ display: "flex", gap: 5 }}>
           <button
             onClick={() => upgrade("plus")}
-            className="flex-1 text-xs py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+            style={{ flex: 1, fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(99,102,241,0.2)", border: "none", color: "rgba(165,163,255,0.9)", cursor: "pointer", fontWeight: 500 }}
           >
-            Plus — 10€
+            Plus 10€
           </button>
           <button
             onClick={() => upgrade("pro")}
-            className="flex-1 text-xs py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+            style={{ flex: 1, fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 500 }}
           >
-            Pro — 25€
+            Pro 25€
           </button>
         </div>
       )}
@@ -97,9 +79,9 @@ export function UsageBadge() {
       {(quota.plan === "plus" || quota.plan === "pro") && (
         <button
           onClick={openPortal}
-          className="w-full text-xs py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-colors"
+          style={{ width: "100%", fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "none", color: "rgba(255,255,255,0.35)", cursor: "pointer" }}
         >
-          Gérer mon abonnement
+          Gérer l&apos;abonnement
         </button>
       )}
     </div>

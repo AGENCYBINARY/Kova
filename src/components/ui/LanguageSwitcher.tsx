@@ -10,27 +10,23 @@ export function LanguageSwitcher() {
       title={lang === 'fr' ? 'Switch to English' : 'Passer en français'}
       style={{
         background: 'none',
-        border: '1px solid rgba(255,255,255,0.12)',
-        borderRadius: '8px',
+        border: 'none',
         cursor: 'pointer',
-        fontSize: '13px',
-        padding: '4px 8px',
-        color: 'var(--text-muted)',
+        fontSize: 11,
+        padding: '4px 6px',
+        color: 'rgba(255,255,255,0.28)',
         display: 'flex',
         alignItems: 'center',
-        gap: '5px',
-        transition: 'all 0.15s',
+        gap: 4,
+        borderRadius: 6,
+        transition: 'color 0.15s',
+        letterSpacing: '0.04em',
+        fontWeight: 500,
       }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-        e.currentTarget.style.color = 'var(--text-primary)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'none'
-        e.currentTarget.style.color = 'var(--text-muted)'
-      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.65)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.28)' }}
     >
-      <span style={{ fontSize: '16px' }}>{lang === 'fr' ? '🇫🇷' : '🇬🇧'}</span>
+      <span style={{ fontSize: 14, lineHeight: 1 }}>{lang === 'fr' ? '🇫🇷' : '🇬🇧'}</span>
       <span>{lang === 'fr' ? 'FR' : 'EN'}</span>
     </button>
   )
