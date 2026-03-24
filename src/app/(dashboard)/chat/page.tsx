@@ -42,17 +42,33 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages, isStreaming])
 
+  const WELCOME_FR = "Je suis votre opérateur Kova. Demandez-moi de rédiger des emails, planifier des réunions, travailler dans Notion, créer des Google Docs ou enregistrer des fichiers sur Google Drive. Je préparerai l'action pour approbation avant exécution."
+  const WELCOME_EN = "I'm your Kova operator. Ask me to draft emails, schedule meetings, work in Notion, create Google Docs, or save files to Google Drive. I will prepare the action for approval before execution."
+
+  const translateMessages = useCallback((msgs: Message[], currentLang: string) => {
+    return msgs.map(m =>
+      m.id === 'welcome'
+        ? { ...m, content: currentLang === 'fr' ? WELCOME_FR : WELCOME_EN }
+        : m
+    )
+  }, [])
+
   const refreshChatState = useCallback(async () => {
     const response = await fetch('/api/chat', { cache: 'no-store' })
     const data = await response.json()
-    setMessages(data.messages || [])
+    setMessages(translateMessages(data.messages || [], lang))
     setProposals(data.proposals || [])
     setIsBootstrapping(false)
-  }, [])
+  }, [lang, translateMessages])
 
   useEffect(() => {
     void refreshChatState()
   }, [refreshChatState])
+
+  // retranslate welcome message on lang change
+  useEffect(() => {
+    setMessages(prev => translateMessages(prev, lang))
+  }, [lang, translateMessages])
 
   const handleSend = useCallback(async (content: string, executionMode: ExecutionMode) => {
     const startedAt = Date.now()

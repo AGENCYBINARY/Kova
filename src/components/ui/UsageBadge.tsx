@@ -10,6 +10,8 @@ type QuotaData = {
 
 export function UsageBadge() {
   const [quota, setQuota] = useState<QuotaData | null>(null)
+  const [upgrading, setUpgrading] = useState(false)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/subscription")
@@ -29,13 +31,25 @@ export function UsageBadge() {
   const textColor = isAtLimit ? "rgba(239,68,68,0.9)" : isNearLimit ? "rgba(245,158,11,0.9)" : "rgba(255,255,255,0.3)"
 
   const upgrade = async (plan: "plus" | "pro") => {
-    const res = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan }),
-    })
-    const data = await res.json()
-    if (data.url) window.location.href = data.url
+    setUpgrading(true)
+    setUpgradeError(null)
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        setUpgradeError(data.error || "Erreur lors de la redirection")
+        setUpgrading(false)
+      }
+    } catch {
+      setUpgradeError("Connexion impossible au serveur")
+      setUpgrading(false)
+    }
   }
 
   const openPortal = async () => {
@@ -60,20 +74,29 @@ export function UsageBadge() {
 
       {/* Upgrade buttons only if free */}
       {quota.plan === "free" && (
-        <div style={{ display: "flex", gap: 5 }}>
-          <button
-            onClick={() => upgrade("plus")}
-            style={{ flex: 1, fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(99,102,241,0.2)", border: "none", color: "rgba(165,163,255,0.9)", cursor: "pointer", fontWeight: 500 }}
-          >
-            Plus 10€
-          </button>
-          <button
-            onClick={() => upgrade("pro")}
-            style={{ flex: 1, fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 500 }}
-          >
-            Pro 25€
-          </button>
-        </div>
+        <>
+          <div style={{ display: "flex", gap: 5 }}>
+            <button
+              onClick={() => upgrade("plus")}
+              disabled={upgrading}
+              style={{ flex: 1, fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(99,102,241,0.2)", border: "none", color: upgrading ? "rgba(165,163,255,0.4)" : "rgba(165,163,255,0.9)", cursor: upgrading ? "default" : "pointer", fontWeight: 500 }}
+            >
+              {upgrading ? "…" : "Plus 10€"}
+            </button>
+            <button
+              onClick={() => upgrade("pro")}
+              disabled={upgrading}
+              style={{ flex: 1, fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "none", color: upgrading ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.4)", cursor: upgrading ? "default" : "pointer", fontWeight: 500 }}
+            >
+              {upgrading ? "…" : "Pro 25€"}
+            </button>
+          </div>
+          {upgradeError && (
+            <p style={{ fontSize: 9, color: "rgba(239,68,68,0.8)", margin: 0, padding: "2px 8px", textAlign: "center" }}>
+              {upgradeError}
+            </p>
+          )}
+        </>
       )}
 
       {(quota.plan === "plus" || quota.plan === "pro") && (

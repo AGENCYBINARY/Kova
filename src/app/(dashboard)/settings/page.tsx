@@ -129,7 +129,7 @@ export default function SettingsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Execution Defaults</h2>
+          <h2 className={styles.sectionTitle}>{t.settings.executionDefaults}</h2>
           <Card variant="bordered" className={styles.card}>
             <div className={styles.setting}>
               <div className={styles.settingInfo}>
@@ -172,17 +172,15 @@ export default function SettingsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Danger Zone</h2>
+          <h2 className={styles.sectionTitle}>{t.settings.dangerZone}</h2>
           <Card variant="bordered" className={styles.card}>
             <div className={styles.dangerSetting}>
               <div className={styles.settingInfo}>
-                <h4 className={styles.settingTitle}>Supprimer toutes les données</h4>
-                <p className={styles.settingDescription}>
-                  Supprime définitivement tous vos messages, actions et historique
-                </p>
+                <h4 className={styles.settingTitle}>{t.settings.deleteData}</h4>
+                <p className={styles.settingDescription}>{t.settings.deleteDataDesc}</p>
               </div>
               <Button variant="danger" size="sm">
-                Supprimer
+                {t.settings.delete}
               </Button>
             </div>
           </Card>

@@ -124,6 +124,11 @@ export const translations = {
       saved: "Paramètres enregistrés",
       language: "Langue",
       languageDesc: "Choisir la langue de l'interface",
+      executionDefaults: "Comportement d'exécution",
+      dangerZone: "Zone dangereuse",
+      deleteData: "Supprimer toutes les données",
+      deleteDataDesc: "Supprime définitivement tous vos messages, actions et historique",
+      delete: "Supprimer",
     },
     proposal: {
       pendingApproval: "En attente d'approbation",
@@ -273,6 +278,11 @@ export const translations = {
       saved: "Settings saved",
       language: "Language",
       languageDesc: "Choose interface language",
+      executionDefaults: "Execution defaults",
+      dangerZone: "Danger zone",
+      deleteData: "Delete all data",
+      deleteDataDesc: "Permanently deletes all your messages, actions and history",
+      delete: "Delete",
     },
     proposal: {
       pendingApproval: "Pending Approval",
