@@ -1,0 +1,71 @@
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.header {
+  height: 120px;
+  border-radius: 28px;
+  margin-bottom: 32px;
+}
+
+.headerSm {
+  height: 80px;
+  border-radius: 28px;
+  margin-bottom: 32px;
+}
+
+.row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.card {
+  flex: 1;
+  height: 100px;
+  border-radius: 16px;
+}
+
+.cardTall {
+  flex: 1;
+  height: 200px;
+  border-radius: 16px;
+}
+
+.line {
+  height: 16px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.lineShort {
+  height: 14px;
+  width: 40%;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.table {
+  height: 300px;
+  border-radius: 16px;
+  margin-bottom: 20px;
+}
+
+.block {
+  height: 160px;
+  border-radius: 16px;
+  margin-bottom: 20px;
+}
