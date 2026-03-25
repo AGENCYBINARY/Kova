@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getDashboardBundle } from '@/lib/dashboard/server'
+import { getIntegrationsPageData } from '@/lib/dashboard/server'
 
 export async function GET() {
-  const data = await getDashboardBundle()
+  const data = await getIntegrationsPageData()
   return NextResponse.json({
     source: data.source,
     items: data.integrations,

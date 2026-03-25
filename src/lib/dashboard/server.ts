@@ -195,12 +195,31 @@ export interface DashboardBundle {
   source: 'database'
 }
 
-export async function getDashboardBundle(): Promise<DashboardBundle> {
+export interface ActionsPageData {
+  pendingActions: DashboardAction[]
+  source: 'database'
+}
+
+export interface HistoryPageData {
+  executionHistory: DashboardAction[]
+  source: 'database'
+}
+
+export interface IntegrationsPageData {
+  integrations: DashboardIntegration[]
+  source: 'database'
+}
+
+async function getDashboardScope() {
   const { dbUserId, workspaceId } = await getAppContext()
-  const scopeWhere = buildDashboardScopeWhere({
+  return buildDashboardScopeWhere({
     workspaceId,
     userId: dbUserId,
   })
+}
+
+export async function getDashboardBundle(): Promise<DashboardBundle> {
+  const scopeWhere = await getDashboardScope()
   const [actions, integrations] = await Promise.all([
     prisma.action.findMany({
       where: scopeWhere,
@@ -261,6 +280,56 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
           ? Math.round((mappedActions.filter((action) => action.status === 'failed').length / mappedActions.length) * 100)
           : 0,
     },
+    source: 'database',
+  }
+}
+
+export async function getActionsPageData(): Promise<ActionsPageData> {
+  const scopeWhere = await getDashboardScope()
+  const actions = await prisma.action.findMany({
+    where: {
+      ...scopeWhere,
+      status: 'pending',
+    },
+    orderBy: [{ createdAt: 'desc' }],
+    take: 50,
+  })
+
+  return {
+    pendingActions: actions.map(mapAction),
+    source: 'database',
+  }
+}
+
+export async function getHistoryPageData(): Promise<HistoryPageData> {
+  const scopeWhere = await getDashboardScope()
+  const actions = await prisma.action.findMany({
+    where: {
+      ...scopeWhere,
+      status: {
+        not: 'pending',
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }],
+    take: 50,
+  })
+
+  return {
+    executionHistory: actions.map(mapAction),
+    source: 'database',
+  }
+}
+
+export async function getIntegrationsPageData(): Promise<IntegrationsPageData> {
+  const scopeWhere = await getDashboardScope()
+  const integrations = await prisma.integration.findMany({
+    where: scopeWhere,
+    orderBy: [{ updatedAt: 'desc' }],
+    take: 20,
+  })
+
+  return {
+    integrations: integrations.map(mapIntegration),
     source: 'database',
   }
 }

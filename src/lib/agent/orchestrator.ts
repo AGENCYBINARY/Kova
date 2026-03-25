@@ -32,6 +32,18 @@ interface PersistedMessageRecord {
   metadata: unknown
 }
 
+function mapChatRole(role: string): 'user' | 'assistant' {
+  return role === 'user' ? 'user' : 'assistant'
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+
+  return {}
+}
+
 export async function getChatPageData(context: ChatContext) {
   const [messages, actions] = await Promise.all([
     prisma.message.findMany({
@@ -54,13 +66,20 @@ export async function getChatPageData(context: ChatContext) {
   ])
 
   return {
-    messages: messages.length > 0 ? messages : [buildWelcomeMessage()],
+    messages:
+      messages.length > 0
+        ? messages.map((message) => ({
+            id: message.id,
+            role: mapChatRole(message.role),
+            content: message.content,
+          }))
+        : [buildWelcomeMessage()],
     proposals: actions.map((action) => ({
       id: action.id,
       type: action.type,
       title: action.title,
       description: action.description,
-      parameters: action.parameters,
+      parameters: asRecord(action.parameters),
     })),
   }
 }

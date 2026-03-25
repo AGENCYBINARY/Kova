@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getDashboardBundle } from '@/lib/dashboard/server'
+import { getActionsPageData } from '@/lib/dashboard/server'
 
 export async function GET() {
-  const data = await getDashboardBundle()
+  const data = await getActionsPageData()
   return NextResponse.json({
     source: data.source,
-    metrics: data.metrics,
     items: data.pendingActions,
   })
 }

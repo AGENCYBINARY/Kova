@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, KeyboardEvent, useLayoutEffect, ChangeEvent } from 'react'
+import { useState, useRef, KeyboardEvent, useLayoutEffect } from 'react'
 import { Textarea } from '../ui'
 import { useLang } from '@/lib/lang-context'
 import styles from './ChatInput.module.css'
@@ -14,9 +14,7 @@ interface ChatInputProps {
 export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: ChatInputProps) {
   const { t } = useLang()
   const [message, setMessage] = useState('')
-  const [attachments, setAttachments] = useState<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current
@@ -30,19 +28,8 @@ export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: Cha
     if (message.trim() && !disabled) {
       onSend(message.trim(), preferredMode)
       setMessage('')
-      setAttachments([])
-      if (fileInputRef.current) fileInputRef.current.value = ''
       if (textareaRef.current) textareaRef.current.style.height = '52px'
     }
-  }
-
-  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || [])
-    setAttachments(files.map((file) => file.name))
-  }
-
-  const removeAttachment = (name: string) => {
-    setAttachments((current) => current.filter((item) => item !== name))
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -55,25 +42,6 @@ export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: Cha
   return (
     <div className={styles.container}>
       <div className={styles.inputWrapper}>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className={styles.hiddenInput}
-          onChange={handleAttachmentChange}
-        />
-        <button
-          type="button"
-          className={styles.attachButton}
-          onClick={() => fileInputRef.current?.click()}
-          disabled={disabled}
-          aria-label={t.chatInput.addAttachment}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14" />
-            <path d="M5 12h14" />
-          </svg>
-        </button>
         <Textarea
           ref={textareaRef}
           value={message}
@@ -95,22 +63,6 @@ export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: Cha
           </svg>
         </button>
       </div>
-      {attachments.length > 0 ? (
-        <div className={styles.attachments}>
-          {attachments.map((attachment) => (
-            <button
-              key={attachment}
-              type="button"
-              className={styles.attachmentChip}
-              onClick={() => removeAttachment(attachment)}
-              title={t.chatInput.removeAttachment}
-            >
-              <span>{attachment}</span>
-              <span className={styles.attachmentRemove}>×</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
       <div className={styles.bottomRow}>
         <div className={styles.modeSwitch}>
           <button
