@@ -30,7 +30,7 @@ interface Profile {
 const defaultProfile: Profile = {
   executiveMode: true,
   assistantName: 'Kova',
-  roleDescription: 'Executive AI operator and high-performance digital secretary',
+  roleDescription: 'Executive AI operator across Gmail, Calendar, Docs, Drive, and Notion',
   defaultLanguage: 'fr',
   writingTone: 'executive',
   writingDirectness: 'balanced',

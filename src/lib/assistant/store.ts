@@ -1,6 +1,10 @@
 import { prisma } from '@/lib/db/prisma'
 import { Prisma } from '@prisma/client'
-import { defaultAssistantProfile, type AssistantProfile } from '@/lib/assistant/profile'
+import {
+  defaultAssistantProfile,
+  resolveEnabledAssistantSkills,
+  type AssistantProfile,
+} from '@/lib/assistant/profile'
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -70,10 +74,7 @@ function parseAssistantProfile(value: unknown): AssistantProfile {
       typeof obj.meetingDefaultDurationMinutes === 'number'
         ? obj.meetingDefaultDurationMinutes
         : defaultAssistantProfile.meetingDefaultDurationMinutes,
-    enabledSkills:
-      Array.isArray(obj.enabledSkills) && obj.enabledSkills.every((skill) => typeof skill === 'string')
-        ? (obj.enabledSkills as string[])
-        : defaultAssistantProfile.enabledSkills,
+    enabledSkills: resolveEnabledAssistantSkills(obj.enabledSkills),
   }
 }
 

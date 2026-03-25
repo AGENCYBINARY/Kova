@@ -147,12 +147,94 @@ export const executiveAssistantSkills = [
     instructions:
       'Match the user language by default, preserve professionalism, and avoid mixed-language outputs unless requested.',
   },
+  {
+    id: 'gmail_thread_responder',
+    title: 'Gmail Thread Responder',
+    description: 'Handles Gmail replies with thread awareness, answer discipline, and next-step clarity.',
+    instructions:
+      'When replying to Gmail threads, preserve the actual thread intent, answer open questions explicitly, keep the reply shorter than the inbound email unless detail is required, and do not invent context that is not present in the thread.',
+  },
+  {
+    id: 'gmail_followup_detector',
+    title: 'Gmail Follow-up Detector',
+    description: 'Finds unanswered threads, stale outreach, and follow-up opportunities in inbox workflows.',
+    instructions:
+      'Surface overdue replies, detect unanswered outbound messages, and suggest concise follow-ups with a clear requested next step instead of vague nudges.',
+  },
+  {
+    id: 'calendar_rescheduler',
+    title: 'Calendar Rescheduler',
+    description: 'Updates or moves events cleanly when timing, attendees, or meeting intent changes.',
+    instructions:
+      'When an event must move, keep the title professional, preserve the attendee list unless the user says otherwise, and avoid partial changes that would leave the meeting in an inconsistent state.',
+  },
+  {
+    id: 'calendar_agenda_planner',
+    title: 'Calendar Agenda Planner',
+    description: 'Turns meeting requests into events with clear purpose, structure, and prep notes.',
+    instructions:
+      'When preparing a meeting, infer a concrete outcome, add a short decision-oriented description, and keep titles specific enough to be scannable in a crowded calendar.',
+  },
+  {
+    id: 'google_drive_filing_operator',
+    title: 'Google Drive Filing Operator',
+    description: 'Creates and stores files in Drive with clean naming and predictable organization.',
+    instructions:
+      'Prefer durable file names, create structure that is easy to find later, and mention the intended folder or parent context whenever the request implies storage rather than just document creation.',
+  },
+  {
+    id: 'google_docs_revision_editor',
+    title: 'Google Docs Revision Editor',
+    description: 'Updates Google Docs with structured edits instead of dumping raw text into documents.',
+    instructions:
+      'When editing a doc, rewrite for readability, preserve document intent, and prefer crisp sections, headings, and summaries over note-like text blocks.',
+  },
+  {
+    id: 'notion_operations_writer',
+    title: 'Notion Operations Writer',
+    description: 'Creates and updates Notion pages with operational structure that works for teams.',
+    instructions:
+      'Use actionable headings, status-oriented writing, concise summaries, and explicit owners or next steps when the request is operational, planning, or project related.',
+  },
+  {
+    id: 'cross_app_execution_planner',
+    title: 'Cross-app Execution Planner',
+    description: 'Coordinates work that spans email, calendar, docs, Drive, and Notion without dropping context.',
+    instructions:
+      'When a request spans multiple apps, sequence actions in a sensible order, reuse context across proposals, and avoid duplicated work or mismatched titles between the tools involved.',
+  },
+  {
+    id: 'approval_safety_reviewer',
+    title: 'Approval Safety Reviewer',
+    description: 'Distinguishes low-risk execution from actions that should stay behind review.',
+    instructions:
+      'Treat outbound external communication, destructive changes, and ambiguous edits as review-sensitive. Keep proposals precise enough that the user can approve them quickly and safely.',
+  },
+  {
+    id: 'integration_connection_diagnostician',
+    title: 'Integration Connection Diagnostician',
+    description: 'Explains plainly when a connected app is missing, expired, or unable to execute the requested work.',
+    instructions:
+      'If a requested app action cannot run because the integration is disconnected, missing, or expired, say so directly, identify the specific app, and do not pretend the action is executable.',
+  },
 ] as const
+
+export const executiveAssistantSkillIds: string[] = executiveAssistantSkills.map((skill) => skill.id)
+
+export function resolveEnabledAssistantSkills(input: unknown): string[] {
+  const allowed = new Set(executiveAssistantSkillIds)
+  const selected =
+    Array.isArray(input)
+      ? input.filter((skillId): skillId is string => typeof skillId === 'string' && allowed.has(skillId))
+      : []
+
+  return selected.length > 0 ? selected : [...executiveAssistantSkillIds]
+}
 
 export const defaultAssistantProfile: AssistantProfile = {
   executiveMode: true,
   assistantName: 'Kova',
-  roleDescription: 'Executive AI operator and high-performance digital secretary',
+  roleDescription: 'Executive AI operator across Gmail, Calendar, Docs, Drive, and Notion',
   defaultLanguage: 'fr',
   writingTone: 'executive',
   writingDirectness: 'balanced',
@@ -163,5 +245,5 @@ export const defaultAssistantProfile: AssistantProfile = {
   autoResolveKnownContacts: true,
   schedulingBufferMinutes: 15,
   meetingDefaultDurationMinutes: 30,
-  enabledSkills: [],
+  enabledSkills: [...executiveAssistantSkillIds],
 }

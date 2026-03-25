@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import { analyzeUserRequest } from '@/lib/ai/client'
-import { executiveAssistantSkills, type AssistantProfile } from '@/lib/assistant/profile'
+import {
+  executiveAssistantSkills,
+  resolveEnabledAssistantSkills,
+  type AssistantProfile,
+} from '@/lib/assistant/profile'
 import { extractRecipientName, findContactByName, type KnownContact } from '@/lib/contacts'
 import { prepareActionParameters } from '@/lib/agent/data-prep'
 import { getToolByActionType, listMcpTools } from '@/lib/mcp/registry'
@@ -466,6 +470,8 @@ export async function runAgentTurn(
     workspaceContext?: string
   } = {}
 ): Promise<AgentTurnResult> {
+  const enabledSkillIds = resolveEnabledAssistantSkills(assistantProfile?.enabledSkills)
+  const enabledSkills = executiveAssistantSkills.filter((skill) => enabledSkillIds.includes(skill.id))
   const availableTools = listMcpTools().filter((tool) =>
     allowedActionTypes.includes(tool.actionType as AgentActionType)
   )
@@ -478,9 +484,7 @@ export async function runAgentTurn(
           conversationHistory,
           {
             assistantProfile,
-            skills: executiveAssistantSkills.filter((skill) =>
-              assistantProfile?.enabledSkills?.includes(skill.id) ?? true
-            ),
+            skills: enabledSkills,
             workspaceContext: options.workspaceContext,
             behaviorMode: 'conversation',
           }
@@ -519,9 +523,7 @@ export async function runAgentTurn(
         {
           knownContacts: knownContacts.map((contact) => ({ name: contact.name, email: contact.email })),
           assistantProfile,
-          skills: executiveAssistantSkills.filter((skill) =>
-            assistantProfile?.enabledSkills?.includes(skill.id) ?? true
-          ),
+          skills: enabledSkills,
           tools: availableTools,
           workspaceContext: options.workspaceContext,
         }

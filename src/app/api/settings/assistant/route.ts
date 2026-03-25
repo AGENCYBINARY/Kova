@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAppContext } from '@/lib/app-context'
-import { executiveAssistantSkills } from '@/lib/assistant/profile'
+import { executiveAssistantSkillIds, executiveAssistantSkills } from '@/lib/assistant/profile'
 import { getAssistantProfile, updateAssistantProfile } from '@/lib/assistant/store'
+
+const assistantSkillIdSchema = z.string().refine((value) => executiveAssistantSkillIds.includes(value), {
+  message: 'Unknown assistant skill.',
+})
 
 const assistantProfileSchema = z.object({
   executiveMode: z.boolean(),
@@ -18,7 +22,7 @@ const assistantProfileSchema = z.object({
   autoResolveKnownContacts: z.boolean(),
   schedulingBufferMinutes: z.number().min(0).max(60),
   meetingDefaultDurationMinutes: z.number().min(15).max(120),
-  enabledSkills: z.array(z.string()).min(1),
+  enabledSkills: z.array(assistantSkillIdSchema).min(1),
 })
 
 export async function GET() {
