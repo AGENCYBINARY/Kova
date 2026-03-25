@@ -61,12 +61,6 @@ const integrations = [
   { name: 'Drive', color: '#0F9D58', icon: '▲' },
 ]
 
-const proofPoints = [
-  { label: 'Workflow', value: 'Chat -> Review -> Execute' },
-  { label: 'Control', value: 'Approval-first by default' },
-  { label: 'Focus', value: 'Email, calendar, docs, Notion' },
-]
-
 export default function HomePage() {
   const { userId } = auth()
   if (userId) redirect('/dashboard')
@@ -128,15 +122,6 @@ export default function HomePage() {
             <a href="#demo" className={styles.ctaGhost}>
               Voir la démo
             </a>
-          </div>
-
-          <div className={styles.proofRow}>
-            {proofPoints.map((point) => (
-              <div key={point.label} className={styles.proofItem}>
-                <span>{point.label}</span>
-                <strong>{point.value}</strong>
-              </div>
-            ))}
           </div>
 
           <div className={styles.integRow}>
