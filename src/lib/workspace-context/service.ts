@@ -18,7 +18,9 @@ import {
 import {
   getValidNotionAccessToken,
   readNotionPagePreview,
+  searchNotionDatabases,
   searchNotionPages,
+  type NotionDatabaseSummary,
   type NotionPageSummary,
 } from '@/lib/integrations/notion'
 import {
@@ -85,6 +87,13 @@ interface NotionPageMetadata {
   url: string | null
 }
 
+interface NotionDatabaseMetadata {
+  databaseId: string
+  title: string
+  lastEditedTime: string | null
+  url: string | null
+}
+
 export interface ConnectedWorkspaceContextResult {
   request: ConnectedContextRequest
   workspaceContext: string
@@ -135,6 +144,10 @@ function formatGoogleDocLine(doc: GoogleDocSummary) {
 
 function formatNotionPageLine(page: NotionPageSummary) {
   return `${page.title} | edited ${page.lastEditedTime || 'unknown'}${page.preview ? ` | ${page.preview}` : ''}${page.url ? ` | ${page.url}` : ''} | pageId: ${page.id}`
+}
+
+function formatNotionDatabaseLine(database: NotionDatabaseSummary) {
+  return `${database.title} | edited ${database.lastEditedTime || 'unknown'}${database.url ? ` | ${database.url}` : ''} | databaseId: ${database.id}`
 }
 
 function buildTimeRange(timeframe: ConnectedContextRequest['timeframe']) {
@@ -330,6 +343,10 @@ async function buildNotionContext(params: {
     query: params.request.searchQuery || undefined,
     maxResults: 6,
   })
+  const databases = await searchNotionDatabases(params.accessToken, {
+    query: params.request.searchQuery || undefined,
+    maxResults: 4,
+  })
   const enrichedPages = await Promise.all(
     pages.slice(0, 4).map(async (page) => ({
       ...page,
@@ -342,13 +359,17 @@ async function buildNotionContext(params: {
     lines: [
       `Notion${params.workspaceName ? ` (${params.workspaceName})` : ''}${params.connectedAccount ? ` / ${params.connectedAccount}` : ''}`,
       `- pages loaded: ${pages.length}`,
+      `- databases loaded: ${databases.length}`,
       ...(enrichedPages.length > 0 ? enrichedPages.map((page) => `- ${formatNotionPageLine(page)}`) : ['- no matching pages']),
+      ...(databases.length > 0 ? ['- databases:'] : []),
+      ...databases.map((database) => `- ${formatNotionDatabaseLine(database)}`),
     ],
     metadata: {
       source: 'notion',
       connectedAccount: params.connectedAccount,
       workspaceName: params.workspaceName,
       pageCount: pages.length,
+      databaseCount: databases.length,
       pages: enrichedPages.map((page) => ({
         pageId: page.id,
         title: page.title,
@@ -356,6 +377,12 @@ async function buildNotionContext(params: {
         preview: page.preview,
         url: page.url,
       } satisfies NotionPageMetadata)),
+      databases: databases.map((database) => ({
+        databaseId: database.id,
+        title: database.title,
+        lastEditedTime: database.lastEditedTime,
+        url: database.url,
+      } satisfies NotionDatabaseMetadata)),
     },
   } satisfies SourceContextBlock
 }

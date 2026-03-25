@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { resolveActionReferences } from '../src/lib/agent/reference-resolution'
+import { resolveActionReferences, resolveActionReferencesDetailed } from '../src/lib/agent/reference-resolution'
 
 test('reply proposals inherit Gmail thread and message references from connected context', () => {
   const [proposal] = resolveActionReferences({
@@ -129,4 +129,118 @@ test('doc, drive, and notion update/delete proposals inherit ids from connected 
   assert.equal(proposals[0].parameters.documentId, 'doc_board_update')
   assert.equal(proposals[1].parameters.fileId, 'file_contract_final')
   assert.equal(proposals[2].parameters.pageId, 'page_launch_control')
+})
+
+test('forward, drive move/share, and notion database parent inherit ids from connected context', () => {
+  const proposals = resolveActionReferences({
+    userInput: 'Transfère le dernier mail de Marie, déplace le contrat final, partage-le avec finance et crée une page dans Sales CRM',
+    proposals: [
+      {
+        type: 'forward_email',
+        title: 'Forward email',
+        description: 'Forward an email.',
+        parameters: { messageId: 'message-id', to: ['finance@client.com'], note: 'FYI' },
+        confidenceScore: 0.8,
+      },
+      {
+        type: 'move_google_drive_file',
+        title: 'Move file',
+        description: 'Move a Drive file.',
+        parameters: { fileId: 'file-id', destinationFolderName: 'Archive' },
+        confidenceScore: 0.8,
+      },
+      {
+        type: 'share_google_drive_file',
+        title: 'Share file',
+        description: 'Share a Drive file.',
+        parameters: { fileId: '', emails: ['finance@client.com'], role: 'reader' },
+        confidenceScore: 0.8,
+      },
+      {
+        type: 'create_notion_page',
+        title: 'Create page',
+        description: 'Create a Notion page.',
+        parameters: { title: 'Follow-up', content: 'Ready', parentDatabaseId: 'database-id' },
+        confidenceScore: 0.8,
+      },
+    ],
+    connectedContextMetadata: {
+      connectedContextSummary: [
+        {
+          source: 'gmail',
+          messages: [
+            {
+              messageId: 'msg_marie_latest',
+              threadId: 'thread_marie',
+              from: 'Marie <marie@client.com>',
+              fromEmail: 'marie@client.com',
+              subject: 'Contrat final',
+              snippet: 'Voici la dernière version du contrat',
+              unread: true,
+            },
+          ],
+        },
+        {
+          source: 'google_drive',
+          files: [{ fileId: 'file_contract_final', name: 'contrat-final.pdf', mimeType: 'application/pdf' }],
+        },
+        {
+          source: 'notion',
+          databases: [{ databaseId: 'db_sales_crm', title: 'Sales CRM', url: 'https://notion.so/db-sales-crm' }],
+        },
+      ],
+    },
+  })
+
+  assert.equal(proposals[0].parameters.messageId, 'msg_marie_latest')
+  assert.equal(proposals[1].parameters.fileId, 'file_contract_final')
+  assert.equal(proposals[2].parameters.fileId, 'file_contract_final')
+  assert.equal(proposals[3].parameters.parentDatabaseId, 'db_sales_crm')
+})
+
+test('ambiguous gmail matches return an explicit disambiguation shortlist', () => {
+  const result = resolveActionReferencesDetailed({
+    userInput: 'Archive le mail de Martin',
+    proposals: [
+      {
+        type: 'archive_gmail_thread',
+        title: 'Archive',
+        description: 'Archive a thread.',
+        parameters: { threadId: 'thread-id' },
+        confidenceScore: 0.8,
+      },
+    ],
+    connectedContextMetadata: {
+      connectedContextSummary: [
+        {
+          source: 'gmail',
+          messages: [
+            {
+              messageId: 'msg_martin_ops',
+              threadId: 'thread_martin_ops',
+              from: 'Martin Ops <martin@ops.com>',
+              fromEmail: 'martin@ops.com',
+              subject: 'Launch plan',
+              snippet: 'Plan de lancement',
+              unread: true,
+            },
+            {
+              messageId: 'msg_martin_sales',
+              threadId: 'thread_martin_sales',
+              from: 'Martin Sales <martin@sales.com>',
+              fromEmail: 'martin@sales.com',
+              subject: 'Sales review',
+              snippet: 'Revue commerciale',
+              unread: false,
+            },
+          ],
+        },
+      ],
+    },
+  })
+
+  assert.equal(result.proposals[0].parameters.threadId, 'thread-id')
+  assert.equal(result.disambiguations.length, 1)
+  assert.equal(result.disambiguations[0]?.source, 'gmail')
+  assert.equal(result.disambiguations[0]?.options.length, 2)
 })

@@ -159,6 +159,7 @@ test('gmail fallback summary stays user-facing and concise', () => {
         snippet: 'Peux-tu valider la derniere version du contrat avant 16h ?',
         internalDate: String(Date.now()),
         unread: true,
+        labelIds: ['UNREAD'],
       },
       {
         id: 'm2',
@@ -168,6 +169,7 @@ test('gmail fallback summary stays user-facing and concise', () => {
         snippet: 'Je t envoie les remarques de l equipe produit.',
         internalDate: String(Date.now() - 1000),
         unread: false,
+        labelIds: [],
       },
     ],
   })

@@ -50,11 +50,18 @@ interface SourceMetadataSummary {
     webViewLink?: string | null
   }>
   pageCount?: number
+  databaseCount?: number
   pages?: Array<{
     pageId?: string
     title?: string
     lastEditedTime?: string | null
     preview?: string
+    url?: string | null
+  }>
+  databases?: Array<{
+    databaseId?: string
+    title?: string
+    lastEditedTime?: string | null
     url?: string | null
   }>
   error?: string
@@ -120,8 +127,8 @@ export function buildConnectedContextFallbackResponse(
     }
 
     return language === 'en'
-      ? [`notion: ${summary.pageCount || 0} matching pages`]
-      : [`notion: ${summary.pageCount || 0} pages correspondantes`]
+      ? [`notion: ${summary.pageCount || 0} matching pages, ${summary.databaseCount || 0} matching databases`]
+      : [`notion: ${summary.pageCount || 0} pages correspondantes, ${summary.databaseCount || 0} bases correspondantes`]
   })
 
   if (lines.length === 0) {

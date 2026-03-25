@@ -8,6 +8,7 @@ interface GmailSummaryItem {
   subject?: string
   snippet?: string
   unread?: boolean
+  labelIds?: string[]
 }
 
 interface CalendarSummaryItem {
@@ -28,6 +29,7 @@ interface DriveSummaryItem {
   modifiedTime?: string | null
   owners?: string[]
   webViewLink?: string | null
+  parentIds?: string[]
 }
 
 interface DocSummaryItem {
@@ -46,6 +48,13 @@ interface NotionSummaryItem {
   url?: string | null
 }
 
+interface NotionDatabaseSummaryItem {
+  databaseId?: string
+  title?: string
+  lastEditedTime?: string | null
+  url?: string | null
+}
+
 interface SourceMetadataSummary {
   source?: string
   messages?: GmailSummaryItem[]
@@ -53,6 +62,28 @@ interface SourceMetadataSummary {
   files?: DriveSummaryItem[]
   docs?: DocSummaryItem[]
   pages?: NotionSummaryItem[]
+  databases?: NotionDatabaseSummaryItem[]
+}
+
+interface RankedCandidate<T> {
+  item: T
+  score: number
+}
+
+export interface ReferenceDisambiguation {
+  actionType: AgentProposal['type']
+  source: 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'notion'
+  field: string
+  question: string
+  options: Array<{
+    id: string
+    label: string
+  }>
+}
+
+export interface ResolveActionReferencesResult {
+  proposals: AgentProposal[]
+  disambiguations: ReferenceDisambiguation[]
 }
 
 function normalize(value: string) {
@@ -66,11 +97,13 @@ const stopWords = new Set([
   'a', 'au', 'aux', 'avec', 'ce', 'cet', 'cette', 'ces', 'dans', 'de', 'des', 'du', 'en', 'et', 'for', 'from',
   'i', 'il', 'ils', 'je', 'la', 'le', 'les', 'ma', 'mes', 'mon', 'my', 'nos', 'notre', 'ou', 'par', 'pour', 'sur',
   'ta', 'tes', 'the', 'this', 'to', 'ton', 'tous', 'toutes', 'moi', 'mail', 'mails', 'email', 'emails', 'gmail',
-  'message', 'messages', 'calendar', 'agenda', 'calendrier', 'event', 'events', 'meeting', 'meetings', 'doc', 'docs',
-  'document', 'documents', 'drive', 'file', 'files', 'fichier', 'fichiers', 'page', 'pages', 'notion', 'update',
-  'delete', 'remove', 'reply', 'reponds', 'repondre', 'supprime', 'supprimer', 'mets', 'mettre', 'jour', 'modifie',
-  'modifier', 'edite', 'editer', 'change', 'changer', 'latest', 'last', 'recent', 'dernier', 'derniere', 'prochain',
-  'prochaine', 'ce', 'cette', 'the', 'please',
+  'message', 'messages', 'thread', 'threads', 'calendar', 'agenda', 'calendrier', 'event', 'events', 'meeting',
+  'meetings', 'doc', 'docs', 'document', 'documents', 'drive', 'file', 'files', 'fichier', 'fichiers', 'page',
+  'pages', 'notion', 'database', 'databases', 'base', 'bases', 'donnees', 'update', 'delete', 'remove', 'reply',
+  'reponds', 'repondre', 'supprime', 'supprimer', 'mets', 'mettre', 'jour', 'modifie', 'modifier', 'edite',
+  'editer', 'change', 'changer', 'latest', 'last', 'recent', 'dernier', 'derniere', 'prochain', 'prochaine',
+  'please', 'archive', 'archiver', 'label', 'labels', 'read', 'unread', 'lu', 'non', 'transfere', 'transferer',
+  'forward', 'share', 'partage', 'move', 'deplace', 'rename', 'renomme', 'status', 'statut', 'property', 'properties',
 ])
 
 function tokenize(value: string) {
@@ -93,6 +126,7 @@ function includesPlaceholder(value: unknown) {
     normalized === 'document-id' ||
     normalized === 'file-id' ||
     normalized === 'page-id' ||
+    normalized === 'database-id' ||
     normalized === 'thread-id' ||
     normalized === 'message-id' ||
     normalized === 'notion-page-id'
@@ -111,25 +145,18 @@ function scoreCandidate(haystacks: Array<string | null | undefined>, tokens: str
   return score
 }
 
-function pickBestMatch<T>(items: T[], tokens: string[], fields: (item: T) => Array<string | null | undefined>) {
-  if (items.length === 0) return null
-  let bestItem = items[0]
-  let bestScore = scoreCandidate(fields(items[0]), tokens)
-
-  for (const item of items.slice(1)) {
-    const score = scoreCandidate(fields(item), tokens)
-    if (score > bestScore) {
-      bestItem = item
-      bestScore = score
-    }
-  }
-
-  return { item: bestItem, score: bestScore }
+function rankMatches<T>(items: T[], tokens: string[], fields: (item: T) => Array<string | null | undefined>) {
+  return items
+    .map((item) => ({
+      item,
+      score: scoreCandidate(fields(item), tokens),
+    }))
+    .sort((left, right) => right.score - left.score)
 }
 
 function getConnectedSummaries(metadata: Record<string, unknown> | undefined) {
   return Array.isArray(metadata?.connectedContextSummary)
-    ? (metadata?.connectedContextSummary as SourceMetadataSummary[])
+    ? (metadata.connectedContextSummary as SourceMetadataSummary[])
     : []
 }
 
@@ -140,6 +167,48 @@ function getSourceSummary(
   return getConnectedSummaries(metadata).find((summary) => summary.source === source) || null
 }
 
+function shouldDisambiguate<T>(ranked: RankedCandidate<T>[], tokens: string[]) {
+  if (ranked.length <= 1) return false
+  if (tokens.length === 0) return true
+  const [first, second] = ranked
+  if (!first || !second) return false
+  return first.score > 0 && second.score > 0 && first.score - second.score <= 1
+}
+
+function buildDisambiguation<T>(params: {
+  actionType: AgentProposal['type']
+  source: ReferenceDisambiguation['source']
+  field: string
+  question: string
+  ranked: RankedCandidate<T>[]
+  getId: (item: T) => string | null | undefined
+  format: (item: T) => string
+}) {
+  const options = params.ranked
+    .slice(0, 3)
+    .map((entry) => {
+      const id = params.getId(entry.item)
+      if (!id) return null
+      return {
+        id,
+        label: params.format(entry.item),
+      }
+    })
+    .filter((entry): entry is { id: string; label: string } => entry !== null)
+
+  if (options.length === 0) {
+    return null
+  }
+
+  return {
+    actionType: params.actionType,
+    source: params.source,
+    field: params.field,
+    question: params.question,
+    options,
+  } satisfies ReferenceDisambiguation
+}
+
 function resolveReplyProposal(
   proposal: AgentProposal,
   userInput: string,
@@ -148,7 +217,7 @@ function resolveReplyProposal(
   const gmailSummary = getSourceSummary(metadata, 'gmail')
   const messages = Array.isArray(gmailSummary?.messages) ? gmailSummary.messages : []
   if (messages.length === 0) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   const hasThreadId = !includesPlaceholder(proposal.parameters.threadId)
@@ -159,44 +228,99 @@ function resolveReplyProposal(
   const hasSubject = typeof proposal.parameters.subject === 'string' && proposal.parameters.subject.trim().length > 0
 
   if (hasThreadId && hasMessageId && currentRecipients.length > 0 && hasSubject) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   const tokens = tokenize(userInput)
-  const match = pickBestMatch(messages, tokens, (message) => [
-    message.from,
-    message.fromEmail,
-    message.subject,
-    message.snippet,
-  ])
+  const ranked = rankMatches(messages, tokens, (message) => [message.from, message.fromEmail, message.subject, message.snippet])
+  if (shouldDisambiguate(ranked, tokens)) {
+    return {
+      proposal,
+      disambiguation: buildDisambiguation({
+        actionType: proposal.type,
+        source: 'gmail',
+        field: 'threadId',
+        question: 'Plusieurs threads Gmail correspondent. Lequel veux-tu utiliser ?',
+        ranked,
+        getId: (item) => item.threadId || item.messageId,
+        format: (item) => `${item.from || 'Expéditeur inconnu'} | ${item.subject || 'Sans objet'}${item.unread ? ' | non lu' : ''}`,
+      }),
+    }
+  }
 
-  const chosen = match?.item || messages[0]
+  const chosen = ranked[0]?.item || messages[0]
   if (!chosen) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   const subject = chosen.subject?.trim()
   const normalizedSubject = subject ? normalize(subject) : ''
-  const replySubject = !subject
-    ? proposal.parameters.subject
-    : normalizedSubject.startsWith('re:')
-      ? subject
-      : `Re: ${subject}`
+  const replySubject = !subject ? proposal.parameters.subject : normalizedSubject.startsWith('re:') ? subject : `Re: ${subject}`
 
   return {
-    ...proposal,
-    parameters: {
-      ...proposal.parameters,
-      threadId: hasThreadId ? proposal.parameters.threadId : chosen.threadId || chosen.messageId,
-      messageId: hasMessageId ? proposal.parameters.messageId : chosen.messageId,
-      to: currentRecipients.length > 0
-        ? currentRecipients
-        : chosen.fromEmail
-          ? [chosen.fromEmail]
-          : proposal.parameters.to,
-      subject: hasSubject ? proposal.parameters.subject : replySubject,
+    proposal: {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        threadId: hasThreadId ? proposal.parameters.threadId : chosen.threadId || chosen.messageId,
+        messageId: hasMessageId ? proposal.parameters.messageId : chosen.messageId,
+        to: currentRecipients.length > 0 ? currentRecipients : chosen.fromEmail ? [chosen.fromEmail] : proposal.parameters.to,
+        subject: hasSubject ? proposal.parameters.subject : replySubject,
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, ranked[0] && ranked[0].score > 0 ? 0.92 : 0.84),
     },
-    confidenceScore: Math.max(proposal.confidenceScore, match && match.score > 0 ? 0.92 : 0.84),
+    disambiguation: null as ReferenceDisambiguation | null,
+  }
+}
+
+function resolveGmailMessageProposal(
+  proposal: AgentProposal,
+  userInput: string,
+  metadata: Record<string, unknown> | undefined,
+  options: {
+    field: 'threadId' | 'messageId'
+    question: string
+  }
+) {
+  const gmailSummary = getSourceSummary(metadata, 'gmail')
+  const messages = Array.isArray(gmailSummary?.messages) ? gmailSummary.messages : []
+  if (messages.length === 0 || !includesPlaceholder(proposal.parameters[options.field])) {
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  const tokens = tokenize(userInput)
+  const ranked = rankMatches(messages, tokens, (message) => [message.from, message.fromEmail, message.subject, message.snippet])
+  if (shouldDisambiguate(ranked, tokens)) {
+    return {
+      proposal,
+      disambiguation: buildDisambiguation({
+        actionType: proposal.type,
+        source: 'gmail',
+        field: options.field,
+        question: options.question,
+        ranked,
+        getId: (item) => options.field === 'threadId' ? item.threadId || item.messageId : item.messageId,
+        format: (item) => `${item.from || 'Expéditeur inconnu'} | ${item.subject || 'Sans objet'}${item.unread ? ' | non lu' : ''}`,
+      }),
+    }
+  }
+
+  const chosen = ranked[0]?.item || messages[0]
+  if (!chosen) {
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  return {
+    proposal: {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        [options.field]: options.field === 'threadId' ? chosen.threadId || chosen.messageId : chosen.messageId,
+        ...(proposal.type === 'forward_email' && chosen.threadId ? { threadId: chosen.threadId } : {}),
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, ranked[0] && ranked[0].score > 0 ? 0.9 : 0.82),
+    },
+    disambiguation: null as ReferenceDisambiguation | null,
   }
 }
 
@@ -208,27 +332,41 @@ function resolveCalendarProposal(
   const calendarSummary = getSourceSummary(metadata, 'calendar')
   const events = Array.isArray(calendarSummary?.events) ? calendarSummary.events : []
   if (events.length === 0 || !includesPlaceholder(proposal.parameters.eventId)) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   const tokens = tokenize(userInput)
-  const match = pickBestMatch(events, tokens, (event) => [
-    event.title,
-    event.location,
-    ...(Array.isArray(event.attendees) ? event.attendees : []),
-  ])
-  const chosen = match?.item || events[0]
+  const ranked = rankMatches(events, tokens, (event) => [event.title, event.location, ...(Array.isArray(event.attendees) ? event.attendees : [])])
+  if (shouldDisambiguate(ranked, tokens)) {
+    return {
+      proposal,
+      disambiguation: buildDisambiguation({
+        actionType: proposal.type,
+        source: 'calendar',
+        field: 'eventId',
+        question: 'Plusieurs événements correspondent. Lequel veux-tu modifier ?',
+        ranked,
+        getId: (item) => item.eventId,
+        format: (item) => `${item.title || 'Événement'} | ${item.startTime || 'heure inconnue'}`,
+      }),
+    }
+  }
+
+  const chosen = ranked[0]?.item || events[0]
   if (!chosen?.eventId) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   return {
-    ...proposal,
-    parameters: {
-      ...proposal.parameters,
-      eventId: chosen.eventId,
+    proposal: {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        eventId: chosen.eventId,
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, ranked[0] && ranked[0].score > 0 ? 0.92 : 0.83),
     },
-    confidenceScore: Math.max(proposal.confidenceScore, match && match.score > 0 ? 0.92 : 0.83),
+    disambiguation: null as ReferenceDisambiguation | null,
   }
 }
 
@@ -240,23 +378,41 @@ function resolveDocProposal(
   const docSummary = getSourceSummary(metadata, 'google_docs')
   const docs = Array.isArray(docSummary?.docs) ? docSummary.docs : []
   if (docs.length === 0 || !includesPlaceholder(proposal.parameters.documentId)) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   const tokens = tokenize(userInput)
-  const match = pickBestMatch(docs, tokens, (doc) => [doc.title, doc.preview])
-  const chosen = match?.item || docs[0]
+  const ranked = rankMatches(docs, tokens, (doc) => [doc.title, doc.preview, doc.webViewLink])
+  if (shouldDisambiguate(ranked, tokens)) {
+    return {
+      proposal,
+      disambiguation: buildDisambiguation({
+        actionType: proposal.type,
+        source: 'google_docs',
+        field: 'documentId',
+        question: 'Plusieurs Google Docs correspondent. Lequel veux-tu mettre à jour ?',
+        ranked,
+        getId: (item) => item.documentId,
+        format: (item) => `${item.title || 'Document'}${item.modifiedTime ? ` | ${item.modifiedTime}` : ''}`,
+      }),
+    }
+  }
+
+  const chosen = ranked[0]?.item || docs[0]
   if (!chosen?.documentId) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   return {
-    ...proposal,
-    parameters: {
-      ...proposal.parameters,
-      documentId: chosen.documentId,
+    proposal: {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        documentId: chosen.documentId,
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, ranked[0] && ranked[0].score > 0 ? 0.9 : 0.82),
     },
-    confidenceScore: Math.max(proposal.confidenceScore, match && match.score > 0 ? 0.9 : 0.82),
+    disambiguation: null as ReferenceDisambiguation | null,
   }
 }
 
@@ -268,27 +424,45 @@ function resolveDriveProposal(
   const driveSummary = getSourceSummary(metadata, 'google_drive')
   const files = Array.isArray(driveSummary?.files) ? driveSummary.files : []
   if (files.length === 0 || !includesPlaceholder(proposal.parameters.fileId)) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   const tokens = tokenize(userInput)
-  const match = pickBestMatch(files, tokens, (file) => [file.name, file.mimeType, file.webViewLink])
-  const chosen = match?.item || files[0]
+  const ranked = rankMatches(files, tokens, (file) => [file.name, file.mimeType, file.webViewLink, ...(file.owners || [])])
+  if (shouldDisambiguate(ranked, tokens)) {
+    return {
+      proposal,
+      disambiguation: buildDisambiguation({
+        actionType: proposal.type,
+        source: 'google_drive',
+        field: 'fileId',
+        question: 'Plusieurs fichiers Drive correspondent. Lequel veux-tu utiliser ?',
+        ranked,
+        getId: (item) => item.fileId,
+        format: (item) => `${item.name || 'Fichier'} | ${item.mimeType || 'type inconnu'}`,
+      }),
+    }
+  }
+
+  const chosen = ranked[0]?.item || files[0]
   if (!chosen?.fileId) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   return {
-    ...proposal,
-    parameters: {
-      ...proposal.parameters,
-      fileId: chosen.fileId,
+    proposal: {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        fileId: chosen.fileId,
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, ranked[0] && ranked[0].score > 0 ? 0.9 : 0.82),
     },
-    confidenceScore: Math.max(proposal.confidenceScore, match && match.score > 0 ? 0.9 : 0.82),
+    disambiguation: null as ReferenceDisambiguation | null,
   }
 }
 
-function resolveNotionProposal(
+function resolveNotionPageProposal(
   proposal: AgentProposal,
   userInput: string,
   metadata: Record<string, unknown> | undefined
@@ -296,23 +470,168 @@ function resolveNotionProposal(
   const notionSummary = getSourceSummary(metadata, 'notion')
   const pages = Array.isArray(notionSummary?.pages) ? notionSummary.pages : []
   if (pages.length === 0 || !includesPlaceholder(proposal.parameters.pageId)) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   const tokens = tokenize(userInput)
-  const match = pickBestMatch(pages, tokens, (page) => [page.title, page.preview, page.url])
-  const chosen = match?.item || pages[0]
+  const ranked = rankMatches(pages, tokens, (page) => [page.title, page.preview, page.url])
+  if (shouldDisambiguate(ranked, tokens)) {
+    return {
+      proposal,
+      disambiguation: buildDisambiguation({
+        actionType: proposal.type,
+        source: 'notion',
+        field: 'pageId',
+        question: 'Plusieurs pages Notion correspondent. Laquelle veux-tu utiliser ?',
+        ranked,
+        getId: (item) => item.pageId,
+        format: (item) => `${item.title || 'Page'}${item.preview ? ` | ${item.preview}` : ''}`,
+      }),
+    }
+  }
+
+  const chosen = ranked[0]?.item || pages[0]
   if (!chosen?.pageId) {
-    return proposal
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
   return {
-    ...proposal,
-    parameters: {
-      ...proposal.parameters,
-      pageId: chosen.pageId,
+    proposal: {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        pageId: chosen.pageId,
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, ranked[0] && ranked[0].score > 0 ? 0.9 : 0.82),
     },
-    confidenceScore: Math.max(proposal.confidenceScore, match && match.score > 0 ? 0.9 : 0.82),
+    disambiguation: null as ReferenceDisambiguation | null,
+  }
+}
+
+function resolveNotionDatabaseParentProposal(
+  proposal: AgentProposal,
+  userInput: string,
+  metadata: Record<string, unknown> | undefined
+) {
+  const notionSummary = getSourceSummary(metadata, 'notion')
+  const databases = Array.isArray(notionSummary?.databases) ? notionSummary.databases : []
+  if (databases.length === 0 || !includesPlaceholder(proposal.parameters.parentDatabaseId)) {
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  const tokens = tokenize(userInput)
+  const ranked = rankMatches(databases, tokens, (database) => [database.title, database.url])
+  if (shouldDisambiguate(ranked, tokens)) {
+    return {
+      proposal,
+      disambiguation: buildDisambiguation({
+        actionType: proposal.type,
+        source: 'notion',
+        field: 'parentDatabaseId',
+        question: 'Plusieurs bases Notion correspondent. Dans laquelle veux-tu créer la page ?',
+        ranked,
+        getId: (item) => item.databaseId,
+        format: (item) => `${item.title || 'Base Notion'}${item.lastEditedTime ? ` | ${item.lastEditedTime}` : ''}`,
+      }),
+    }
+  }
+
+  const chosen = ranked[0]?.item || databases[0]
+  if (!chosen?.databaseId) {
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  return {
+    proposal: {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        parentDatabaseId: chosen.databaseId,
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, ranked[0] && ranked[0].score > 0 ? 0.9 : 0.82),
+    },
+    disambiguation: null as ReferenceDisambiguation | null,
+  }
+}
+
+export function resolveActionReferencesDetailed(params: {
+  proposals: AgentProposal[]
+  userInput: string
+  connectedContextMetadata?: Record<string, unknown>
+}): ResolveActionReferencesResult {
+  const disambiguations: ReferenceDisambiguation[] = []
+
+  const proposals = params.proposals.map((proposal) => {
+    if (proposal.type === 'reply_to_email') {
+      const result = resolveReplyProposal(proposal, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (
+      proposal.type === 'archive_gmail_thread' ||
+      proposal.type === 'label_gmail_thread' ||
+      proposal.type === 'mark_gmail_thread_read' ||
+      proposal.type === 'mark_gmail_thread_unread'
+    ) {
+      const result = resolveGmailMessageProposal(proposal, params.userInput, params.connectedContextMetadata, {
+        field: 'threadId',
+        question: 'Plusieurs threads Gmail correspondent. Lequel veux-tu utiliser ?',
+      })
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (proposal.type === 'forward_email') {
+      const result = resolveGmailMessageProposal(proposal, params.userInput, params.connectedContextMetadata, {
+        field: 'messageId',
+        question: 'Plusieurs emails Gmail correspondent. Lequel veux-tu transférer ?',
+      })
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (proposal.type === 'update_calendar_event' || proposal.type === 'delete_calendar_event') {
+      const result = resolveCalendarProposal(proposal, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (proposal.type === 'update_google_doc') {
+      const result = resolveDocProposal(proposal, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (
+      proposal.type === 'delete_google_drive_file' ||
+      proposal.type === 'move_google_drive_file' ||
+      proposal.type === 'rename_google_drive_file' ||
+      proposal.type === 'share_google_drive_file'
+    ) {
+      const result = resolveDriveProposal(proposal, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (proposal.type === 'update_notion_page' || proposal.type === 'update_notion_page_properties') {
+      const result = resolveNotionPageProposal(proposal, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (proposal.type === 'create_notion_page' && includesPlaceholder(proposal.parameters.parentDatabaseId)) {
+      const result = resolveNotionDatabaseParentProposal(proposal, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    return proposal
+  })
+
+  return {
+    proposals,
+    disambiguations,
   }
 }
 
@@ -321,27 +640,5 @@ export function resolveActionReferences(params: {
   userInput: string
   connectedContextMetadata?: Record<string, unknown>
 }) {
-  return params.proposals.map((proposal) => {
-    if (proposal.type === 'reply_to_email') {
-      return resolveReplyProposal(proposal, params.userInput, params.connectedContextMetadata)
-    }
-
-    if (proposal.type === 'update_calendar_event' || proposal.type === 'delete_calendar_event') {
-      return resolveCalendarProposal(proposal, params.userInput, params.connectedContextMetadata)
-    }
-
-    if (proposal.type === 'update_google_doc') {
-      return resolveDocProposal(proposal, params.userInput, params.connectedContextMetadata)
-    }
-
-    if (proposal.type === 'delete_google_drive_file') {
-      return resolveDriveProposal(proposal, params.userInput, params.connectedContextMetadata)
-    }
-
-    if (proposal.type === 'update_notion_page') {
-      return resolveNotionProposal(proposal, params.userInput, params.connectedContextMetadata)
-    }
-
-    return proposal
-  })
+  return resolveActionReferencesDetailed(params).proposals
 }

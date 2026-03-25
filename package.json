@@ -10,6 +10,7 @@
     "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/tests/*.test.js",
     "mcp:test": "node scripts/test-mcp.mjs",
     "integration:smoke": "tsx scripts/integration-smoke.ts",
+    "integration:live": "tsx scripts/integration-live-runner.ts",
     "mcp:standalone": "tsx src/lib/mcp/standalone-server.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

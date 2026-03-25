@@ -508,7 +508,7 @@ async function resolveCorrectedContactFromChatInput(params: {
 
   const email = emails[0]
   const latestPendingEmailAction = params.pendingActions.find(
-    (action) => action.type === 'send_email' || action.type === 'reply_to_email'
+    (action) => action.type === 'send_email' || action.type === 'reply_to_email' || action.type === 'forward_email'
   )
   const explicitNameFromMessage =
     extractRecipientName(params.content) ||
@@ -547,11 +547,17 @@ async function resolveCorrectedContactFromChatInput(params: {
       resolvedContactName: name,
     }
     const updatedTitle =
-      latestPendingEmailAction.type === 'reply_to_email' ? `Reply to ${name}` : `Send email to ${name}`
+      latestPendingEmailAction.type === 'reply_to_email'
+        ? `Reply to ${name}`
+        : latestPendingEmailAction.type === 'forward_email'
+          ? `Forward email to ${name}`
+          : `Send email to ${name}`
     const updatedDescription =
       latestPendingEmailAction.type === 'reply_to_email'
         ? `Prepare a reply to ${name} in the relevant Gmail thread.`
-        : `Prepare and send an email to ${name} through Gmail.`
+        : latestPendingEmailAction.type === 'forward_email'
+          ? `Forward the relevant Gmail message to ${name}.`
+          : `Prepare and send an email to ${name} through Gmail.`
 
     const updatedAction = await prisma.action.update({
       where: { id: latestPendingEmailAction.id },

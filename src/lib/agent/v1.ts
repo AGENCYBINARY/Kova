@@ -5,7 +5,7 @@ import {
   resolveEnabledAssistantSkills,
   type AssistantProfile,
 } from '@/lib/assistant/profile'
-import { resolveActionReferences } from '@/lib/agent/reference-resolution'
+import { resolveActionReferencesDetailed } from '@/lib/agent/reference-resolution'
 import { extractRecipientName, findContactByName, type KnownContact } from '@/lib/contacts'
 import { prepareActionParameters } from '@/lib/agent/data-prep'
 import { getToolByActionType, listMcpTools } from '@/lib/mcp/registry'
@@ -14,15 +14,24 @@ import { isEmailSendIntent, isReadOnlyWorkspaceQuestion } from '@/lib/workspace-
 export const agentActionTypeSchema = z.enum([
   'send_email',
   'reply_to_email',
+  'forward_email',
+  'archive_gmail_thread',
+  'label_gmail_thread',
+  'mark_gmail_thread_read',
+  'mark_gmail_thread_unread',
   'create_calendar_event',
   'update_calendar_event',
   'delete_calendar_event',
   'update_notion_page',
+  'update_notion_page_properties',
   'create_notion_page',
   'create_google_doc',
   'update_google_doc',
   'create_google_drive_file',
   'delete_google_drive_file',
+  'move_google_drive_file',
+  'rename_google_drive_file',
+  'share_google_drive_file',
 ])
 
 export type AgentActionType = z.infer<typeof agentActionTypeSchema>
@@ -44,9 +53,9 @@ export type AgentExecutionMode = 'ask' | 'auto'
 
 const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,})/
 const actionIntentPattern =
-  /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|envoie|envoyer|rédige|redige|écris|ecris|crée|cree|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|déconnecte|deconnecte|actualise|rafraichis)/i
+  /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|label|forward|move|rename|envoie|envoyer|rédige|redige|écris|ecris|crée|cree|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|déconnecte|deconnecte|actualise|rafraichis|archiver|transférer|transferer|deplacer|deplace|renommer|renomme|labellise|labelise)/i
 const appIntentPattern =
-  /(gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|visio|réunion|reunion|dossier|folder|fichier|file|page|doc\b)/i
+  /(gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\b)/i
 const greetingOnlyPattern =
   /^(bonjour|salut|hello|hey|yo|coucou|bonsoir|good morning|good evening|hi|ça va|ca va)\b[ !?.]*$/i
 const conversationalPattern =
@@ -54,6 +63,15 @@ const conversationalPattern =
 
 function hasPlaceholderRecipient(parameters: Record<string, unknown>) {
   const recipients = Array.isArray(parameters.to) ? parameters.to : []
+  return recipients.some(
+    (value) =>
+      typeof value === 'string' &&
+      (value.trim().toLowerCase() === 'recipient@example.com' || value.trim().toLowerCase().endsWith('@example.com'))
+  )
+}
+
+function hasPlaceholderShareRecipient(parameters: Record<string, unknown>) {
+  const recipients = Array.isArray(parameters.emails) ? parameters.emails : []
   return recipients.some(
     (value) =>
       typeof value === 'string' &&
@@ -271,6 +289,72 @@ function buildEmailReplyProposal(input: string, profile?: AssistantProfile): Age
   }
 }
 
+function buildForwardEmailProposal(input: string, profile?: AssistantProfile, contact?: KnownContact | null): AgentProposal {
+  return {
+    type: 'forward_email',
+    title: contact ? `Forward email to ${contact.name}` : 'Forward email',
+    description: 'Forward the matching Gmail message to the selected recipients.',
+    parameters: {
+      messageId: '',
+      to: contact ? [contact.email] : ['recipient@example.com'],
+      note: input.trim(),
+      ...(contact ? { resolvedContactName: contact.name } : {}),
+    },
+    confidenceScore: contact ? 0.9 : 0.72,
+  }
+}
+
+function buildArchiveEmailProposal(profile?: AssistantProfile): AgentProposal {
+  return {
+    type: 'archive_gmail_thread',
+    title: profile?.defaultLanguage === 'en' ? 'Archive Gmail thread' : 'Archiver le thread Gmail',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Archive the matching Gmail thread.'
+        : 'Archiver le thread Gmail correspondant.',
+    parameters: {
+      threadId: '',
+    },
+    confidenceScore: 0.82,
+  }
+}
+
+function buildLabelEmailProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const labelMatch = input.match(/(?:label|labels|etiquette|etiquettes|tag)\s+["“]?([^"”]+?)["”]?(?:$|[,.!?])/i)
+  const label = labelMatch?.[1]?.trim() || (profile?.defaultLanguage === 'en' ? 'To review' : 'À revoir')
+  return {
+    type: 'label_gmail_thread',
+    title: profile?.defaultLanguage === 'en' ? 'Label Gmail thread' : 'Labelliser le thread Gmail',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Apply labels to the matching Gmail thread.'
+        : 'Appliquer des labels au thread Gmail correspondant.',
+    parameters: {
+      threadId: '',
+      labelNames: [label],
+    },
+    confidenceScore: 0.8,
+  }
+}
+
+function buildMarkReadStateProposal(unread: boolean, profile?: AssistantProfile): AgentProposal {
+  return {
+    type: unread ? 'mark_gmail_thread_unread' : 'mark_gmail_thread_read',
+    title:
+      profile?.defaultLanguage === 'en'
+        ? unread ? 'Mark Gmail thread unread' : 'Mark Gmail thread read'
+        : unread ? 'Marquer le thread Gmail comme non lu' : 'Marquer le thread Gmail comme lu',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? unread ? 'Mark the matching Gmail thread as unread.' : 'Mark the matching Gmail thread as read.'
+        : unread ? 'Marquer le thread Gmail correspondant comme non lu.' : 'Marquer le thread Gmail correspondant comme lu.',
+    parameters: {
+      threadId: '',
+    },
+    confidenceScore: 0.8,
+  }
+}
+
 function buildResolvedEmailProposal(input: string, contact: KnownContact, profile?: AssistantProfile): AgentProposal {
   return {
     type: 'send_email',
@@ -338,6 +422,58 @@ function buildDeleteGoogleDriveProposal(profile?: AssistantProfile): AgentPropos
   }
 }
 
+function buildMoveGoogleDriveProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const folderMatch = input.match(/(?:dans|vers|to|into)\s+["“]?([^"”]+?)["”]?(?:$|[,.!?])/i)
+  return {
+    type: 'move_google_drive_file',
+    title: profile?.defaultLanguage === 'en' ? 'Move Drive file' : 'Déplacer le fichier Drive',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Move the matching Google Drive file to another folder.'
+        : 'Déplacer le fichier Google Drive correspondant vers un autre dossier.',
+    parameters: {
+      fileId: '',
+      destinationFolderName: folderMatch?.[1]?.trim() || (profile?.defaultLanguage === 'en' ? 'Archive' : 'Archive'),
+    },
+    confidenceScore: 0.8,
+  }
+}
+
+function buildRenameGoogleDriveProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const quoted = input.match(/["“]([^"”]+)["”]/)
+  return {
+    type: 'rename_google_drive_file',
+    title: profile?.defaultLanguage === 'en' ? 'Rename Drive file' : 'Renommer le fichier Drive',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Rename the matching Google Drive file.'
+        : 'Renommer le fichier Google Drive correspondant.',
+    parameters: {
+      fileId: '',
+      name: quoted?.[1]?.trim() || (profile?.defaultLanguage === 'en' ? 'Renamed file' : 'Fichier renommé'),
+    },
+    confidenceScore: 0.79,
+  }
+}
+
+function buildShareGoogleDriveProposal(input: string, contact: KnownContact | null, profile?: AssistantProfile): AgentProposal {
+  return {
+    type: 'share_google_drive_file',
+    title: profile?.defaultLanguage === 'en' ? 'Share Drive file' : 'Partager le fichier Drive',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Share the matching Google Drive file.'
+        : 'Partager le fichier Google Drive correspondant.',
+    parameters: {
+      fileId: '',
+      emails: contact ? [contact.email] : ['recipient@example.com'],
+      role: 'reader',
+      ...(contact ? { resolvedContactName: contact.name } : {}),
+    },
+    confidenceScore: contact ? 0.86 : 0.68,
+  }
+}
+
 function buildGoogleDocProposal(input: string, profile?: AssistantProfile): AgentProposal {
   return {
     type: 'create_google_doc',
@@ -391,6 +527,7 @@ function buildGoogleDriveProposal(input: string, profile?: AssistantProfile): Ag
 
 function buildNotionProposal(input: string, profile?: AssistantProfile): AgentProposal {
   const wantsUpdate = /(update|refresh|edit|modify)/.test(input)
+  const targetsDatabase = /(database|base de donnees|base de données)/.test(normalizeInput(input))
   const createTitle =
     profile?.defaultLanguage === 'en'
       ? 'Operations note'
@@ -414,9 +551,56 @@ function buildNotionProposal(input: string, profile?: AssistantProfile): AgentPr
         parameters: {
           title: createTitle,
           content: input,
+          ...(targetsDatabase ? { parentDatabaseId: 'database-id' } : {}),
         },
         confidenceScore: 0.82,
       }
+}
+
+function buildNotionPropertyUpdateProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const statusMatch = input.match(/(?:status|statut)\s+(?:a|à|to)?\s*["“]?([^"”.,!?]+)["”]?/i)
+  const priorityMatch = input.match(/(?:priority|priorite|priorité)\s+(?:a|à|to)?\s*["“]?([^"”.,!?]+)["”]?/i)
+  const properties: Record<string, unknown> = {}
+
+  if (statusMatch?.[1]) {
+    properties.Status = statusMatch[1].trim()
+  }
+  if (priorityMatch?.[1]) {
+    properties.Priority = priorityMatch[1].trim()
+  }
+
+  return {
+    type: 'update_notion_page_properties',
+    title: profile?.defaultLanguage === 'en' ? 'Update Notion properties' : 'Mettre à jour les propriétés Notion',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Update the matching Notion page properties.'
+        : 'Mettre à jour les propriétés de la page Notion correspondante.',
+    parameters: {
+      pageId: 'notion-page-id',
+      properties,
+      content: Object.keys(properties).length === 0 ? input : '',
+    },
+    confidenceScore: 0.8,
+  }
+}
+
+function buildDisambiguationResponse(
+  questions: Array<{
+    question: string
+    options: Array<{ label: string }>
+  }>,
+  profile?: AssistantProfile
+) {
+  const language = profile?.defaultLanguage || 'fr'
+  const lines = questions.flatMap((entry, index) => [
+    `${index + 1}. ${entry.question}`,
+    ...entry.options.map((option, optionIndex) => `   ${String.fromCharCode(97 + optionIndex)}. ${option.label}`),
+  ])
+
+  return language === 'en'
+    ? `I found multiple possible matches.\n${lines.join('\n')}\nReply with the correct option or give me the exact name.`
+    : `J’ai trouvé plusieurs correspondances possibles.\n${lines.join('\n')}\nRéponds avec la bonne option ou donne-moi le nom exact.`
 }
 
 function buildFallbackResponse(input: string): AgentTurnResult {
@@ -447,10 +631,19 @@ function buildFallbackResponseWithContactsAndProfile(
     /(reply|reponds|repondre|reponse|réponds|répondre|réponse|answer this email|reply to|reponds-lui|reponds lui)/.test(
       normalized
     )
+  const explicitForwardIntent = /(forward|transfere|transferer|transmets|faire suivre)/.test(normalized)
+  const archiveIntent = /(archive|archiver|range|ranger)/.test(normalized)
+  const labelIntent = /(label|labels|etiquette|etiquettes|tag|tags)/.test(normalized)
+  const markUnreadIntent = /(non lu|unread|marque.*non lu|mark.*unread)/.test(normalized)
+  const markReadIntent = /(marque.*lu|mark.*read|\blu\b)/.test(normalized) && !markUnreadIntent
   const deleteIntent = /(delete|remove|supprime|supprimer|efface|annule|cancel)/.test(normalized)
   const updateIntent = /(update|edit|revise|rewrite|modifie|modifier|mets a jour|mettre a jour|complete|compl[eè]te)/.test(
     normalized
   )
+  const moveIntent = /(move|deplace|deplacer|range dans|place dans)/.test(normalized)
+  const renameIntent = /(rename|renomme|renommer)/.test(normalized)
+  const shareIntent = /(share|partage|partager)/.test(normalized)
+  const notionPropertiesIntent = /(status|statut|priority|priorite|priorité|property|properties|propriete|proprietes)/.test(normalized)
 
   if (
     isMeetingRequest &&
@@ -527,6 +720,46 @@ function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
+  if (explicitForwardIntent && /(gmail|email|e-mail|mail|message|messages|thread)/.test(normalized)) {
+    return {
+      response:
+        language === 'en'
+          ? 'Forward is ready. Review and confirm.'
+          : 'Transfert prêt. Vérifie et confirme.',
+      proposals: [buildForwardEmailProposal(input, assistantProfile, knownContact)],
+    }
+  }
+
+  if ((archiveIntent || labelIntent || markReadIntent || markUnreadIntent) && /(gmail|email|e-mail|mail|message|messages|thread|inbox)/.test(normalized)) {
+    if (archiveIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Archive action ready.'
+            : 'Archivage prêt.',
+        proposals: [buildArchiveEmailProposal(assistantProfile)],
+      }
+    }
+
+    if (labelIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Labelling action ready.'
+            : 'Labellisation prête.',
+        proposals: [buildLabelEmailProposal(input, assistantProfile)],
+      }
+    }
+
+    return {
+      response:
+        language === 'en'
+          ? 'Inbox status update ready.'
+          : 'Mise à jour de statut inbox prête.',
+      proposals: [buildMarkReadStateProposal(markUnreadIntent, assistantProfile)],
+    }
+  }
+
   if (/(google doc|google docs|doc\b|document|brief|report|summary|compte rendu|compte-rendu|rapport|note)/.test(normalized)) {
     if (updateIntent) {
       return {
@@ -558,6 +791,36 @@ function buildFallbackResponseWithContactsAndProfile(
       }
     }
 
+    if (moveIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Drive move ready.'
+            : 'Déplacement Drive prêt.',
+        proposals: [buildMoveGoogleDriveProposal(input, assistantProfile)],
+      }
+    }
+
+    if (renameIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Drive rename ready.'
+            : 'Renommage Drive prêt.',
+        proposals: [buildRenameGoogleDriveProposal(input, assistantProfile)],
+      }
+    }
+
+    if (shareIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Drive share ready.'
+            : 'Partage Drive prêt.',
+        proposals: [buildShareGoogleDriveProposal(input, knownContact, assistantProfile)],
+      }
+    }
+
     return {
       response:
         language === 'en'
@@ -568,6 +831,16 @@ function buildFallbackResponseWithContactsAndProfile(
   }
 
   if (/(notion|wiki|database|base de donnees|base de données|workspace|page)/.test(normalized)) {
+    if (notionPropertiesIntent && updateIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Notion property update ready. Review and confirm.'
+            : 'Mise à jour des propriétés Notion prête. Vérifie et confirme.',
+        proposals: [buildNotionPropertyUpdateProposal(input, assistantProfile)],
+      }
+    }
+
     return {
       response:
         language === 'en'
@@ -683,11 +956,12 @@ export async function runAgentTurn(
         })
         .filter((proposal): proposal is AgentProposal => proposal !== null)
 
-      const resolvedReferenceProposals = resolveActionReferences({
+      const resolvedReferenceResult = resolveActionReferencesDetailed({
         proposals,
         userInput: input,
         connectedContextMetadata: options.connectedContextMetadata,
       })
+      const resolvedReferenceProposals = resolvedReferenceResult.proposals
 
       const enrichedProposals = resolvedReferenceProposals.map((proposal) => {
         if (proposal.type === 'create_calendar_event') {
@@ -716,11 +990,12 @@ export async function runAgentTurn(
           }
         }
 
-        if (proposal.type !== 'send_email') {
+        if (proposal.type !== 'send_email' && proposal.type !== 'share_google_drive_file' && proposal.type !== 'forward_email') {
           return proposal
         }
 
-        const to = Array.isArray(proposal.parameters.to) ? proposal.parameters.to : []
+        const recipientKey = proposal.type === 'share_google_drive_file' ? 'emails' : 'to'
+        const to = Array.isArray(proposal.parameters[recipientKey]) ? proposal.parameters[recipientKey] as unknown[] : []
         const hasRealEmail = to.some((value) => typeof value === 'string' && value.includes('@'))
         if (hasRealEmail) {
           return proposal
@@ -734,10 +1009,15 @@ export async function runAgentTurn(
 
         return {
           ...proposal,
-          title: `Send email to ${knownContact.name}`,
+          title:
+            proposal.type === 'share_google_drive_file'
+              ? `Share file with ${knownContact.name}`
+              : proposal.type === 'forward_email'
+                ? `Forward email to ${knownContact.name}`
+                : `Send email to ${knownContact.name}`,
           parameters: {
             ...proposal.parameters,
-            to: [knownContact.email],
+            [recipientKey]: [knownContact.email],
             resolvedContactName: knownContact.name,
           },
           confidenceScore: Math.max(proposal.confidenceScore, 0.93),
@@ -745,7 +1025,12 @@ export async function runAgentTurn(
       })
 
       const safeProposals = enrichedProposals.map((proposal) => {
-        if (proposal.type !== 'send_email' || !hasPlaceholderRecipient(proposal.parameters)) {
+        if (
+          !(
+            ((proposal.type === 'send_email' || proposal.type === 'forward_email') && hasPlaceholderRecipient(proposal.parameters)) ||
+            (proposal.type === 'share_google_drive_file' && hasPlaceholderShareRecipient(proposal.parameters))
+          )
+        ) {
           return proposal
         }
 
@@ -757,23 +1042,35 @@ export async function runAgentTurn(
 
       const allowProposals = isActionRequest(input)
       const hadModelProposalButNoneValidated = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
-      const fallbackForInvalidModelProposal = hadModelProposalButNoneValidated
-        ? resolveActionReferences({
+      const fallbackResolutionForInvalidModel = hadModelProposalButNoneValidated
+        ? resolveActionReferencesDetailed({
             proposals: buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).proposals.filter(
               (proposal) => allowedActionTypes.includes(proposal.type)
             ),
             userInput: input,
             connectedContextMetadata: options.connectedContextMetadata,
           })
-        : []
+        : { proposals: [], disambiguations: [] }
+      const fallbackForInvalidModelProposal = fallbackResolutionForInvalidModel.proposals
       const deniedByRole =
         hadModelProposalButNoneValidated &&
         fallbackForInvalidModelProposal.length === 0 &&
         availableTools.length === 0
+      const hasDisambiguation =
+        resolvedReferenceResult.disambiguations.length > 0 ||
+        fallbackResolutionForInvalidModel.disambiguations.length > 0
 
       return {
         response:
-          deniedByRole
+          hasDisambiguation
+            ? buildDisambiguationResponse(
+                [
+                  ...resolvedReferenceResult.disambiguations,
+                  ...fallbackResolutionForInvalidModel.disambiguations,
+                ],
+                assistantProfile
+              )
+            : deniedByRole
             ? assistantProfile?.defaultLanguage === 'en'
               ? 'I understood the request, but your workspace role is not allowed to use that tool.'
               : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
@@ -783,7 +1080,9 @@ export async function runAgentTurn(
             ? buildConversationalResponse(input, assistantProfile)
             : aiResult.response,
         proposals:
-          allowProposals
+          hasDisambiguation
+            ? []
+            : allowProposals
             ? safeProposals.length > 0
               ? safeProposals
               : fallbackForInvalidModelProposal
@@ -791,38 +1090,44 @@ export async function runAgentTurn(
       }
     } catch {
       const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
-      const filteredProposals = resolveActionReferences({
+      const fallbackResolution = resolveActionReferencesDetailed({
         proposals: fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type)),
         userInput: input,
         connectedContextMetadata: options.connectedContextMetadata,
       })
+      const filteredProposals = fallbackResolution.proposals
 
       return {
         response:
-          fallback.proposals.length > 0 && filteredProposals.length === 0
+          fallbackResolution.disambiguations.length > 0
+            ? buildDisambiguationResponse(fallbackResolution.disambiguations, assistantProfile)
+            : fallback.proposals.length > 0 && filteredProposals.length === 0
             ? assistantProfile?.defaultLanguage === 'en'
               ? 'I understood the request, but your workspace role is not allowed to use that tool.'
               : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
             : fallback.response,
-        proposals: filteredProposals,
+        proposals: fallbackResolution.disambiguations.length > 0 ? [] : filteredProposals,
       }
     }
   }
 
   const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
-  const filteredProposals = resolveActionReferences({
+  const fallbackResolution = resolveActionReferencesDetailed({
     proposals: fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type)),
     userInput: input,
     connectedContextMetadata: options.connectedContextMetadata,
   })
+  const filteredProposals = fallbackResolution.proposals
 
   return {
     response:
-      fallback.proposals.length > 0 && filteredProposals.length === 0
+      fallbackResolution.disambiguations.length > 0
+        ? buildDisambiguationResponse(fallbackResolution.disambiguations, assistantProfile)
+        : fallback.proposals.length > 0 && filteredProposals.length === 0
         ? assistantProfile?.defaultLanguage === 'en'
           ? 'I understood the request, but your workspace role is not allowed to use that tool.'
           : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
         : fallback.response,
-    proposals: filteredProposals,
+    proposals: fallbackResolution.disambiguations.length > 0 ? [] : filteredProposals,
   }
 }

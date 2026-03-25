@@ -56,5 +56,35 @@ export function prepareActionParameters(
     }
   }
 
+  if (actionType === 'forward_email') {
+    return {
+      ...normalized,
+      note: typeof normalized.note === 'string' ? normalizeMultiline(normalized.note) : '',
+    }
+  }
+
+  if (actionType === 'label_gmail_thread') {
+    return {
+      ...normalized,
+      labelNames: Array.isArray(normalized.labelNames)
+        ? normalized.labelNames.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        : [],
+    }
+  }
+
+  if (actionType === 'rename_google_drive_file') {
+    return {
+      ...normalized,
+      name: typeof normalized.name === 'string' ? collapseWhitespace(normalized.name) : 'Renamed file',
+    }
+  }
+
+  if (actionType === 'share_google_drive_file') {
+    return {
+      ...normalized,
+      message: typeof normalized.message === 'string' ? normalizeMultiline(normalized.message) : '',
+    }
+  }
+
   return normalized
 }

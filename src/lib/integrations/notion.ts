@@ -210,6 +210,13 @@ export interface NotionPageSummary {
   preview: string
 }
 
+export interface NotionDatabaseSummary {
+  id: string
+  title: string
+  url: string | null
+  lastEditedTime: string | null
+}
+
 function extractNotionTitle(properties: Record<string, unknown> | undefined) {
   if (!properties) {
     return 'Untitled'
@@ -295,6 +302,212 @@ export async function searchNotionPages(
   } satisfies NotionPageSummary))
 }
 
+export async function searchNotionDatabases(
+  token: string,
+  options: {
+    query?: string
+    maxResults?: number
+  } = {}
+) {
+  const data = await notionFetch('/search', token, {
+    method: 'POST',
+    body: JSON.stringify({
+      query: options.query?.trim() || undefined,
+      filter: {
+        property: 'object',
+        value: 'database',
+      },
+      sort: {
+        direction: 'descending',
+        timestamp: 'last_edited_time',
+      },
+      page_size: Math.max(1, Math.min(options.maxResults || 10, 20)),
+    }),
+  }, {
+    timeoutMs: NOTION_READ_TIMEOUT_MS,
+    retries: 1,
+  }) as {
+    results?: Array<{
+      id: string
+      url?: string
+      last_edited_time?: string
+      title?: Array<{ plain_text?: string }>
+    }>
+  }
+
+  return (data.results || []).map((database) => ({
+    id: database.id,
+    title: extractPlainText(database.title),
+    url: database.url || null,
+    lastEditedTime: database.last_edited_time || null,
+  } satisfies NotionDatabaseSummary))
+}
+
+async function fetchNotionDatabaseSchema(token: string, databaseId: string) {
+  return notionFetch(`/databases/${databaseId}`, token, undefined, {
+    timeoutMs: NOTION_READ_TIMEOUT_MS,
+    retries: 1,
+  }) as Promise<{
+    id: string
+    title?: Array<{ plain_text?: string }>
+    properties?: Record<string, { type?: string }>
+  }>
+}
+
+async function fetchNotionPage(token: string, pageId: string) {
+  return notionFetch(`/pages/${pageId}`, token, undefined, {
+    timeoutMs: NOTION_READ_TIMEOUT_MS,
+    retries: 1,
+  }) as Promise<{
+    id: string
+    parent?: {
+      type?: string
+      database_id?: string
+      page_id?: string
+    }
+    properties?: Record<string, { type?: string }>
+    url?: string
+  }>
+}
+
+function findNotionTitlePropertyName(properties: Record<string, { type?: string }> | undefined) {
+  if (!properties) {
+    return 'title'
+  }
+
+  for (const [name, property] of Object.entries(properties)) {
+    if (property?.type === 'title') {
+      return name
+    }
+  }
+
+  return 'title'
+}
+
+function buildNotionPropertyValue(type: string, value: unknown) {
+  if (type === 'title') {
+    return {
+      title: [
+        {
+          text: {
+            content: String(value || ''),
+          },
+        },
+      ],
+    }
+  }
+
+  if (type === 'rich_text') {
+    return {
+      rich_text: [
+        {
+          text: {
+            content: String(value || ''),
+          },
+        },
+      ],
+    }
+  }
+
+  if (type === 'number') {
+    return {
+      number: typeof value === 'number' ? value : Number(value),
+    }
+  }
+
+  if (type === 'checkbox') {
+    return {
+      checkbox: Boolean(value),
+    }
+  }
+
+  if (type === 'url') {
+    return { url: String(value || '') || null }
+  }
+
+  if (type === 'email') {
+    return { email: String(value || '') || null }
+  }
+
+  if (type === 'phone_number') {
+    return { phone_number: String(value || '') || null }
+  }
+
+  if (type === 'date') {
+    const dateValue = typeof value === 'string'
+      ? { start: value }
+      : value && typeof value === 'object'
+        ? value
+        : { start: String(value || '') }
+    return { date: dateValue }
+  }
+
+  if (type === 'select') {
+    return { select: value ? { name: String(value) } : null }
+  }
+
+  if (type === 'multi_select') {
+    const values = Array.isArray(value) ? value : [value]
+    return {
+      multi_select: values
+        .filter((item): item is string | number => typeof item === 'string' || typeof item === 'number')
+        .map((item) => ({ name: String(item) })),
+    }
+  }
+
+  if (type === 'status') {
+    return { status: value ? { name: String(value) } : null }
+  }
+
+  return {
+    rich_text: [
+      {
+        text: {
+          content: typeof value === 'string' ? value : JSON.stringify(value),
+        },
+      },
+    ],
+  }
+}
+
+function serializeNotionProperties(
+  schema: Record<string, { type?: string }> | undefined,
+  properties: Record<string, unknown>
+) {
+  const serialized: Record<string, unknown> = {}
+
+  for (const [name, value] of Object.entries(properties)) {
+    if (value === undefined) continue
+    const propertyType = schema?.[name]?.type || 'rich_text'
+    serialized[name] = buildNotionPropertyValue(propertyType, value)
+  }
+
+  return serialized
+}
+
+function buildParagraphChildren(content: string) {
+  if (!content.trim()) {
+    return []
+  }
+
+  return [
+    {
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [
+          {
+            type: 'text',
+            text: {
+              content,
+            },
+          },
+        ],
+      },
+    },
+  ]
+}
+
 export async function readNotionPagePreview(
   token: string,
   pageId: string,
@@ -323,51 +536,49 @@ export async function readNotionPagePreview(
 }
 
 export async function createNotionPage(token: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const parentPageId = process.env.NOTION_PARENT_PAGE_ID || String(parameters.parentPageId || '')
-
-  if (!parentPageId) {
-    throw new Error('NOTION_PARENT_PAGE_ID or parentPageId is required for Notion page creation.')
-  }
-
   const title = String(parameters.title || 'Kova page')
   const content = String(parameters.content || '')
+  const parentPageId = String(parameters.parentPageId || process.env.NOTION_PARENT_PAGE_ID || '')
+  const parentDatabaseId = String(parameters.parentDatabaseId || '')
+  const rawProperties =
+    parameters.properties && typeof parameters.properties === 'object' && !Array.isArray(parameters.properties)
+      ? (parameters.properties as Record<string, unknown>)
+      : {}
+
+  if (!parentPageId && !parentDatabaseId) {
+    throw new Error('NOTION_PARENT_PAGE_ID, parentPageId, or parentDatabaseId is required for Notion page creation.')
+  }
+
+  const parent =
+    parentDatabaseId
+      ? {
+          type: 'database_id',
+          database_id: parentDatabaseId,
+        }
+      : {
+          type: 'page_id',
+          page_id: parentPageId,
+        }
+
+  const schema = parentDatabaseId
+    ? await fetchNotionDatabaseSchema(token, parentDatabaseId)
+    : null
+  const titlePropertyName = findNotionTitlePropertyName(schema?.properties)
+  const properties = parentDatabaseId
+    ? {
+        ...serializeNotionProperties(schema?.properties, rawProperties),
+        [titlePropertyName]: buildNotionPropertyValue('title', title),
+      }
+    : {
+        title: buildNotionPropertyValue('title', title),
+      }
 
   const data = await notionFetch('/pages', token, {
     method: 'POST',
     body: JSON.stringify({
-      parent: {
-        type: 'page_id',
-        page_id: parentPageId,
-      },
-      properties: {
-        title: {
-          title: [
-            {
-              text: {
-                content: title,
-              },
-            },
-          ],
-        },
-      },
-      children: content
-        ? [
-            {
-              object: 'block',
-              type: 'paragraph',
-              paragraph: {
-                rich_text: [
-                  {
-                    type: 'text',
-                    text: {
-                      content,
-                    },
-                  },
-                ],
-              },
-            },
-          ]
-        : [],
+      parent,
+      properties,
+      children: buildParagraphChildren(content),
     }),
   }, {
     timeoutMs: NOTION_WRITE_TIMEOUT_MS,
@@ -378,6 +589,8 @@ export async function createNotionPage(token: string, parameters: Record<string,
     output: {
       provider: 'notion',
       pageId: data.id,
+      parentPageId: parentPageId || null,
+      parentDatabaseId: parentDatabaseId || null,
       url: data.url || null,
     },
   }
@@ -422,6 +635,60 @@ export async function updateNotionPage(token: string, parameters: Record<string,
       provider: 'notion',
       pageId,
       blocksAppended: data.results?.length || 0,
+    },
+  }
+}
+
+export async function updateNotionPageProperties(token: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const pageId = String(parameters.pageId || '')
+  const rawProperties =
+    parameters.properties && typeof parameters.properties === 'object' && !Array.isArray(parameters.properties)
+      ? (parameters.properties as Record<string, unknown>)
+      : {}
+  const content = typeof parameters.content === 'string' ? parameters.content : ''
+
+  if (!pageId) {
+    throw new Error('pageId is required to update Notion properties.')
+  }
+
+  if (Object.keys(rawProperties).length === 0 && !content.trim()) {
+    throw new Error('properties or content is required to update a Notion page.')
+  }
+
+  const page = await fetchNotionPage(token, pageId)
+  if (Object.keys(rawProperties).length > 0) {
+    await notionFetch(`/pages/${pageId}`, token, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        properties: serializeNotionProperties(page.properties, rawProperties),
+      }),
+    }, {
+      timeoutMs: NOTION_WRITE_TIMEOUT_MS,
+    })
+  }
+
+  let blocksAppended = 0
+  if (content.trim()) {
+    const data = await notionFetch(`/blocks/${pageId}/children`, token, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        children: buildParagraphChildren(content),
+      }),
+    }, {
+      timeoutMs: NOTION_WRITE_TIMEOUT_MS,
+    }) as { results?: Array<{ id?: string }> }
+    blocksAppended = data.results?.length || 0
+  }
+
+  return {
+    details: 'Notion properties updated.',
+    output: {
+      provider: 'notion',
+      pageId,
+      parentDatabaseId: page.parent?.database_id || null,
+      updatedPropertyCount: Object.keys(rawProperties).length,
+      blocksAppended,
+      url: page.url || null,
     },
   }
 }

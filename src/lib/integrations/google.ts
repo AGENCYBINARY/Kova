@@ -7,12 +7,13 @@ const GOOGLE_SCOPES = [
   'email',
   'profile',
   'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.labels',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/documents',
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  'https://www.googleapis.com/auth/drive',
 ]
 
 const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive'] as const
@@ -22,6 +23,8 @@ const GOOGLE_AUTH_TIMEOUT_MS = 10_000
 const GOOGLE_REQUIRED_SCOPES = {
   gmail: [
     'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.labels',
     'https://www.googleapis.com/auth/gmail.readonly',
   ],
   calendar: [
@@ -32,8 +35,7 @@ const GOOGLE_REQUIRED_SCOPES = {
     'https://www.googleapis.com/auth/documents',
   ],
   google_drive: [
-    'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/drive.metadata.readonly',
+    'https://www.googleapis.com/auth/drive',
   ],
 } as const
 
@@ -368,6 +370,7 @@ export interface GmailMessageSummary {
   snippet: string
   internalDate: string | null
   unread: boolean
+  labelIds: string[]
 }
 
 export interface GmailThreadSummary {
@@ -402,6 +405,7 @@ export interface GoogleDriveFileSummary {
   modifiedTime: string | null
   owners: string[]
   webViewLink: string | null
+  parentIds?: string[]
 }
 
 function getStartOfDay(date = new Date()) {
@@ -466,6 +470,7 @@ async function listGmailMessageMetadata(accessToken: string, query: string, maxR
         snippet: decodeMimeWords(detailData.snippet || ''),
         internalDate: detailData.internalDate || null,
         unread: Array.isArray(detailData.labelIds) ? detailData.labelIds.includes('UNREAD') : false,
+        labelIds: Array.isArray(detailData.labelIds) ? detailData.labelIds : [],
       } satisfies GmailMessageSummary
     })
   )
@@ -514,6 +519,155 @@ export async function sendGmailMessage(accessToken: string, parameters: Record<s
       subject,
     },
   }
+}
+
+async function fetchGmailThreadMessageIds(accessToken: string, threadId: string) {
+  const response = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=Subject`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Gmail thread read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    messages?: Array<{
+      id?: string
+      payload?: {
+        headers?: Array<{ name?: string; value?: string }>
+      }
+    }>
+  }
+
+  return (data.messages || []).map((message) => ({
+    id: message.id || '',
+    subject: getHeaderValue(message.payload?.headers || [], 'Subject'),
+  })).filter((message) => message.id)
+}
+
+async function fetchGmailMessageSubject(accessToken: string, messageId: string) {
+  const response = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata&metadataHeaders=Subject`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Gmail metadata read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    threadId?: string
+    payload?: {
+      headers?: Array<{ name?: string; value?: string }>
+    }
+  }
+
+  return {
+    threadId: data.threadId || null,
+    subject: getHeaderValue(data.payload?.headers || [], 'Subject'),
+  }
+}
+
+async function modifyGmailThreadLabels(accessToken: string, threadId: string, payload: {
+  addLabelIds?: string[]
+  removeLabelIds?: string[]
+}) {
+  const response = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}/modify`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+    { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Gmail thread modify failed: ${response.status}`)
+  }
+}
+
+async function listGmailLabels(accessToken: string) {
+  const response = await googleFetch(
+    'https://gmail.googleapis.com/gmail/v1/users/me/labels',
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Gmail labels read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    labels?: Array<{ id?: string; name?: string; type?: string }>
+  }
+
+  return (data.labels || []).map((label) => ({
+    id: label.id || '',
+    name: label.name || '',
+    type: label.type || '',
+  })).filter((label) => label.id && label.name)
+}
+
+async function ensureGmailLabels(accessToken: string, labelNames: string[]) {
+  const existingLabels = await listGmailLabels(accessToken)
+  const labelIds: string[] = []
+
+  for (const rawLabelName of labelNames) {
+    const labelName = rawLabelName.trim()
+    if (!labelName) continue
+    const existing = existingLabels.find((label) => label.name.toLowerCase() === labelName.toLowerCase())
+    if (existing) {
+      labelIds.push(existing.id)
+      continue
+    }
+
+    const createResponse = await googleFetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/labels',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: labelName,
+          labelListVisibility: 'labelShow',
+          messageListVisibility: 'show',
+        }),
+      },
+      { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
+    )
+
+    if (!createResponse.ok) {
+      throw new Error(`Gmail label creation failed: ${createResponse.status}`)
+    }
+
+    const created = await createResponse.json() as { id?: string }
+    if (created.id) {
+      labelIds.push(created.id)
+    }
+  }
+
+  return labelIds
 }
 
 export async function findGoogleContactEmail(accessToken: string, name: string) {
@@ -625,6 +779,122 @@ export async function listTodayGmailMessages(
   const maxResults = Math.max(1, Math.min(options.maxResults || 12, 25))
   const startOfDay = getStartOfDay()
   return listGmailMessageMetadata(accessToken, `in:inbox after:${Math.floor(startOfDay.getTime() / 1000)}`, maxResults)
+}
+
+export async function archiveGmailThread(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  if (!threadId) {
+    throw new Error('threadId is required to archive a Gmail thread.')
+  }
+
+  await modifyGmailThreadLabels(accessToken, threadId, {
+    removeLabelIds: ['INBOX'],
+  })
+
+  return {
+    details: 'Gmail thread archived.',
+    output: {
+      provider: 'gmail',
+      threadId,
+      archived: true,
+    },
+  }
+}
+
+export async function labelGmailThread(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  const labelNames = Array.isArray(parameters.labelNames)
+    ? parameters.labelNames.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : []
+
+  if (!threadId) {
+    throw new Error('threadId is required to label a Gmail thread.')
+  }
+
+  if (labelNames.length === 0) {
+    throw new Error('labelNames is required to label a Gmail thread.')
+  }
+
+  const labelIds = await ensureGmailLabels(accessToken, labelNames)
+  await modifyGmailThreadLabels(accessToken, threadId, {
+    addLabelIds: labelIds,
+  })
+
+  return {
+    details: 'Gmail thread labelled.',
+    output: {
+      provider: 'gmail',
+      threadId,
+      labels: labelNames,
+    },
+  }
+}
+
+export async function setGmailThreadReadState(
+  accessToken: string,
+  parameters: Record<string, unknown>,
+  options: { unread: boolean }
+): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  if (!threadId) {
+    throw new Error('threadId is required to update a Gmail thread read state.')
+  }
+
+  await modifyGmailThreadLabels(accessToken, threadId, options.unread
+    ? { addLabelIds: ['UNREAD'] }
+    : { removeLabelIds: ['UNREAD'] })
+
+  return {
+    details: options.unread ? 'Gmail thread marked as unread.' : 'Gmail thread marked as read.',
+    output: {
+      provider: 'gmail',
+      threadId,
+      unread: options.unread,
+    },
+  }
+}
+
+export async function forwardGmailMessage(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  let messageId = String(parameters.messageId || '')
+  let subject = ''
+
+  if (!messageId && typeof parameters.threadId === 'string' && parameters.threadId.trim()) {
+    const threadMessages = await fetchGmailThreadMessageIds(accessToken, parameters.threadId.trim())
+    messageId = threadMessages[threadMessages.length - 1]?.id || ''
+    subject = threadMessages[threadMessages.length - 1]?.subject || ''
+  }
+
+  if (!messageId) {
+    throw new Error('messageId is required to forward an email.')
+  }
+
+  if (!subject) {
+    const metadata = await fetchGmailMessageSubject(accessToken, messageId)
+    subject = metadata.subject
+  }
+
+  const originalBody = await readGmailMessageBody(accessToken, messageId)
+  const recipients = Array.isArray(parameters.to)
+    ? parameters.to.filter((value): value is string => typeof value === 'string' && value.includes('@'))
+    : []
+  const note = typeof parameters.note === 'string' ? parameters.note.trim() : ''
+
+  if (recipients.length === 0) {
+    throw new Error('to is required to forward an email.')
+  }
+
+  const body = [
+    ...(note ? [note, ''] : []),
+    '---------- Forwarded message ----------',
+    '',
+    originalBody,
+  ].join('\n')
+
+  return sendGmailMessage(accessToken, {
+    to: recipients,
+    subject: subject.toLowerCase().startsWith('fwd:') ? subject : `Fwd: ${subject || 'Message'}`,
+    body,
+  })
 }
 
 export async function searchGmailMessages(
@@ -788,7 +1058,7 @@ export async function searchGoogleDriveFiles(
   url.searchParams.set('q', clauses.join(' and '))
   url.searchParams.set('orderBy', 'modifiedTime desc')
   url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 12, 30))))
-  url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress),webViewLink)')
+  url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress),webViewLink,parents)')
 
   const response = await googleFetch(url.toString(), {
     headers: {
@@ -807,6 +1077,7 @@ export async function searchGoogleDriveFiles(
       mimeType?: string
       modifiedTime?: string
       webViewLink?: string
+      parents?: string[]
       owners?: Array<{ displayName?: string; emailAddress?: string }>
     }>
   }
@@ -818,6 +1089,7 @@ export async function searchGoogleDriveFiles(
     modifiedTime: file.modifiedTime || null,
     owners: (file.owners || []).map((owner) => owner.displayName || owner.emailAddress || '').filter(Boolean),
     webViewLink: file.webViewLink || null,
+    parentIds: Array.isArray(file.parents) ? file.parents : [],
   } satisfies GoogleDriveFileSummary))
 }
 
@@ -1019,6 +1291,182 @@ export async function deleteGoogleDriveFile(accessToken: string, parameters: Rec
   return {
     details: 'File deleted from Google Drive.',
     output: { provider: 'google_drive', fileId, deleted: true },
+  }
+}
+
+async function getGoogleDriveFile(accessToken: string, fileId: string) {
+  const response = await googleFetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,parents,webViewLink`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Google Drive file read failed: ${response.status}`)
+  }
+
+  return response.json() as Promise<{
+    id: string
+    name?: string
+    mimeType?: string
+    parents?: string[]
+    webViewLink?: string
+  }>
+}
+
+export async function renameGoogleDriveFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const fileId = String(parameters.fileId || '')
+  const name = String(parameters.name || '').trim()
+
+  if (!fileId) {
+    throw new Error('fileId is required to rename a Drive file.')
+  }
+
+  if (!name) {
+    throw new Error('name is required to rename a Drive file.')
+  }
+
+  const response = await googleFetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,webViewLink,mimeType`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name }),
+    },
+    { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Google Drive rename failed: ${response.status}`)
+  }
+
+  const data = await response.json() as { id: string; name?: string; webViewLink?: string; mimeType?: string }
+  return {
+    details: 'Drive file renamed.',
+    output: {
+      provider: 'google_drive',
+      fileId: data.id,
+      name: data.name || name,
+      mimeType: data.mimeType || null,
+      link: data.webViewLink || null,
+    },
+  }
+}
+
+export async function moveGoogleDriveFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const fileId = String(parameters.fileId || '')
+  const destinationFolderId = typeof parameters.destinationFolderId === 'string' ? parameters.destinationFolderId.trim() : ''
+  const destinationFolderName = typeof parameters.destinationFolderName === 'string' ? parameters.destinationFolderName.trim() : ''
+
+  if (!fileId) {
+    throw new Error('fileId is required to move a Drive file.')
+  }
+
+  const targetFolderId = destinationFolderId || (destinationFolderName ? await ensureDriveFolder(accessToken, destinationFolderName) : '')
+  if (!targetFolderId) {
+    throw new Error('destinationFolderId or destinationFolderName is required to move a Drive file.')
+  }
+
+  const current = await getGoogleDriveFile(accessToken, fileId)
+  const currentParents = Array.isArray(current.parents) ? current.parents.filter(Boolean) : []
+
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}`)
+  url.searchParams.set('addParents', targetFolderId)
+  if (currentParents.length > 0) {
+    url.searchParams.set('removeParents', currentParents.join(','))
+  }
+  url.searchParams.set('fields', 'id,name,mimeType,parents,webViewLink')
+
+  const response = await googleFetch(url.toString(), {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive move failed: ${response.status}`)
+  }
+
+  const data = await response.json() as { id: string; name?: string; mimeType?: string; parents?: string[]; webViewLink?: string }
+  return {
+    details: 'Drive file moved.',
+    output: {
+      provider: 'google_drive',
+      fileId: data.id,
+      name: data.name || current.name || null,
+      mimeType: data.mimeType || current.mimeType || null,
+      parentIds: Array.isArray(data.parents) ? data.parents : [targetFolderId],
+      destinationFolderId: targetFolderId,
+      destinationFolderName: destinationFolderName || null,
+      link: data.webViewLink || current.webViewLink || null,
+    },
+  }
+}
+
+export async function shareGoogleDriveFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const fileId = String(parameters.fileId || '')
+  const emails = Array.isArray(parameters.emails)
+    ? parameters.emails.filter((value): value is string => typeof value === 'string' && value.includes('@'))
+    : []
+  const role =
+    parameters.role === 'reader' || parameters.role === 'commenter' || parameters.role === 'writer'
+      ? parameters.role
+      : 'reader'
+  const notify = typeof parameters.notify === 'boolean' ? parameters.notify : true
+  const message = typeof parameters.message === 'string' ? parameters.message : ''
+
+  if (!fileId) {
+    throw new Error('fileId is required to share a Drive file.')
+  }
+
+  if (emails.length === 0) {
+    throw new Error('emails is required to share a Drive file.')
+  }
+
+  await Promise.all(
+    emails.map(async (email) => {
+      const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`)
+      url.searchParams.set('sendNotificationEmail', notify ? 'true' : 'false')
+      if (message) {
+        url.searchParams.set('emailMessage', message)
+      }
+
+      const response = await googleFetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          role,
+          type: 'user',
+          emailAddress: email,
+        }),
+      }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+      if (!response.ok) {
+        throw new Error(`Google Drive share failed: ${response.status}`)
+      }
+    })
+  )
+
+  const file = await getGoogleDriveFile(accessToken, fileId)
+  return {
+    details: 'Drive file shared.',
+    output: {
+      provider: 'google_drive',
+      fileId,
+      emails,
+      role,
+      name: file.name || null,
+      link: file.webViewLink || null,
+    },
   }
 }
 

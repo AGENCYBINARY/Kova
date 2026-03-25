@@ -29,12 +29,30 @@ function mapActionStatus(status: string): DashboardAction['status'] {
 }
 
 function targetAppForType(type: DashboardAction['type']): DashboardAction['targetApp'] {
-  if (type === 'send_email' || type === 'reply_to_email') return 'Gmail'
+  if (
+    type === 'send_email' ||
+    type === 'reply_to_email' ||
+    type === 'forward_email' ||
+    type === 'archive_gmail_thread' ||
+    type === 'label_gmail_thread' ||
+    type === 'mark_gmail_thread_read' ||
+    type === 'mark_gmail_thread_unread'
+  ) {
+    return 'Gmail'
+  }
   if (type === 'create_calendar_event' || type === 'update_calendar_event' || type === 'delete_calendar_event') {
     return 'Google Calendar'
   }
   if (type === 'create_google_doc' || type === 'update_google_doc') return 'Google Docs'
-  if (type === 'create_google_drive_file' || type === 'delete_google_drive_file') return 'Google Drive'
+  if (
+    type === 'create_google_drive_file' ||
+    type === 'delete_google_drive_file' ||
+    type === 'move_google_drive_file' ||
+    type === 'rename_google_drive_file' ||
+    type === 'share_google_drive_file'
+  ) {
+    return 'Google Drive'
+  }
   return 'Notion'
 }
 

@@ -3,15 +3,22 @@ import { prisma } from '@/lib/db/prisma'
 import type { DashboardAction } from '@/lib/dashboard-data'
 import { prepareActionParameters } from '@/lib/agent/data-prep'
 import {
+  archiveGmailThread,
   createGoogleCalendarEvent,
   createGoogleDoc,
   createGoogleDriveFile,
   deleteGoogleCalendarEvent,
   deleteGoogleDriveFile,
+  forwardGmailMessage,
   getValidGoogleAccessToken,
+  labelGmailThread,
+  moveGoogleDriveFile,
+  renameGoogleDriveFile,
   readGmailMessageBody,
   replyToGmailMessage,
   sendGmailMessage,
+  setGmailThreadReadState,
+  shareGoogleDriveFile,
   updateGoogleCalendarEvent,
   updateGoogleDoc,
 } from '@/lib/integrations/google'
@@ -19,6 +26,7 @@ import {
   createNotionPage,
   getValidNotionAccessToken,
   updateNotionPage,
+  updateNotionPageProperties,
 } from '@/lib/integrations/notion'
 import type { IntegrationExecutionResult } from '@/lib/integrations/types'
 import type { McpExecutionContext, McpToolDefinition } from '@/lib/mcp/types'
@@ -60,8 +68,10 @@ const createGoogleDriveFileSchema = z.object({
 
 const createNotionPageSchema = z.object({
   title: z.string().min(1),
-  content: z.string().min(1),
+  content: z.string().optional(),
   parentPageId: z.string().optional(),
+  parentDatabaseId: z.string().optional(),
+  properties: z.record(z.unknown()).optional(),
 }).passthrough()
 
 const updateNotionPageSchema = z.object({
@@ -75,6 +85,24 @@ const replyToEmailSchema = z.object({
   to: z.array(z.string().email()).min(1),
   subject: z.string().min(1),
   body: z.string().min(1),
+}).passthrough()
+
+const forwardEmailSchema = z.object({
+  messageId: z.string().min(1).optional(),
+  threadId: z.string().min(1).optional(),
+  to: z.array(z.string().email()).min(1),
+  note: z.string().optional(),
+}).passthrough().refine((value) => Boolean(value.messageId || value.threadId), {
+  message: 'messageId or threadId is required',
+})
+
+const gmailThreadSchema = z.object({
+  threadId: z.string().min(1),
+}).passthrough()
+
+const gmailLabelSchema = z.object({
+  threadId: z.string().min(1),
+  labelNames: z.array(z.string().min(1)).min(1),
 }).passthrough()
 
 const updateCalendarEventSchema = z.object({
@@ -93,6 +121,35 @@ const deleteCalendarEventSchema = z.object({
 const deleteGoogleDriveFileSchema = z.object({
   fileId: z.string().min(1),
 }).passthrough()
+
+const moveGoogleDriveFileSchema = z.object({
+  fileId: z.string().min(1),
+  destinationFolderId: z.string().min(1).optional(),
+  destinationFolderName: z.string().min(1).optional(),
+}).passthrough().refine((value) => Boolean(value.destinationFolderId || value.destinationFolderName), {
+  message: 'destinationFolderId or destinationFolderName is required',
+})
+
+const renameGoogleDriveFileSchema = z.object({
+  fileId: z.string().min(1),
+  name: z.string().min(1),
+}).passthrough()
+
+const shareGoogleDriveFileSchema = z.object({
+  fileId: z.string().min(1),
+  emails: z.array(z.string().email()).min(1),
+  role: z.enum(['reader', 'commenter', 'writer']).optional(),
+  notify: z.boolean().optional(),
+  message: z.string().optional(),
+}).passthrough()
+
+const updateNotionPagePropertiesSchema = z.object({
+  pageId: z.string().min(1),
+  properties: z.record(z.unknown()).optional(),
+  content: z.string().optional(),
+}).passthrough().refine((value) => Boolean(value.properties || value.content), {
+  message: 'properties or content is required',
+})
 
 async function getConnectedIntegration(context: McpExecutionContext, provider: string) {
   const integration = await prisma.integration.findFirst({
@@ -169,6 +226,135 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'calendar')
       const accessToken = await getValidGoogleAccessToken(integration)
       return createGoogleCalendarEvent(accessToken, input)
+    },
+  },
+  {
+    name: 'gmail.forward_email',
+    actionType: 'forward_email',
+    provider: 'gmail',
+    title: 'Forward email',
+    description: 'Forward a Gmail message or thread to one or more recipients.',
+    version: '2026-03-25',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        messageId: { type: 'string' },
+        threadId: { type: 'string' },
+        to: { type: 'array', items: { type: 'string', format: 'email' } },
+        note: { type: 'string' },
+      },
+      required: ['to'],
+      additionalProperties: true,
+    },
+    inputSchema: forwardEmailSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return forwardGmailMessage(accessToken, input)
+    },
+  },
+  {
+    name: 'gmail.archive_thread',
+    actionType: 'archive_gmail_thread',
+    provider: 'gmail',
+    title: 'Archive Gmail thread',
+    description: 'Archive a Gmail thread by removing it from the inbox.',
+    version: '2026-03-25',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+      },
+      required: ['threadId'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailThreadSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return archiveGmailThread(accessToken, input)
+    },
+  },
+  {
+    name: 'gmail.label_thread',
+    actionType: 'label_gmail_thread',
+    provider: 'gmail',
+    title: 'Label Gmail thread',
+    description: 'Apply one or more Gmail labels to an existing thread.',
+    version: '2026-03-25',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+        labelNames: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['threadId', 'labelNames'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailLabelSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return labelGmailThread(accessToken, input)
+    },
+  },
+  {
+    name: 'gmail.mark_thread_read',
+    actionType: 'mark_gmail_thread_read',
+    provider: 'gmail',
+    title: 'Mark Gmail thread read',
+    description: 'Mark a Gmail thread as read.',
+    version: '2026-03-25',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+      },
+      required: ['threadId'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailThreadSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return setGmailThreadReadState(accessToken, input, { unread: false })
+    },
+  },
+  {
+    name: 'gmail.mark_thread_unread',
+    actionType: 'mark_gmail_thread_unread',
+    provider: 'gmail',
+    title: 'Mark Gmail thread unread',
+    description: 'Mark a Gmail thread as unread.',
+    version: '2026-03-25',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+      },
+      required: ['threadId'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailThreadSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return setGmailThreadReadState(accessToken, input, { unread: true })
     },
   },
   {
@@ -254,6 +440,88 @@ const tools: Array<McpToolDefinition> = [
     },
   },
   {
+    name: 'drive.move_file',
+    actionType: 'move_google_drive_file',
+    provider: 'google_drive',
+    title: 'Move Drive file',
+    description: 'Move an existing Google Drive file or folder to a different folder.',
+    version: '2026-03-25',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+        destinationFolderId: { type: 'string' },
+        destinationFolderName: { type: 'string' },
+      },
+      required: ['fileId'],
+      additionalProperties: true,
+    },
+    inputSchema: moveGoogleDriveFileSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return moveGoogleDriveFile(accessToken, input)
+    },
+  },
+  {
+    name: 'drive.rename_file',
+    actionType: 'rename_google_drive_file',
+    provider: 'google_drive',
+    title: 'Rename Drive file',
+    description: 'Rename an existing Google Drive file or folder.',
+    version: '2026-03-25',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+        name: { type: 'string' },
+      },
+      required: ['fileId', 'name'],
+      additionalProperties: true,
+    },
+    inputSchema: renameGoogleDriveFileSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return renameGoogleDriveFile(accessToken, input)
+    },
+  },
+  {
+    name: 'drive.share_file',
+    actionType: 'share_google_drive_file',
+    provider: 'google_drive',
+    title: 'Share Drive file',
+    description: 'Share a Google Drive file or folder with one or more recipients.',
+    version: '2026-03-25',
+    riskLevel: 'high',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+        emails: { type: 'array', items: { type: 'string', format: 'email' } },
+        role: { type: 'string', enum: ['reader', 'commenter', 'writer'] },
+        notify: { type: 'boolean' },
+        message: { type: 'string' },
+      },
+      required: ['fileId', 'emails'],
+      additionalProperties: true,
+    },
+    inputSchema: shareGoogleDriveFileSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return shareGoogleDriveFile(accessToken, input)
+    },
+  },
+  {
     name: 'notion.create_page',
     actionType: 'create_notion_page',
     provider: 'notion',
@@ -269,8 +537,10 @@ const tools: Array<McpToolDefinition> = [
         title: { type: 'string' },
         content: { type: 'string' },
         parentPageId: { type: 'string' },
+        parentDatabaseId: { type: 'string' },
+        properties: { type: 'object' },
       },
-      required: ['title', 'content'],
+      required: ['title'],
       additionalProperties: true,
     },
     inputSchema: createNotionPageSchema,
@@ -304,6 +574,33 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'notion')
       const accessToken = getValidNotionAccessToken(integration)
       return updateNotionPage(accessToken, input)
+    },
+  },
+  {
+    name: 'notion.update_page_properties',
+    actionType: 'update_notion_page_properties',
+    provider: 'notion',
+    title: 'Update Notion properties',
+    description: 'Update Notion page properties and optionally append content.',
+    version: '2026-03-25',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        pageId: { type: 'string' },
+        properties: { type: 'object' },
+        content: { type: 'string' },
+      },
+      required: ['pageId'],
+      additionalProperties: true,
+    },
+    inputSchema: updateNotionPagePropertiesSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'notion')
+      const accessToken = getValidNotionAccessToken(integration)
+      return updateNotionPageProperties(accessToken, input)
     },
   },
   {

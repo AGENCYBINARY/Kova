@@ -42,4 +42,12 @@ test('destructive actions stay high risk', () => {
     }),
     'high'
   )
+
+  assert.equal(
+    inferRiskLevel('share_google_drive_file', {
+      fileId: 'file_123',
+      emails: ['ops@company.com'],
+    }),
+    'high'
+  )
 })

@@ -16,8 +16,22 @@ export interface ExecutionProposal {
   parameters: Record<string, unknown>
 }
 
+function hasExternalShareRecipients(parameters: Record<string, unknown>) {
+  const recipients = Array.isArray(parameters.emails) ? parameters.emails : []
+  return recipients.some((value) => typeof value === 'string' && value.includes('@'))
+}
+
 function hasPlaceholderRecipient(parameters: Record<string, unknown>) {
   const recipients = Array.isArray(parameters.to) ? parameters.to : []
+  return recipients.some((value) => {
+    if (typeof value !== 'string') return false
+    const normalized = value.trim().toLowerCase()
+    return normalized === 'recipient@example.com' || normalized.endsWith('@example.com')
+  })
+}
+
+function hasPlaceholderShareRecipient(parameters: Record<string, unknown>) {
+  const recipients = Array.isArray(parameters.emails) ? parameters.emails : []
   return recipients.some((value) => {
     if (typeof value !== 'string') return false
     const normalized = value.trim().toLowerCase()
@@ -29,7 +43,29 @@ export function inferRiskLevel(
   actionType: DashboardAction['type'],
   parameters: Record<string, unknown>
 ): 'low' | 'medium' | 'high' {
-  if (actionType === 'delete_calendar_event' || actionType === 'delete_google_drive_file') {
+  if (
+    actionType === 'delete_calendar_event' ||
+    actionType === 'delete_google_drive_file' ||
+    actionType === 'share_google_drive_file'
+  ) {
+    if (actionType !== 'share_google_drive_file' || hasExternalShareRecipients(parameters)) {
+      return 'high'
+    }
+  }
+
+  if (actionType === 'label_gmail_thread' || actionType === 'move_google_drive_file' || actionType === 'forward_email') {
+    return 'medium'
+  }
+
+  if (actionType === 'archive_gmail_thread' || actionType === 'mark_gmail_thread_read' || actionType === 'mark_gmail_thread_unread') {
+    return 'low'
+  }
+
+  if (actionType === 'rename_google_drive_file' || actionType === 'update_notion_page_properties') {
+    return 'medium'
+  }
+
+  if (actionType === 'share_google_drive_file') {
     return 'high'
   }
 
@@ -64,7 +100,12 @@ export function resolveExecutionDecision(params: {
     return { effectiveMode: 'ask' as const, reason: 'profile_requires_review' as ExecutionDecisionReason }
   }
 
-  if (params.proposals.some((proposal) => proposal.type === 'send_email' && hasPlaceholderRecipient(proposal.parameters))) {
+  if (
+    params.proposals.some((proposal) =>
+      (proposal.type === 'send_email' || proposal.type === 'forward_email') && hasPlaceholderRecipient(proposal.parameters)
+    ) ||
+    params.proposals.some((proposal) => proposal.type === 'share_google_drive_file' && hasPlaceholderShareRecipient(proposal.parameters))
+  ) {
     return { effectiveMode: 'ask' as const, reason: 'missing_recipient' as ExecutionDecisionReason }
   }
 
