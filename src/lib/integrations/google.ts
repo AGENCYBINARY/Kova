@@ -16,6 +16,9 @@ const GOOGLE_SCOPES = [
 ]
 
 const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive'] as const
+const GOOGLE_READ_TIMEOUT_MS = 8_000
+const GOOGLE_WRITE_TIMEOUT_MS = 12_000
+const GOOGLE_AUTH_TIMEOUT_MS = 10_000
 const GOOGLE_REQUIRED_SCOPES = {
   gmail: [
     'https://www.googleapis.com/auth/gmail.send',
@@ -33,6 +36,54 @@ const GOOGLE_REQUIRED_SCOPES = {
     'https://www.googleapis.com/auth/drive.metadata.readonly',
   ],
 } as const
+
+async function wait(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function shouldRetryGoogleRequest(status?: number) {
+  return status === 429 || (typeof status === 'number' && status >= 500)
+}
+
+async function googleFetch(
+  url: string,
+  init: RequestInit,
+  options: {
+    timeoutMs: number
+    retries?: number
+  }
+) {
+  const retries = options.retries || 0
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs)
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      })
+
+      if (attempt < retries && shouldRetryGoogleRequest(response.status)) {
+        await wait(250 * (attempt + 1))
+        continue
+      }
+
+      return response
+    } catch (error) {
+      const isAbortError = error instanceof Error && error.name === 'AbortError'
+      if (attempt >= retries) {
+        throw isAbortError ? new Error('Google request timed out.') : error
+      }
+      await wait(250 * (attempt + 1))
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  throw new Error('Google request failed.')
+}
 
 export interface GoogleIntegrationCapabilityState {
   grantedScopes: string[]
@@ -75,7 +126,7 @@ export function buildGoogleOAuthUrl(state: string) {
 
 export async function exchangeGoogleCodeForTokens(code: string) {
   const { clientId, clientSecret } = getGoogleClientConfig()
-  const response = await fetch('https://oauth2.googleapis.com/token', {
+  const response = await googleFetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -87,7 +138,7 @@ export async function exchangeGoogleCodeForTokens(code: string) {
       redirect_uri: getGoogleRedirectUri(),
       grant_type: 'authorization_code',
     }),
-  })
+  }, { timeoutMs: GOOGLE_AUTH_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Google token exchange failed: ${response.status}`)
@@ -105,7 +156,7 @@ export async function exchangeGoogleCodeForTokens(code: string) {
 
 async function refreshGoogleAccessToken(refreshToken: string) {
   const { clientId, clientSecret } = getGoogleClientConfig()
-  const response = await fetch('https://oauth2.googleapis.com/token', {
+  const response = await googleFetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -116,7 +167,7 @@ async function refreshGoogleAccessToken(refreshToken: string) {
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),
-  })
+  }, { timeoutMs: GOOGLE_AUTH_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Google token refresh failed: ${response.status}`)
@@ -131,11 +182,11 @@ async function refreshGoogleAccessToken(refreshToken: string) {
 }
 
 export async function fetchGoogleAccountEmail(accessToken: string) {
-  const response = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+  const response = await googleFetch('https://openidconnect.googleapis.com/v1/userinfo', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  })
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
 
   if (!response.ok) {
     throw new Error(`Google userinfo fetch failed: ${response.status}`)
@@ -360,13 +411,14 @@ function getStartOfDay(date = new Date()) {
 }
 
 async function listGmailMessageMetadata(accessToken: string, query: string, maxResults: number) {
-  const listResponse = await fetch(
+  const listResponse = await googleFetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&q=${encodeURIComponent(query)}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-    }
+    },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
   )
 
   if (!listResponse.ok) {
@@ -379,13 +431,14 @@ async function listGmailMessageMetadata(accessToken: string, query: string, maxR
 
   const detailedMessages = await Promise.all(
     (listData.messages || []).map(async (message) => {
-      const detailResponse = await fetch(
+      const detailResponse = await googleFetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
-        }
+        },
+        { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
       )
 
       if (!detailResponse.ok) {
@@ -436,7 +489,7 @@ export async function sendGmailMessage(accessToken: string, parameters: Record<s
     body,
   ].join('\r\n')
 
-  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+  const response = await googleFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -445,7 +498,7 @@ export async function sendGmailMessage(accessToken: string, parameters: Record<s
     body: JSON.stringify({
       raw: toBase64Url(mime),
     }),
-  })
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Gmail send failed: ${response.status}`)
@@ -471,13 +524,14 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
   ]
 
   for (const query of queries) {
-    const listResponse = await fetch(
+    const listResponse = await googleFetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${encodeURIComponent(query)}`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-      }
+      },
+      { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
     )
 
     if (!listResponse.ok) {
@@ -489,13 +543,14 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
     }
 
     for (const message of listData.messages || []) {
-      const detailResponse = await fetch(
+      const detailResponse = await googleFetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
-        }
+        },
+        { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
       )
 
       if (!detailResponse.ok) {
@@ -596,11 +651,11 @@ export async function listGoogleCalendarEvents(
     url.searchParams.set('q', options.query.trim())
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await googleFetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  })
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
 
   if (!response.ok) {
     throw new Error(`Calendar read failed: ${response.status}`)
@@ -703,11 +758,11 @@ export async function searchGoogleDriveFiles(
   url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 12, 30))))
   url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress),webViewLink)')
 
-  const response = await fetch(url.toString(), {
+  const response = await googleFetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  })
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
 
   if (!response.ok) {
     throw new Error(`Google Drive read failed: ${response.status}`)
@@ -744,9 +799,10 @@ export async function replyToGmailMessage(accessToken: string, parameters: Recor
   let references = ''
 
   if (threadId) {
-    const threadResponse = await fetch(
+    const threadResponse = await googleFetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+      { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
     )
     if (threadResponse.ok) {
       const threadData = await threadResponse.json() as {
@@ -775,7 +831,7 @@ export async function replyToGmailMessage(accessToken: string, parameters: Recor
     body,
   ].join('\r\n')
 
-  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+  const response = await googleFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -785,7 +841,7 @@ export async function replyToGmailMessage(accessToken: string, parameters: Recor
       raw: toBase64Url(mime),
       ...(threadId ? { threadId } : {}),
     }),
-  })
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Gmail reply failed: ${response.status}`)
@@ -805,9 +861,10 @@ export async function replyToGmailMessage(accessToken: string, parameters: Recor
 }
 
 export async function readGmailMessageBody(accessToken: string, messageId: string): Promise<string> {
-  const response = await fetch(
+  const response = await googleFetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
   )
   if (!response.ok) throw new Error(`Gmail message read failed: ${response.status}`)
 
@@ -862,14 +919,14 @@ export async function updateGoogleCalendarEvent(accessToken: string, parameters:
     url.searchParams.set('sendUpdates', 'all')
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await googleFetch(url.toString(), {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
-  })
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Calendar event update failed: ${response.status}`)
@@ -891,12 +948,13 @@ export async function deleteGoogleCalendarEvent(accessToken: string, parameters:
   const eventId = String(parameters.eventId || '')
   if (!eventId) throw new Error('eventId is required to delete a calendar event.')
 
-  const response = await fetch(
+  const response = await googleFetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
     {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },
-    }
+    },
+    { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
   )
 
   if (!response.ok && response.status !== 204) {
@@ -913,12 +971,13 @@ export async function deleteGoogleDriveFile(accessToken: string, parameters: Rec
   const fileId = String(parameters.fileId || '')
   if (!fileId) throw new Error('fileId is required to delete a Drive file.')
 
-  const response = await fetch(
+  const response = await googleFetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}`,
     {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },
-    }
+    },
+    { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
   )
 
   if (!response.ok && response.status !== 204) {
@@ -944,7 +1003,7 @@ export async function createGoogleCalendarEvent(accessToken: string, parameters:
     url.searchParams.set('sendUpdates', 'all')
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await googleFetch(url.toString(), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -971,7 +1030,7 @@ export async function createGoogleCalendarEvent(accessToken: string, parameters:
           }
         : {}),
     }),
-  })
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Calendar event creation failed: ${response.status}`)
@@ -1004,11 +1063,11 @@ export async function createGoogleCalendarEvent(accessToken: string, parameters:
 }
 
 async function insertTextIntoGoogleDoc(accessToken: string, documentId: string, text: string) {
-  const getResponse = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}`, {
+  const getResponse = await googleFetch(`https://docs.googleapis.com/v1/documents/${documentId}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  })
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
 
   if (!getResponse.ok) {
     throw new Error(`Google Docs read failed: ${getResponse.status}`)
@@ -1017,7 +1076,7 @@ async function insertTextIntoGoogleDoc(accessToken: string, documentId: string, 
   const document = await getResponse.json() as { body?: { content?: Array<{ endIndex?: number }> } }
   const endIndex = document.body?.content?.[document.body.content.length - 1]?.endIndex || 1
 
-  const updateResponse = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
+  const updateResponse = await googleFetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -1033,7 +1092,7 @@ async function insertTextIntoGoogleDoc(accessToken: string, documentId: string, 
         },
       ],
     }),
-  })
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
   if (!updateResponse.ok) {
     throw new Error(`Google Docs write failed: ${updateResponse.status}`)
@@ -1049,11 +1108,11 @@ export interface GoogleDocSummary {
 }
 
 export async function readGoogleDocContent(accessToken: string, documentId: string): Promise<string> {
-  const response = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}`, {
+  const response = await googleFetch(`https://docs.googleapis.com/v1/documents/${documentId}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  })
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
 
   if (!response.ok) {
     throw new Error(`Google Docs read failed: ${response.status}`)
@@ -1127,11 +1186,11 @@ export async function listRecentGoogleDocs(
   url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 8, 20))))
   url.searchParams.set('fields', 'files(id,name,modifiedTime,webViewLink)')
 
-  const response = await fetch(url.toString(), {
+  const response = await googleFetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-  })
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
 
   if (!response.ok) {
     throw new Error(`Google Drive Docs list failed: ${response.status}`)
@@ -1179,7 +1238,7 @@ export async function listRecentGoogleDocs(
 }
 
 export async function createGoogleDoc(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const response = await fetch('https://docs.googleapis.com/v1/documents', {
+  const response = await googleFetch('https://docs.googleapis.com/v1/documents', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -1188,7 +1247,7 @@ export async function createGoogleDoc(accessToken: string, parameters: Record<st
     body: JSON.stringify({
       title: parameters.title || 'Kova document',
     }),
-  })
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Google Docs create failed: ${response.status}`)
@@ -1230,13 +1289,14 @@ export async function updateGoogleDoc(accessToken: string, parameters: Record<st
 
 async function ensureDriveFolder(accessToken: string, folderName: string) {
   const query = `mimeType='application/vnd.google-apps.folder' and trashed=false and name='${folderName.replace(/'/g, "\\'")}'`
-  const lookupResponse = await fetch(
+  const lookupResponse = await googleFetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&pageSize=10`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-    }
+    },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
   )
 
   if (lookupResponse.ok) {
@@ -1247,7 +1307,7 @@ async function ensureDriveFolder(accessToken: string, folderName: string) {
     }
   }
 
-  const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+  const createResponse = await googleFetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -1257,7 +1317,7 @@ async function ensureDriveFolder(accessToken: string, folderName: string) {
       name: folderName,
       mimeType: 'application/vnd.google-apps.folder',
     }),
-  })
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
   if (!createResponse.ok) {
     throw new Error(`Google Drive folder creation failed: ${createResponse.status}`)
@@ -1282,7 +1342,7 @@ export async function createGoogleDriveFile(accessToken: string, parameters: Rec
 
   const isFolder = mimeType === 'application/vnd.google-apps.folder'
 
-  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink,parents,mimeType', {
+  const response = await googleFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink,parents,mimeType', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -1307,7 +1367,7 @@ export async function createGoogleDriveFile(accessToken: string, parameters: Rec
           content,
           '--kova_drive_boundary--',
         ].join('\r\n'),
-  })
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Google Drive file creation failed: ${response.status}`)

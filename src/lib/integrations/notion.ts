@@ -4,6 +4,57 @@ import { prisma } from '@/lib/db/prisma'
 import type { IntegrationExecutionResult } from '@/lib/integrations/types'
 
 const NOTION_VERSION = '2022-06-28'
+const NOTION_READ_TIMEOUT_MS = 8_000
+const NOTION_WRITE_TIMEOUT_MS = 12_000
+const NOTION_AUTH_TIMEOUT_MS = 10_000
+
+async function wait(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function shouldRetryNotionRequest(status?: number) {
+  return status === 429 || (typeof status === 'number' && status >= 500)
+}
+
+async function notionRequest(
+  url: string,
+  init: RequestInit,
+  options: {
+    timeoutMs: number
+    retries?: number
+  }
+) {
+  const retries = options.retries || 0
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs)
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      })
+
+      if (attempt < retries && shouldRetryNotionRequest(response.status)) {
+        await wait(250 * (attempt + 1))
+        continue
+      }
+
+      return response
+    } catch (error) {
+      const isAbortError = error instanceof Error && error.name === 'AbortError'
+      if (attempt >= retries) {
+        throw isAbortError ? new Error('Notion request timed out.') : error
+      }
+      await wait(250 * (attempt + 1))
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  throw new Error('Notion request failed.')
+}
 
 function getNotionClientConfig() {
   const clientId = process.env.NOTION_CLIENT_ID
@@ -40,7 +91,7 @@ export async function exchangeNotionCodeForTokens(code: string) {
   const { clientId, clientSecret } = getNotionClientConfig()
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
 
-  const response = await fetch('https://api.notion.com/v1/oauth/token', {
+  const response = await notionRequest('https://api.notion.com/v1/oauth/token', {
     method: 'POST',
     headers: {
       Authorization: `Basic ${basic}`,
@@ -51,7 +102,7 @@ export async function exchangeNotionCodeForTokens(code: string) {
       code,
       redirect_uri: getNotionRedirectUri(),
     }),
-  })
+  }, { timeoutMs: NOTION_AUTH_TIMEOUT_MS })
 
   if (!response.ok) {
     throw new Error(`Notion token exchange failed: ${response.status}`)
@@ -122,8 +173,16 @@ export function getValidNotionAccessToken(integration: { accessToken: string }) 
   return token
 }
 
-async function notionFetch(path: string, token: string, init?: RequestInit) {
-  const response = await fetch(`https://api.notion.com/v1${path}`, {
+async function notionFetch(
+  path: string,
+  token: string,
+  init?: RequestInit,
+  options: {
+    timeoutMs?: number
+    retries?: number
+  } = {}
+) {
+  const response = await notionRequest(`https://api.notion.com/v1${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -131,6 +190,9 @@ async function notionFetch(path: string, token: string, init?: RequestInit) {
       'Content-Type': 'application/json',
       ...(init?.headers || {}),
     },
+  }, {
+    timeoutMs: options.timeoutMs || NOTION_WRITE_TIMEOUT_MS,
+    retries: options.retries || 0,
   })
 
   if (!response.ok) {
@@ -212,6 +274,9 @@ export async function searchNotionPages(
       },
       page_size: Math.max(1, Math.min(options.maxResults || 10, 20)),
     }),
+  }, {
+    timeoutMs: NOTION_READ_TIMEOUT_MS,
+    retries: 1,
   }) as {
     results?: Array<{
       id: string
@@ -237,7 +302,15 @@ export async function readNotionPagePreview(
     maxBlocks?: number
   } = {}
 ) {
-  const data = await notionFetch(`/blocks/${pageId}/children?page_size=${Math.max(1, Math.min(options.maxBlocks || 6, 20))}`, token) as {
+  const data = await notionFetch(
+    `/blocks/${pageId}/children?page_size=${Math.max(1, Math.min(options.maxBlocks || 6, 20))}`,
+    token,
+    undefined,
+    {
+      timeoutMs: NOTION_READ_TIMEOUT_MS,
+      retries: 1,
+    }
+  ) as {
     results?: Array<Record<string, unknown>>
   }
 
@@ -296,6 +369,8 @@ export async function createNotionPage(token: string, parameters: Record<string,
           ]
         : [],
     }),
+  }, {
+    timeoutMs: NOTION_WRITE_TIMEOUT_MS,
   }) as { id: string; url?: string }
 
   return {
@@ -337,6 +412,8 @@ export async function updateNotionPage(token: string, parameters: Record<string,
         },
       ],
     }),
+  }, {
+    timeoutMs: NOTION_WRITE_TIMEOUT_MS,
   }) as { results?: Array<{ id?: string }> }
 
   return {

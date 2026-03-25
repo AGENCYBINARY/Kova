@@ -1,8 +1,24 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import KovaDemoVideo from '@/components/landing/KovaDemoVideo'
+import dynamic from 'next/dynamic'
 import styles from './page.module.css'
+
+const KovaDemoVideo = dynamic(() => import('@/components/landing/KovaDemoVideo'), {
+  ssr: false,
+  loading: () => (
+    <div className={styles.demoPlaceholder} aria-hidden>
+      <div className={styles.demoPlaceholderFrame}>
+        <div className={styles.demoPlaceholderChrome}>
+          <span />
+          <span />
+          <span />
+        </div>
+      </div>
+      <div className={styles.demoPlaceholderLabel} />
+    </div>
+  ),
+})
 
 const features = [
   {

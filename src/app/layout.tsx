@@ -1,6 +1,12 @@
 import type { Metadata } from 'next'
+import { Manrope } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'Kova - AI Execution Agent',
@@ -14,12 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en">
-        <head>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        </head>
+      <html lang="en" className={manrope.className}>
         <body>{children}</body>
       </html>
     </ClerkProvider>
