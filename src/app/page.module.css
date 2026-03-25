@@ -119,17 +119,13 @@
 .hero {
   position: relative;
   z-index: 1;
-  max-width: 1320px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 154px 32px 86px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 40px;
-  align-items: end;
+  padding: 138px 32px 72px;
 }
 
 .heroCopy {
-  max-width: 760px;
+  max-width: 780px;
 }
 
 .heroBadge {
@@ -161,11 +157,11 @@
 }
 
 .heroTitle {
-  font-size: clamp(74px, 9vw, 132px);
-  line-height: 0.88;
-  letter-spacing: -0.065em;
+  font-size: clamp(56px, 7vw, 94px);
+  line-height: 0.92;
+  letter-spacing: -0.06em;
   color: var(--text-primary);
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .heroGradient {
@@ -176,11 +172,11 @@
 }
 
 .heroSub {
-  max-width: 34ch;
-  font-size: 18px;
-  line-height: 1.72;
+  max-width: 42ch;
+  font-size: 17px;
+  line-height: 1.68;
   color: var(--text-secondary);
-  margin-bottom: 34px;
+  margin-bottom: 28px;
 }
 
 .heroCtas {
@@ -188,6 +184,7 @@
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
+  margin-bottom: 26px;
 }
 
 .ctaPrimary,
@@ -227,49 +224,23 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-.heroAside {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-self: stretch;
-  justify-content: flex-end;
-}
-
-.proofPanel {
-  padding: 24px;
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
-    rgba(9, 12, 18, 0.84);
-  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);
-}
-
-.proofEyebrow {
-  margin-bottom: 18px;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.proofList {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.proofRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  max-width: 920px;
+  margin-bottom: 16px;
 }
 
 .proofItem {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.proofItem:first-child {
-  padding-top: 0;
-  border-top: none;
+  gap: 4px;
+  min-height: 92px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .proofItem span {
@@ -280,8 +251,9 @@
 }
 
 .proofItem strong {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
   letter-spacing: -0.02em;
   color: var(--text-primary);
 }
@@ -289,14 +261,14 @@
 .integRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .integChip {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 9px 14px;
+  padding: 8px 12px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.028);
@@ -314,7 +286,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
-  margin-bottom: 48px;
+  margin-bottom: 40px;
 }
 
 .eyebrow {
@@ -325,17 +297,17 @@
 }
 
 .sectionTitle {
-  font-size: clamp(36px, 4vw, 56px);
+  font-size: clamp(30px, 3.2vw, 44px);
   letter-spacing: -0.05em;
-  line-height: 0.96;
+  line-height: 1;
   color: var(--text-primary);
-  max-width: 12ch;
+  max-width: 13ch;
 }
 
 .sectionSub {
   max-width: 44ch;
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.65;
   color: var(--text-secondary);
 }
 
@@ -346,7 +318,7 @@
   z-index: 1;
   max-width: 1320px;
   margin: 0 auto;
-  padding: 72px 32px 96px;
+  padding: 62px 32px 82px;
   content-visibility: auto;
 }
 
@@ -374,8 +346,8 @@
 
 .demoPlaceholderFrame {
   width: 100%;
-  height: 560px;
-  border-radius: 28px;
+  height: 520px;
+  border-radius: 24px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
@@ -426,13 +398,13 @@
 .featGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .featCard {
-  min-height: 220px;
-  padding: 28px;
-  border-radius: 26px;
+  min-height: 196px;
+  padding: 22px;
+  border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.016)),
@@ -453,28 +425,28 @@
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .featTitle {
-  font-size: 22px;
-  line-height: 1.05;
+  font-size: 18px;
+  line-height: 1.08;
   letter-spacing: -0.03em;
   color: var(--text-primary);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .featDesc {
-  font-size: 14px;
-  line-height: 1.75;
+  font-size: 13px;
+  line-height: 1.7;
   color: var(--text-secondary);
   max-width: 30ch;
 }
 
 .ctaBannerInner {
   position: relative;
-  padding: 72px 42px;
-  border-radius: 34px;
+  padding: 58px 36px;
+  border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
     radial-gradient(circle at top, rgba(79, 169, 205, 0.12), transparent 36%),
@@ -502,9 +474,9 @@
 }
 
 .ctaBannerTitle {
-  font-size: clamp(36px, 4vw, 58px);
+  font-size: clamp(30px, 3.4vw, 44px);
   letter-spacing: -0.05em;
-  line-height: 0.95;
+  line-height: 1;
   color: var(--text-primary);
   margin-bottom: 12px;
 }
@@ -512,8 +484,8 @@
 .ctaBannerSub {
   max-width: 40ch;
   margin: 0 auto 28px;
-  font-size: 16px;
-  line-height: 1.72;
+  font-size: 15px;
+  line-height: 1.68;
   color: var(--text-secondary);
 }
 
@@ -556,21 +528,13 @@
 }
 
 @media (max-width: 1080px) {
-  .hero {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-
-  .heroSub {
-    max-width: 42ch;
-  }
-
-  .proofPanel {
-    max-width: 640px;
-  }
-
   .featGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .proofRow {
+    grid-template-columns: 1fr;
+    max-width: 520px;
   }
 }
 
@@ -594,7 +558,7 @@
   }
 
   .heroTitle {
-    font-size: clamp(56px, 18vw, 92px);
+    font-size: clamp(46px, 14vw, 72px);
   }
 
   .demoPlaceholderFrame {
@@ -619,6 +583,10 @@
   .sectionSub,
   .ctaBannerSub {
     font-size: 15px;
+  }
+
+  .proofItem {
+    min-height: auto;
   }
 
   .heroCtas {

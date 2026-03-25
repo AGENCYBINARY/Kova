@@ -131,20 +131,16 @@ export default function HomePage() {
               Voir la démo
             </a>
           </div>
-        </div>
 
-        <div className={styles.heroAside}>
-          <div className={styles.proofPanel}>
-            <p className={styles.proofEyebrow}>Designed for operators</p>
-            <div className={styles.proofList}>
-              {proofPoints.map((point) => (
-                <div key={point.label} className={styles.proofItem}>
-                  <span>{point.label}</span>
-                  <strong>{point.value}</strong>
-                </div>
-              ))}
-            </div>
+          <div className={styles.proofRow}>
+            {proofPoints.map((point) => (
+              <div key={point.label} className={styles.proofItem}>
+                <span>{point.label}</span>
+                <strong>{point.value}</strong>
+              </div>
+            ))}
           </div>
+
           <div className={styles.integRow}>
             {integrations.map((app) => (
               <div key={app.name} className={styles.integChip}>
