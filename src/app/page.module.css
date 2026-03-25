@@ -229,30 +229,6 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-.integRow {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-
-.integChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.028);
-  color: rgba(255, 255, 255, 0.56);
-  font-size: 12px;
-  backdrop-filter: blur(10px);
-}
-
-.integIcon {
-  font-size: 13px;
-}
-
 .sectionHead {
   display: flex;
   flex-direction: column;
@@ -299,7 +275,6 @@
 .heroTitle,
 .heroSub,
 .heroCtas,
-.integRow,
 .sectionHead,
 .featGrid,
 .ctaBannerInner {
@@ -316,10 +291,6 @@
 
 .heroCtas {
   animation-delay: 0.18s;
-}
-
-.integRow {
-  animation-delay: 0.24s;
 }
 
 .sectionHead {
@@ -635,7 +606,6 @@
   .heroTitle,
   .heroSub,
   .heroCtas,
-  .integRow,
   .sectionHead,
   .featGrid,
   .ctaBannerInner {

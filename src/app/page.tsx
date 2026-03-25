@@ -53,14 +53,6 @@ const features = [
   },
 ]
 
-const integrations = [
-  { name: 'Gmail', color: '#EA4335', icon: '✉' },
-  { name: 'Calendar', color: '#4285F4', icon: '◷' },
-  { name: 'Notion', color: '#ffffff', icon: 'N' },
-  { name: 'Google Docs', color: '#34A853', icon: 'G' },
-  { name: 'Drive', color: '#0F9D58', icon: '▲' },
-]
-
 export default function HomePage() {
   const { userId } = auth()
   if (userId) redirect('/dashboard')
@@ -124,14 +116,6 @@ export default function HomePage() {
             </a>
           </div>
 
-          <div className={styles.integRow}>
-            {integrations.map((app) => (
-              <div key={app.name} className={styles.integChip}>
-                <span className={styles.integIcon} style={{ color: app.color }}>{app.icon}</span>
-                {app.name}
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
