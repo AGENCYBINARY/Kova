@@ -13,7 +13,16 @@ import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import { getWorkspaceGovernance } from '@/lib/agent/governance'
 import { inferRiskLevel, resolveExecutionDecision } from '@/lib/agent/policy'
-import { extractRecipientName, findContactByName, listKnownContacts, rememberContact } from '@/lib/contacts'
+import {
+  extractEmailAddresses,
+  extractNameBeforeEmail,
+  extractNameNearEmail,
+  extractRecipientName,
+  findContactByName,
+  listKnownContacts,
+  looksLikeContactCorrection,
+  rememberContact,
+} from '@/lib/contacts'
 import { findGoogleContactEmail, getValidGoogleAccessToken } from '@/lib/integrations/google'
 import { buildConnectedContextFallbackResponse, buildDeterministicConnectedResponse } from '@/lib/workspace-context/fallback'
 import { resolveConnectedWorkspaceContext } from '@/lib/workspace-context/service'
@@ -30,6 +39,24 @@ interface PersistedMessageRecord {
   role: string
   content: string
   metadata: unknown
+}
+
+interface PendingActionRecord {
+  id: string
+  type: string
+  title: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+interface CorrectedContactResult {
+  correctedContact: {
+    name: string
+    email: string
+    aliases: string[]
+  }
+  updatedPendingAction?: PendingActionRecord
+  assistantResponse?: string
 }
 
 function mapChatRole(role: string): 'user' | 'assistant' {
@@ -107,13 +134,30 @@ export async function orchestrateChatTurn(params: {
     workspaceId,
     userId,
   })
+  const pendingActionsPromise = prisma.action.findMany({
+    where: {
+      userId,
+      workspaceId,
+      status: 'pending',
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  })
 
   const previousMessages = [...(await previousMessagesPromise)].reverse()
-  const [knownContacts, assistantProfile, governance] = await Promise.all([
+  const [knownContacts, assistantProfile, governance, pendingActionsRaw] = await Promise.all([
     knownContactsPromise,
     assistantProfilePromise,
     governancePromise,
+    pendingActionsPromise,
   ])
+  const pendingActions = pendingActionsRaw.map((action) => ({
+    id: action.id,
+    type: action.type,
+    title: action.title,
+    description: action.description,
+    parameters: asRecord(action.parameters),
+  })) satisfies PendingActionRecord[]
 
   await createToolVisibilityAuditLog({
     workspaceId,
@@ -147,11 +191,76 @@ export async function orchestrateChatTurn(params: {
     })
   }
 
+  const correctedContact = await resolveCorrectedContactFromChatInput({
+    content: params.content,
+    previousMessages,
+    pendingActions,
+    knownContacts,
+    userId,
+    workspaceId,
+  })
+
+  if (correctedContact?.updatedPendingAction && correctedContact.assistantResponse) {
+    const [userMessage, assistantMessage] = await prisma.$transaction([
+      prisma.message.create({
+        data: {
+          content: params.content,
+          role: 'user',
+          userId,
+          workspaceId,
+        },
+      }),
+      prisma.message.create({
+        data: {
+          content: correctedContact.assistantResponse,
+          role: 'assistant',
+          metadata: {
+            proposalCount: 1,
+            workspaceRole: governance.role,
+            correctedActionId: correctedContact.updatedPendingAction.id,
+          },
+          userId,
+          workspaceId,
+        },
+      }),
+    ])
+
+    await createDecisionAuditLog({
+      workspaceId,
+      userId,
+      source: 'chat',
+      executionMode: 'ask',
+      executionReason: 'recipient_correction',
+      proposalCount: 1,
+      details: {
+        actionId: correctedContact.updatedPendingAction.id,
+        actionType: correctedContact.updatedPendingAction.type,
+      },
+    })
+
+    return {
+      userMessage,
+      assistantMessage,
+      proposals: [correctedContact.updatedPendingAction],
+      executionMessages: [],
+      effectiveExecutionMode: 'ask',
+      executionModeReason: 'recipient_correction',
+      workspaceRole: governance.role,
+    }
+  }
+
+  const contactsAfterCorrection = correctedContact?.correctedContact
+    ? [
+        correctedContact.correctedContact,
+        ...knownContacts.filter((contact) => contact.email !== correctedContact.correctedContact.email),
+      ]
+    : knownContacts
+
   const googleResolvedContact =
     assistantProfile.autoResolveKnownContacts
       ? await resolveEmailContactFromGoogle({
           content: params.content,
-          knownContacts,
+          knownContacts: contactsAfterCorrection,
           userId,
           workspaceId,
         })
@@ -160,9 +269,9 @@ export async function orchestrateChatTurn(params: {
   const effectiveKnownContacts = googleResolvedContact
     ? [
         googleResolvedContact,
-        ...knownContacts.filter((contact) => contact.email !== googleResolvedContact.email),
+        ...contactsAfterCorrection.filter((contact) => contact.email !== googleResolvedContact.email),
       ]
-    : knownContacts
+    : contactsAfterCorrection
 
   const agentResult = await runAgentTurn(
     params.content,
@@ -364,6 +473,129 @@ export async function orchestrateChatTurn(params: {
     executionModeReason: autoExecutionFailed ? 'auto_execution_failed' : executionDecision.reason,
     workspaceRole: governance.role,
   }
+}
+
+function extractResolvedContactNameFromPendingAction(action: PendingActionRecord) {
+  if (typeof action.parameters.resolvedContactName === 'string' && action.parameters.resolvedContactName.trim()) {
+    return action.parameters.resolvedContactName.trim()
+  }
+
+  const titleMatch = action.title.match(/send email to\s+(.+)$/i)
+  if (titleMatch?.[1]) {
+    return titleMatch[1].trim()
+  }
+
+  const descriptionMatch = action.description.match(/email to\s+(.+?)\s+(through|via|par|with)\b/i)
+  if (descriptionMatch?.[1]) {
+    return descriptionMatch[1].trim()
+  }
+
+  return null
+}
+
+async function resolveCorrectedContactFromChatInput(params: {
+  content: string
+  previousMessages: PersistedMessageRecord[]
+  pendingActions: PendingActionRecord[]
+  knownContacts: Awaited<ReturnType<typeof listKnownContacts>>
+  userId: string
+  workspaceId: string
+}): Promise<CorrectedContactResult | null> {
+  const emails = extractEmailAddresses(params.content)
+  if (emails.length === 0 || !looksLikeContactCorrection(params.content)) {
+    return null
+  }
+
+  const email = emails[0]
+  const latestPendingEmailAction = params.pendingActions.find(
+    (action) => action.type === 'send_email' || action.type === 'reply_to_email'
+  )
+  const explicitNameFromMessage =
+    extractRecipientName(params.content) ||
+    extractNameBeforeEmail(params.content, email) ||
+    extractNameNearEmail(params.content, email)
+
+  const inferredName =
+    explicitNameFromMessage ||
+    (latestPendingEmailAction ? extractResolvedContactNameFromPendingAction(latestPendingEmailAction) : null) ||
+    (() => {
+      for (let index = params.previousMessages.length - 1; index >= 0; index -= 1) {
+        const message = params.previousMessages[index]
+        if (message.role !== 'user') continue
+        const fromPreviousMessage = extractRecipientName(message.content)
+        if (fromPreviousMessage) return fromPreviousMessage
+      }
+      return null
+    })()
+
+  const existingByEmail = params.knownContacts.find((contact) => contact.email.toLowerCase() === email)
+  const name = inferredName || existingByEmail?.name
+  if (!name) {
+    return null
+  }
+
+  const correctedContact = {
+    name,
+    email,
+    aliases: explicitNameFromMessage ? [explicitNameFromMessage] : [],
+  }
+
+  if (latestPendingEmailAction) {
+    const updatedParameters = {
+      ...latestPendingEmailAction.parameters,
+      to: [email],
+      resolvedContactName: name,
+    }
+    const updatedTitle =
+      latestPendingEmailAction.type === 'reply_to_email' ? `Reply to ${name}` : `Send email to ${name}`
+    const updatedDescription =
+      latestPendingEmailAction.type === 'reply_to_email'
+        ? `Prepare a reply to ${name} in the relevant Gmail thread.`
+        : `Prepare and send an email to ${name} through Gmail.`
+
+    const updatedAction = await prisma.action.update({
+      where: { id: latestPendingEmailAction.id },
+      data: {
+        title: updatedTitle,
+        description: updatedDescription,
+        parameters: updatedParameters,
+      },
+    })
+
+    await rememberContact({
+      userId: params.userId,
+      workspaceId: params.workspaceId,
+      email,
+      name,
+      aliases: explicitNameFromMessage ? [explicitNameFromMessage] : [],
+    })
+
+    return {
+      correctedContact,
+      updatedPendingAction: {
+        id: updatedAction.id,
+        type: updatedAction.type,
+        title: updatedAction.title,
+        description: updatedAction.description,
+        parameters: asRecord(updatedAction.parameters),
+      },
+      assistantResponse: `Adresse corrigée pour ${name}. Vérifie puis confirme.`,
+    }
+  }
+
+  if (!explicitNameFromMessage) {
+    return null
+  }
+
+  await rememberContact({
+    userId: params.userId,
+    workspaceId: params.workspaceId,
+    email,
+    name,
+    aliases: [explicitNameFromMessage],
+  })
+
+  return { correctedContact }
 }
 
 async function orchestrateConnectedReadTurn(params: {

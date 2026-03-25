@@ -517,11 +517,21 @@ export async function sendGmailMessage(accessToken: string, parameters: Record<s
 }
 
 export async function findGoogleContactEmail(accessToken: string, name: string) {
-  const queries = [
+  const normalizedName = name.toLowerCase()
+  const nameTokens = normalizedName
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
+
+  const queries = Array.from(new Set([
     `"${name}"`,
     `to:"${name}"`,
     `from:"${name}"`,
-  ]
+    `cc:"${name}"`,
+    ...nameTokens.map((token) => `from:"${token}"`),
+    ...nameTokens.map((token) => `to:"${token}"`),
+  ]))
+  const candidateScores = new Map<string, number>()
 
   for (const query of queries) {
     const listResponse = await googleFetch(
@@ -569,19 +579,41 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
         .filter(Boolean)
 
       for (const value of decodedValues) {
-        if (!value.toLowerCase().includes(name.toLowerCase())) {
+        const email = extractEmailAddress(value)
+        if (!email || email.endsWith('@example.com')) {
           continue
         }
 
-        const email = extractEmailAddress(value)
-        if (email && !email.endsWith('@example.com')) {
-          return email
+        const normalizedValue = value.toLowerCase()
+        let score = 0
+
+        if (normalizedValue.includes(normalizedName)) {
+          score += 6
+        }
+
+        for (const token of nameTokens) {
+          if (normalizedValue.includes(token)) {
+            score += 2
+          }
+        }
+
+        if (score === 0 && normalizedValue.includes(email.split('@')[0].toLowerCase())) {
+          score += 1
+        }
+
+        if (score > 0) {
+          candidateScores.set(email, (candidateScores.get(email) || 0) + score)
         }
       }
     }
   }
 
-  return null
+  const ranked = Array.from(candidateScores.entries()).sort((left, right) => right[1] - left[1])
+  if (!ranked[0] || ranked[0][1] < 4) {
+    return null
+  }
+
+  return ranked[0][0]
 }
 
 export async function listTodayGmailMessages(
