@@ -172,6 +172,7 @@ export async function orchestrateChatTurn(params: {
     governance.allowedActionTypes,
     {
       workspaceContext: connectedContextResult?.workspaceContext,
+      connectedContextMetadata: connectedContextResult?.metadata,
     }
   )
 

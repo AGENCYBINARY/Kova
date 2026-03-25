@@ -5,6 +5,7 @@ import {
   resolveEnabledAssistantSkills,
   type AssistantProfile,
 } from '@/lib/assistant/profile'
+import { resolveActionReferences } from '@/lib/agent/reference-resolution'
 import { extractRecipientName, findContactByName, type KnownContact } from '@/lib/contacts'
 import { prepareActionParameters } from '@/lib/agent/data-prep'
 import { getToolByActionType, listMcpTools } from '@/lib/mcp/registry'
@@ -468,6 +469,7 @@ export async function runAgentTurn(
   allowedActionTypes: AgentActionType[] = agentActionTypeSchema.options,
   options: {
     workspaceContext?: string
+    connectedContextMetadata?: Record<string, unknown>
   } = {}
 ): Promise<AgentTurnResult> {
   const enabledSkillIds = resolveEnabledAssistantSkills(assistantProfile?.enabledSkills)
@@ -556,7 +558,13 @@ export async function runAgentTurn(
         })
         .filter((proposal): proposal is AgentProposal => proposal !== null)
 
-      const enrichedProposals = proposals.map((proposal) => {
+      const resolvedReferenceProposals = resolveActionReferences({
+        proposals,
+        userInput: input,
+        connectedContextMetadata: options.connectedContextMetadata,
+      })
+
+      const enrichedProposals = resolvedReferenceProposals.map((proposal) => {
         if (proposal.type === 'create_calendar_event') {
           const attendees = Array.isArray(proposal.parameters.attendees)
             ? proposal.parameters.attendees.filter((value): value is string => typeof value === 'string' && value.includes('@'))

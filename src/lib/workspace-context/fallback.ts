@@ -8,7 +8,10 @@ interface SourceMetadataSummary {
   messageCount?: number
   unreadCount?: number
   messages?: Array<{
+    messageId?: string
+    threadId?: string | null
     from?: string
+    fromEmail?: string | null
     subject?: string
     snippet?: string
     unread?: boolean
@@ -16,6 +19,7 @@ interface SourceMetadataSummary {
   eventCount?: number
   availabilityCount?: number
   events?: Array<{
+    eventId?: string
     title?: string
     startTime?: string | null
     endTime?: string | null
@@ -30,14 +34,24 @@ interface SourceMetadataSummary {
   }>
   fileCount?: number
   files?: Array<{
+    fileId?: string
     name?: string
     mimeType?: string
     modifiedTime?: string | null
     owners?: string[]
     webViewLink?: string | null
   }>
+  docCount?: number
+  docs?: Array<{
+    documentId?: string
+    title?: string
+    modifiedTime?: string | null
+    preview?: string
+    webViewLink?: string | null
+  }>
   pageCount?: number
   pages?: Array<{
+    pageId?: string
     title?: string
     lastEditedTime?: string | null
     preview?: string

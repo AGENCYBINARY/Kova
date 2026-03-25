@@ -35,13 +35,17 @@ interface SourceContextBlock {
 }
 
 interface GmailMessageMetadata {
+  messageId: string
+  threadId: string | null
   from: string
+  fromEmail: string | null
   subject: string
   snippet: string
   unread: boolean
 }
 
 interface CalendarEventMetadata {
+  eventId: string
   title: string
   startTime: string | null
   endTime: string | null
@@ -57,6 +61,7 @@ interface AvailabilityWindowMetadata {
 }
 
 interface DriveFileMetadata {
+  fileId: string
   name: string
   mimeType: string
   modifiedTime: string | null
@@ -65,6 +70,7 @@ interface DriveFileMetadata {
 }
 
 interface GoogleDocMetadata {
+  documentId: string
   title: string
   modifiedTime: string | null
   preview: string
@@ -72,6 +78,7 @@ interface GoogleDocMetadata {
 }
 
 interface NotionPageMetadata {
+  pageId: string
   title: string
   lastEditedTime: string | null
   preview: string
@@ -103,7 +110,7 @@ function getIntegrationWorkspaceName(metadata: unknown) {
 }
 
 function formatMessageLine(message: GmailMessageSummary) {
-  return `${message.from || 'Unknown sender'} | ${message.subject || '(no subject)'} | ${message.unread ? 'unread' : 'read'} | ${message.snippet || ''}`.trim()
+  return `${message.from || 'Unknown sender'} | ${message.subject || '(no subject)'} | ${message.unread ? 'unread' : 'read'} | ${message.snippet || ''} | messageId: ${message.id}${message.threadId ? ` | threadId: ${message.threadId}` : ''}`.trim()
 }
 
 function formatThreadLine(subject: string, count: number, participants: string[], snippet: string) {
@@ -111,7 +118,7 @@ function formatThreadLine(subject: string, count: number, participants: string[]
 }
 
 function formatEventLine(event: GoogleCalendarEventSummary) {
-  return `${event.startTime || 'unknown start'} -> ${event.endTime || 'unknown end'} | ${event.title}${event.attendees.length > 0 ? ` | attendees: ${event.attendees.join(', ')}` : ''}${event.meetLink ? ` | meet: ${event.meetLink}` : ''}`
+  return `${event.startTime || 'unknown start'} -> ${event.endTime || 'unknown end'} | ${event.title}${event.attendees.length > 0 ? ` | attendees: ${event.attendees.join(', ')}` : ''}${event.meetLink ? ` | meet: ${event.meetLink}` : ''} | eventId: ${event.id}`
 }
 
 function formatAvailabilityLine(window: GoogleCalendarAvailabilityWindow) {
@@ -119,15 +126,15 @@ function formatAvailabilityLine(window: GoogleCalendarAvailabilityWindow) {
 }
 
 function formatDriveFileLine(file: GoogleDriveFileSummary) {
-  return `${file.name} | ${file.mimeType} | modified ${file.modifiedTime || 'unknown'}${file.owners.length > 0 ? ` | owners: ${file.owners.join(', ')}` : ''}${file.webViewLink ? ` | link: ${file.webViewLink}` : ''}`
+  return `${file.name} | ${file.mimeType} | modified ${file.modifiedTime || 'unknown'}${file.owners.length > 0 ? ` | owners: ${file.owners.join(', ')}` : ''}${file.webViewLink ? ` | link: ${file.webViewLink}` : ''} | fileId: ${file.id}`
 }
 
 function formatGoogleDocLine(doc: GoogleDocSummary) {
-  return `${doc.title} | modified ${doc.modifiedTime || 'unknown'}${doc.preview ? ` | ${doc.preview}` : ''}${doc.webViewLink ? ` | ${doc.webViewLink}` : ''}`
+  return `${doc.title} | modified ${doc.modifiedTime || 'unknown'}${doc.preview ? ` | ${doc.preview}` : ''}${doc.webViewLink ? ` | ${doc.webViewLink}` : ''} | documentId: ${doc.id}`
 }
 
 function formatNotionPageLine(page: NotionPageSummary) {
-  return `${page.title} | edited ${page.lastEditedTime || 'unknown'}${page.preview ? ` | ${page.preview}` : ''}${page.url ? ` | ${page.url}` : ''}`
+  return `${page.title} | edited ${page.lastEditedTime || 'unknown'}${page.preview ? ` | ${page.preview}` : ''}${page.url ? ` | ${page.url}` : ''} | pageId: ${page.id}`
 }
 
 function buildTimeRange(timeframe: ConnectedContextRequest['timeframe']) {
@@ -187,7 +194,10 @@ async function buildGmailContext(params: {
       messageCount: messages.length,
       unreadCount,
       messages: messages.slice(0, 8).map((message) => ({
+        messageId: message.id,
+        threadId: message.threadId,
         from: message.from,
+        fromEmail: message.from ? message.from.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}/)?.[0]?.toLowerCase() || null : null,
         subject: message.subject,
         snippet: message.snippet,
         unread: message.unread,
@@ -228,6 +238,7 @@ async function buildCalendarContext(params: {
       eventCount: events.length,
       availabilityCount: availability.length,
       events: events.slice(0, 8).map((event) => ({
+        eventId: event.id,
         title: event.title,
         startTime: event.startTime,
         endTime: event.endTime,
@@ -266,6 +277,7 @@ async function buildDriveContext(params: {
       connectedAccount: params.connectedAccount,
       fileCount: files.length,
       files: files.slice(0, 8).map((file) => ({
+        fileId: file.id,
         name: file.name,
         mimeType: file.mimeType,
         modifiedTime: file.modifiedTime,
@@ -298,6 +310,7 @@ async function buildDocsContext(params: {
       connectedAccount: params.connectedAccount,
       docCount: docs.length,
       docs: docs.map((doc) => ({
+        documentId: doc.id,
         title: doc.title,
         modifiedTime: doc.modifiedTime,
         preview: doc.preview,
@@ -337,6 +350,7 @@ async function buildNotionContext(params: {
       workspaceName: params.workspaceName,
       pageCount: pages.length,
       pages: enrichedPages.map((page) => ({
+        pageId: page.id,
         title: page.title,
         lastEditedTime: page.lastEditedTime,
         preview: page.preview,
