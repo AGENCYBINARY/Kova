@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
-import { getValidGoogleAccessToken } from '@/lib/integrations/google'
+import { getGoogleIntegrationCapabilityState, getValidGoogleAccessToken } from '@/lib/integrations/google'
 import { getValidNotionAccessToken } from '@/lib/integrations/notion'
 
 export async function POST(
@@ -16,6 +16,7 @@ export async function POST(
       userId: dbUserId,
       workspaceId,
     },
+    orderBy: [{ updatedAt: 'desc' }],
   })
 
   if (!integration) {
@@ -24,21 +25,48 @@ export async function POST(
 
   if (params.provider === 'google') {
     await getValidGoogleAccessToken(integration)
+
+    const googleIntegrations = await prisma.integration.findMany({
+      where: {
+        userId: dbUserId,
+        workspaceId,
+        type: {
+          in: ['gmail', 'calendar', 'google_docs', 'google_drive'],
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        metadata: true,
+      },
+    })
+
+    await Promise.all(
+      googleIntegrations.map((record) => {
+        const capabilityState = getGoogleIntegrationCapabilityState(
+          record.type as 'gmail' | 'calendar' | 'google_docs' | 'google_drive',
+          record.metadata
+        )
+
+        return prisma.integration.update({
+          where: { id: record.id },
+          data: {
+            lastSyncAt: new Date(),
+            status: capabilityState.needsReconnect ? 'error' : 'connected',
+          },
+        })
+      })
+    )
   } else if (params.provider === 'notion') {
     getValidNotionAccessToken(integration)
+    await prisma.integration.update({
+      where: { id: integration.id },
+      data: {
+        lastSyncAt: new Date(),
+        status: 'connected',
+      },
+    })
   }
-
-  await prisma.integration.updateMany({
-    where: {
-      userId: dbUserId,
-      workspaceId,
-      type: params.provider === 'google' ? { in: ['gmail', 'calendar', 'google_docs', 'google_drive'] } : type,
-    } as never,
-    data: {
-      lastSyncAt: new Date(),
-      status: 'connected',
-    },
-  })
 
   return NextResponse.json({ ok: true })
 }

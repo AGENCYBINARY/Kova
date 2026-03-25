@@ -66,3 +66,20 @@ test('standalone mcp context resolves from headers', () => {
   if (previousUser === undefined) delete process.env.KOVA_STANDALONE_USER_ID
   else process.env.KOVA_STANDALONE_USER_ID = previousUser
 })
+
+test('standalone mcp context fails closed when the shared secret is missing', () => {
+  const previousSecret = process.env.KOVA_STANDALONE_SHARED_SECRET
+  delete process.env.KOVA_STANDALONE_SHARED_SECRET
+
+  assert.throws(
+    () =>
+      resolveStandaloneMcpContext({
+        'x-kova-workspace-id': 'ws_123',
+        'x-kova-user-id': 'user_456',
+      }),
+    /KOVA_STANDALONE_SHARED_SECRET is missing/
+  )
+
+  if (previousSecret === undefined) delete process.env.KOVA_STANDALONE_SHARED_SECRET
+  else process.env.KOVA_STANDALONE_SHARED_SECRET = previousSecret
+})

@@ -122,6 +122,8 @@ KOVA_STANDALONE_USER_ID=""
 KOVA_MCP_STANDALONE_PORT="8787"
 ```
 
+`KOVA_STANDALONE_SHARED_SECRET` is mandatory for any standalone MCP usage. Do not expose the standalone server without it.
+
 For Clerk redirects, use:
 
 ```env

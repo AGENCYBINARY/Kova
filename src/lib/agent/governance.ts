@@ -11,28 +11,40 @@ type GovernancePreferences = {
 const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> = {
   owner: [
     'send_email',
+    'reply_to_email',
     'create_calendar_event',
+    'update_calendar_event',
+    'delete_calendar_event',
     'create_google_doc',
     'update_google_doc',
     'create_google_drive_file',
+    'delete_google_drive_file',
     'create_notion_page',
     'update_notion_page',
   ],
   admin: [
     'send_email',
+    'reply_to_email',
     'create_calendar_event',
+    'update_calendar_event',
+    'delete_calendar_event',
     'create_google_doc',
     'update_google_doc',
     'create_google_drive_file',
+    'delete_google_drive_file',
     'create_notion_page',
     'update_notion_page',
   ],
   operator: [
     'send_email',
+    'reply_to_email',
     'create_calendar_event',
+    'update_calendar_event',
     'create_google_doc',
+    'update_google_doc',
     'create_google_drive_file',
     'create_notion_page',
+    'update_notion_page',
   ],
   viewer: [],
 }
@@ -68,10 +80,14 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
         if (!normalizedRole || !Array.isArray(permissions)) return null
         const allowed = permissions.filter((permission): permission is DashboardAction['type'] =>
           permission === 'send_email' ||
+          permission === 'reply_to_email' ||
           permission === 'create_calendar_event' ||
+          permission === 'update_calendar_event' ||
+          permission === 'delete_calendar_event' ||
           permission === 'create_google_doc' ||
           permission === 'update_google_doc' ||
           permission === 'create_google_drive_file' ||
+          permission === 'delete_google_drive_file' ||
           permission === 'create_notion_page' ||
           permission === 'update_notion_page'
         )
@@ -110,7 +126,7 @@ export async function getWorkspaceGovernance(params: {
   const role =
     workspace.ownerId === params.userId
       ? 'owner'
-      : governance.memberRoles?.[params.userId] || 'operator'
+      : governance.memberRoles?.[params.userId] || 'viewer'
 
   const allowedActionTypes = uniqueActionTypes(
     governance.toolPermissions?.[role] || defaultRolePermissions[role]

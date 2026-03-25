@@ -5,6 +5,7 @@ import { getAssistantProfile } from '@/lib/assistant/store'
 import { createAuditLog, createDecisionAuditLog, createPolicyDeniedAuditLog, createToolVisibilityAuditLog } from '@/lib/audit/service'
 import { assertActionAllowed, getWorkspaceGovernance } from '@/lib/agent/governance'
 import { inferRiskLevel, resolveExecutionDecision } from '@/lib/agent/policy'
+import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import {
   prepareAndValidateToolInputByActionType,
@@ -217,6 +218,12 @@ export async function executeAgentToolRequest(request: ToolExecutionRequest): Pr
       governance: governanceSummary,
     }
   }
+
+  await claimPendingActionIds(prisma, {
+    actionIds: [action.id],
+    workspaceId,
+    userId,
+  })
 
   const batchResult = await executePersistedActionBatch({
     actions: [

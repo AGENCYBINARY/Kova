@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
+import { inferRiskLevel } from '@/lib/agent/execution-governance'
 import type { DashboardAction, DashboardIntegration } from '@/lib/dashboard-data'
 import { buildDashboardScopeWhere } from '@/lib/dashboard/query'
 import { getGoogleIntegrationCapabilityState } from '@/lib/integrations/google'
@@ -27,23 +28,13 @@ function mapActionStatus(status: string): DashboardAction['status'] {
   return 'pending'
 }
 
-function inferRiskLevel(parameters: Record<string, unknown>, type: DashboardAction['type']): DashboardAction['riskLevel'] {
-  if (type === 'send_email' && Array.isArray(parameters.to) && parameters.to.length > 1) {
-    return 'medium'
-  }
-
-  if (type === 'create_notion_page') {
-    return 'high'
-  }
-
-  return 'low'
-}
-
 function targetAppForType(type: DashboardAction['type']): DashboardAction['targetApp'] {
-  if (type === 'send_email') return 'Gmail'
-  if (type === 'create_calendar_event') return 'Google Calendar'
+  if (type === 'send_email' || type === 'reply_to_email') return 'Gmail'
+  if (type === 'create_calendar_event' || type === 'update_calendar_event' || type === 'delete_calendar_event') {
+    return 'Google Calendar'
+  }
   if (type === 'create_google_doc' || type === 'update_google_doc') return 'Google Docs'
-  if (type === 'create_google_drive_file') return 'Google Drive'
+  if (type === 'create_google_drive_file' || type === 'delete_google_drive_file') return 'Google Drive'
   return 'Notion'
 }
 
@@ -170,7 +161,7 @@ function mapAction(record: {
     description: record.description,
     parameters,
     status: mapActionStatus(record.status),
-    riskLevel: inferRiskLevel(parameters, type),
+    riskLevel: inferRiskLevel(type, parameters),
     targetApp: targetAppForType(type),
     createdAt: record.createdAt.toISOString(),
     executedAt: record.executedAt?.toISOString(),

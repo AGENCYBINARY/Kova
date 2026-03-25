@@ -65,15 +65,6 @@ export async function executePersistedActionBatch(params: {
     actions,
     resolveParameters: (parameters, priorOutputs) =>
       injectExecutionOutputsIntoParameters(parameters, priorOutputs) as Record<string, unknown>,
-    onBeforeExecute: async (action, effectiveParameters) => {
-      await prisma.action.update({
-        where: { id: action.id },
-        data: {
-          status: 'executing',
-          parameters: effectiveParameters as Prisma.JsonObject,
-        },
-      })
-    },
     execute: async (action, effectiveParameters) => {
       const persistedAction = params.actions.find((item) => item.id === action.id)
       if (!persistedAction) {

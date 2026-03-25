@@ -29,13 +29,25 @@ export function inferRiskLevel(
   actionType: DashboardAction['type'],
   parameters: Record<string, unknown>
 ): 'low' | 'medium' | 'high' {
+  if (actionType === 'delete_calendar_event' || actionType === 'delete_google_drive_file') {
+    return 'high'
+  }
+
   if (actionType === 'send_email') {
     const recipients = Array.isArray(parameters.to) ? parameters.to : []
     return recipients.length > 1 ? 'medium' : 'low'
   }
 
-  if (actionType === 'update_notion_page') return 'medium'
-  if (actionType === 'create_notion_page') return 'medium'
+  if (
+    actionType === 'reply_to_email' ||
+    actionType === 'update_calendar_event' ||
+    actionType === 'update_google_doc' ||
+    actionType === 'update_notion_page' ||
+    actionType === 'create_notion_page'
+  ) {
+    return 'medium'
+  }
+
   return 'low'
 }
 

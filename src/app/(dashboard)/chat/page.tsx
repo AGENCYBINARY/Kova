@@ -149,7 +149,7 @@ export default function ChatPage() {
       setIsLoading(false)
       setIsStreaming(false)
     }
-  }, [t])
+  }, [lang, t])
 
   const handleApprove = useCallback(async (id: string) => {
     setIsLoading(true)

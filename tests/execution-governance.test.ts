@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { defaultAssistantProfile } from '../src/lib/assistant/profile'
-import { resolveExecutionDecision } from '../src/lib/agent/execution-governance'
+import { inferRiskLevel, resolveExecutionDecision } from '../src/lib/agent/execution-governance'
 
 test('direct API execution cannot bypass manual review when policy blocks medium-risk actions', () => {
   const decision = resolveExecutionDecision({
@@ -26,4 +26,20 @@ test('direct API execution cannot bypass manual review when policy blocks medium
 
   assert.equal(decision.effectiveMode, 'ask')
   assert.equal(decision.reason, 'medium_risk_requires_review')
+})
+
+test('destructive actions stay high risk', () => {
+  assert.equal(
+    inferRiskLevel('delete_calendar_event', {
+      eventId: 'evt_123',
+    }),
+    'high'
+  )
+
+  assert.equal(
+    inferRiskLevel('delete_google_drive_file', {
+      fileId: 'file_123',
+    }),
+    'high'
+  )
 })

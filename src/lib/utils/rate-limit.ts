@@ -11,7 +11,7 @@ interface RateLimitEntry {
 const store = new Map<string, RateLimitEntry>()
 
 // Purge expired entries every 5 minutes to avoid memory leaks
-setInterval(
+const cleanupInterval = setInterval(
   () => {
     const now = Date.now()
     for (const [key, entry] of Array.from(store.entries())) {
@@ -22,6 +22,8 @@ setInterval(
   },
   5 * 60 * 1000
 )
+
+cleanupInterval.unref?.()
 
 export function checkRateLimit(
   key: string,

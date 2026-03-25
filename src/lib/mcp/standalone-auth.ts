@@ -28,6 +28,10 @@ function normalizeBearerToken(value: string | null) {
 
 export function resolveStandaloneMcpContext(headers: HeaderLike | Record<string, string | string[] | undefined>) {
   const expectedSecret = process.env.KOVA_STANDALONE_SHARED_SECRET?.trim() || null
+  if (!expectedSecret) {
+    throw new Error('KOVA_STANDALONE_SHARED_SECRET is missing.')
+  }
+
   const providedSecret =
     normalizeBearerToken(readHeader(headers, 'authorization')) ||
     readHeader(headers, 'x-kova-shared-secret')

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { asActionParameters } from '@/lib/actions/parameter-resolution'
+import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import { getErrorStatus } from '@/lib/http/errors'
 
@@ -11,42 +12,53 @@ export async function POST(
 ) {
   try {
     const { dbUserId, workspaceId } = await getAppContext()
-    const action = await prisma.action.findFirst({
-      where: {
-        id: params.id,
-        userId: dbUserId,
+    const actionsToExecute = await prisma.$transaction(async (tx) => {
+      const action = await tx.action.findFirst({
+        where: {
+          id: params.id,
+          userId: dbUserId,
+          workspaceId,
+        },
+      })
+
+      if (!action) {
+        throw new Error('Action not found.')
+      }
+
+      if (action.status !== 'pending') {
+        throw new Error('Action is no longer pending.')
+      }
+
+      const actionParameters = asActionParameters(action.parameters)
+      const requestGroupId =
+        typeof actionParameters.requestGroupId === 'string' ? actionParameters.requestGroupId : null
+
+      const groupedActions = requestGroupId
+        ? await tx.action.findMany({
+            where: {
+              status: 'pending',
+              userId: dbUserId,
+              workspaceId,
+              parameters: {
+                path: ['requestGroupId'],
+                equals: requestGroupId,
+              },
+            },
+            orderBy: { createdAt: 'asc' },
+          })
+        : [action]
+
+      const claimedActions = groupedActions.length > 0 ? groupedActions : [action]
+
+      await claimPendingActionIds(tx, {
+        actionIds: claimedActions.map((item) => item.id),
         workspaceId,
-      },
+        userId: dbUserId,
+      })
+
+      return claimedActions
     })
 
-    if (!action) {
-      return NextResponse.json({ error: 'Action not found.' }, { status: 404 })
-    }
-
-    if (action.status !== 'pending') {
-      return NextResponse.json({ error: 'Action is no longer pending.' }, { status: 409 })
-    }
-
-    const actionParameters = asActionParameters(action.parameters)
-    const requestGroupId =
-      typeof actionParameters.requestGroupId === 'string' ? actionParameters.requestGroupId : null
-
-    const groupedActions = requestGroupId
-      ? await prisma.action.findMany({
-          where: {
-            status: 'pending',
-            userId: dbUserId,
-            workspaceId,
-            parameters: {
-              path: ['requestGroupId'],
-              equals: requestGroupId,
-            },
-          },
-          orderBy: { createdAt: 'asc' },
-        })
-      : [action]
-
-    const actionsToExecute = groupedActions.length > 0 ? groupedActions : [action]
     const batchResult = await executePersistedActionBatch({
       actions: actionsToExecute.map((pendingAction) => ({
         id: pendingAction.id,
@@ -69,6 +81,8 @@ export async function POST(
       orderBy: { createdAt: 'asc' },
     })
 
+    const primaryAction = actionsToExecute[0]
+
     const assistantMessage = await prisma.message.create({
       data: {
         content:
@@ -81,7 +95,7 @@ export async function POST(
               : `C'est bon. "${batchResult.completed[0].action.title}" a ete execute. ${batchResult.completed[0].execution.details}`,
         role: 'assistant',
         metadata: {
-          actionId: action.id,
+          actionId: primaryAction.id,
           actionStatus: batchResult.failed ? 'partial_failure' : 'completed',
           actionCount: updatedActions.length,
           blockedActionCount: batchResult.blocked.length,

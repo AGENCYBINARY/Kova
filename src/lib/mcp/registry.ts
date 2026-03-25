@@ -102,6 +102,7 @@ async function getConnectedIntegration(context: McpExecutionContext, provider: s
       userId: context.userId,
       status: 'connected',
     },
+    orderBy: [{ updatedAt: 'desc' }],
   })
 
   if (!integration) {

@@ -13,7 +13,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "vercel-build": "prisma db push && next build"
+    "vercel-build": "next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -32,6 +32,8 @@
     "@types/node": "^22.10.7",
     "@types/react": "18.3.28",
     "@types/react-dom": "^18.3.5",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.24",
     "prisma": "^6.2.1",
     "tsx": "^4.21.0",
     "typescript": "^5.7.3"

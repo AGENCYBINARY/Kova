@@ -72,10 +72,11 @@ export async function executeBatch<
 
   for (let index = 0; index < params.actions.length; index += 1) {
     const action = params.actions[index]
-    const effectiveParameters = params.resolveParameters(action.parameters, priorOutputs, action)
-    await params.onBeforeExecute?.(action, effectiveParameters)
+    let effectiveParameters: TParameters = action.parameters
 
     try {
+      effectiveParameters = params.resolveParameters(action.parameters, priorOutputs, action)
+      await params.onBeforeExecute?.(action, effectiveParameters)
       const execution = await params.execute(action, effectiveParameters)
       priorOutputs.push(execution.output)
       completed.push({

@@ -1,22 +1,16 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAppContext } from '@/lib/app-context'
+import { agentActionTypeSchema } from '@/lib/agent/v1'
 import { executeAgentToolRequest } from '@/lib/agent/tool-execution'
 import { getWorkspaceGovernance } from '@/lib/agent/governance'
 import { buildAgentManifest } from '@/lib/agent/manifest'
+import { checkRequestRateLimit } from '@/lib/http/request-rate-limit'
 import { listMcpTools } from '@/lib/mcp/registry'
 import { getErrorStatus } from '@/lib/http/errors'
 
 const executeRequestSchema = z.object({
-  actionType: z.enum([
-    'send_email',
-    'create_calendar_event',
-    'create_google_doc',
-    'update_google_doc',
-    'create_google_drive_file',
-    'create_notion_page',
-    'update_notion_page',
-  ]),
+  actionType: agentActionTypeSchema,
   parameters: z.record(z.unknown()),
   requireApproval: z.boolean().default(false),
 })
@@ -39,6 +33,25 @@ export async function POST(request: Request) {
   try {
     const body = executeRequestSchema.parse(await request.json())
     const { dbUserId, workspaceId } = await getAppContext()
+    const rateLimit = checkRequestRateLimit({
+      request,
+      namespace: 'agent-execute',
+      userId: dbUserId,
+      limit: 30,
+      windowMs: 60_000,
+    })
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: 'rate_limit_exceeded',
+          message: 'Trop de requêtes agent en peu de temps. Réessaie dans une minute.',
+          rateLimit,
+        },
+        { status: 429 }
+      )
+    }
+
     const result = await executeAgentToolRequest({
       actionType: body.actionType,
       parameters: body.parameters,

@@ -9,6 +9,7 @@ import {
 } from '@/lib/audit/service'
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
+import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import { getWorkspaceGovernance } from '@/lib/agent/governance'
 import { inferRiskLevel, resolveExecutionDecision } from '@/lib/agent/policy'
@@ -249,6 +250,12 @@ export async function orchestrateChatTurn(params: {
   let reviewableActions = createdActions
 
   if (createdActions.length > 0 && effectiveExecutionMode === 'auto') {
+    await claimPendingActionIds(prisma, {
+      actionIds: createdActions.map((action) => action.id),
+      workspaceId,
+      userId,
+    })
+
     const batchResult = await executePersistedActionBatch({
       actions: createdActions.map((action) => ({
         id: action.id,

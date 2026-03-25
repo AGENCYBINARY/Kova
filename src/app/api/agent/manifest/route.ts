@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAppContext } from '@/lib/app-context'
 import { getWorkspaceGovernance } from '@/lib/agent/governance'
 import { buildAgentManifest } from '@/lib/agent/manifest'
+import { getErrorStatus } from '@/lib/http/errors'
 
 export async function GET() {
   try {
@@ -15,7 +16,8 @@ export async function GET() {
       ...buildAgentManifest(governance.allowedActionTypes),
       workspaceRole: governance.role,
     })
-  } catch {
-    return NextResponse.json(buildAgentManifest())
+  } catch (error) {
+    const { status, message } = getErrorStatus(error)
+    return NextResponse.json({ error: message }, { status })
   }
 }
