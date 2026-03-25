@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { inferRiskLevel } from '@/lib/agent/execution-governance'
-import type { DashboardAction, DashboardIntegration } from '@/lib/dashboard-data'
+import { dashboardIntegrations, type DashboardAction, type DashboardIntegration } from '@/lib/dashboard-data'
 import { buildDashboardScopeWhere } from '@/lib/dashboard/query'
 import { getGoogleIntegrationCapabilityState } from '@/lib/integrations/google'
 
@@ -139,6 +139,28 @@ function mapIntegration(record: {
   }
 }
 
+function buildDisconnectedIntegration(record: DashboardIntegration): DashboardIntegration {
+  return {
+    ...record,
+    connectedAccount: null,
+    lastSync: null,
+    warnings: [],
+    needsReconnect: false,
+  }
+}
+
+function mergeIntegrations(records: Array<{
+  id: string
+  type: string
+  status: string
+  metadata: unknown
+  lastSyncAt: Date | null
+}>) {
+  const mappedByType = new Map(records.map((record) => [record.type, mapIntegration(record)]))
+
+  return dashboardIntegrations.map((integration) => mappedByType.get(integration.id) || buildDisconnectedIntegration(integration))
+}
+
 function mapAction(record: {
   id: string
   type: string
@@ -234,7 +256,7 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
   ])
 
   const mappedActions = actions.map(mapAction)
-  const mappedIntegrations = integrations.map(mapIntegration)
+  const mappedIntegrations = mergeIntegrations(integrations)
   const pendingActions = mappedActions.filter((action) => action.status === 'pending')
   const executionHistory = mappedActions.filter((action) => action.status !== 'pending')
   const completedToday = mappedActions.filter((action) => {
@@ -329,7 +351,7 @@ export async function getIntegrationsPageData(): Promise<IntegrationsPageData> {
   })
 
   return {
-    integrations: integrations.map(mapIntegration),
+    integrations: mergeIntegrations(integrations),
     source: 'database',
   }
 }

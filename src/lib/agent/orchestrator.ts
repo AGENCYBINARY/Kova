@@ -51,8 +51,8 @@ export async function getChatPageData(context: ChatContext) {
         userId: context.userId,
         workspaceId: context.workspaceId,
       },
-      orderBy: { createdAt: 'asc' },
-      take: 100,
+      orderBy: { createdAt: 'desc' },
+      take: 60,
     }),
     prisma.action.findMany({
       where: {
@@ -60,7 +60,7 @@ export async function getChatPageData(context: ChatContext) {
         workspaceId: context.workspaceId,
         status: 'pending',
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       take: 20,
     }),
   ])
@@ -68,13 +68,13 @@ export async function getChatPageData(context: ChatContext) {
   return {
     messages:
       messages.length > 0
-        ? messages.map((message) => ({
+        ? [...messages].reverse().map((message) => ({
             id: message.id,
             role: mapChatRole(message.role),
             content: message.content,
           }))
         : [buildWelcomeMessage()],
-    proposals: actions.map((action) => ({
+    proposals: [...actions].reverse().map((action) => ({
       id: action.id,
       type: action.type,
       title: action.title,
@@ -90,25 +90,29 @@ export async function orchestrateChatTurn(params: {
   context: ChatContext
 }) {
   const { userId, workspaceId } = params.context
-  const previousMessages = await prisma.message.findMany({
+  const previousMessagesPromise = prisma.message.findMany({
     where: {
       userId,
       workspaceId,
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: 'desc' },
     take: 20,
   })
+  const knownContactsPromise = listKnownContacts({
+    userId,
+    workspaceId,
+  })
+  const assistantProfilePromise = getAssistantProfile(workspaceId)
+  const governancePromise = getWorkspaceGovernance({
+    workspaceId,
+    userId,
+  })
 
+  const previousMessages = [...(await previousMessagesPromise)].reverse()
   const [knownContacts, assistantProfile, governance] = await Promise.all([
-    listKnownContacts({
-      userId,
-      workspaceId,
-    }),
-    getAssistantProfile(workspaceId),
-    getWorkspaceGovernance({
-      workspaceId,
-      userId,
-    }),
+    knownContactsPromise,
+    assistantProfilePromise,
+    governancePromise,
   ])
 
   await createToolVisibilityAuditLog({
@@ -182,28 +186,29 @@ export async function orchestrateChatTurn(params: {
   })
   const effectiveExecutionMode = executionDecision.effectiveMode
 
-  const userMessage = await prisma.message.create({
-    data: {
-      content: params.content,
-      role: 'user',
-      userId,
-      workspaceId,
-    },
-  })
-
-  const assistantMessage = await prisma.message.create({
-    data: {
-      content: agentResult.response,
-      role: 'assistant',
-      metadata: {
-        proposalCount: agentResult.proposals.length,
-        workspaceRole: governance.role,
-        ...(connectedContextResult?.metadata || {}),
+  const [userMessage, assistantMessage] = await prisma.$transaction([
+    prisma.message.create({
+      data: {
+        content: params.content,
+        role: 'user',
+        userId,
+        workspaceId,
       },
-      userId,
-      workspaceId,
-    },
-  })
+    }),
+    prisma.message.create({
+      data: {
+        content: agentResult.response,
+        role: 'assistant',
+        metadata: {
+          proposalCount: agentResult.proposals.length,
+          workspaceRole: governance.role,
+          ...(connectedContextResult?.metadata || {}),
+        },
+        userId,
+        workspaceId,
+      },
+    }),
+  ])
 
   await createDecisionAuditLog({
     workspaceId,

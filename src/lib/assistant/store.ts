@@ -83,23 +83,7 @@ export async function getAssistantProfile(workspaceId: string) {
     select: { preferences: true },
   })
 
-  const profile = parseAssistantProfile(workspace?.preferences)
-  const preferences = asObject(workspace?.preferences)
-
-  if (preferences.assistantName === 'CODEX' || preferences.roleDescription !== profile.roleDescription) {
-    await prisma.workspace.update({
-      where: { id: workspaceId },
-      data: {
-        preferences: {
-          ...preferences,
-          assistantName: profile.assistantName,
-          roleDescription: profile.roleDescription,
-        } as Prisma.JsonObject,
-      },
-    })
-  }
-
-  return profile
+  return parseAssistantProfile(workspace?.preferences)
 }
 
 export async function updateAssistantProfile(workspaceId: string, profile: AssistantProfile) {

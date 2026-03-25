@@ -73,7 +73,7 @@ export async function persistNotionTokens(params: {
   connectedAccount: string | null
   workspaceName: string | null
 }) {
-  await prisma.integration.updateMany({
+  const result = await prisma.integration.updateMany({
     where: {
       type: 'notion',
       userId: params.userId,
@@ -92,6 +92,26 @@ export async function persistNotionTokens(params: {
       },
     },
   })
+
+  if (result.count === 0) {
+    await prisma.integration.create({
+      data: {
+        type: 'notion',
+        accessToken: encryptSecret(params.accessToken),
+        refreshToken: null,
+        expiresAt: null,
+        status: 'connected',
+        lastSyncAt: new Date(),
+        metadata: {
+          connectedAccount: params.connectedAccount,
+          workspaceName: params.workspaceName,
+          provider: 'notion',
+        },
+        workspaceId: params.workspaceId,
+        userId: params.userId,
+      },
+    })
+  }
 }
 
 export function getValidNotionAccessToken(integration: { accessToken: string }) {

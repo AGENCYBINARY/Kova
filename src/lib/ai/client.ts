@@ -40,6 +40,8 @@ interface AnalyzeOptions {
   behaviorMode?: 'default' | 'conversation' | 'connected_read'
 }
 
+const OPENAI_REQUEST_TIMEOUT_MS = 20_000
+
 export interface ActionProposal {
   type: string
   title: string
@@ -512,6 +514,39 @@ function buildResponsesInput(userMessage: string, conversationHistory: Conversat
   ]
 }
 
+function buildToolInputSummary(inputSchema: Record<string, unknown>) {
+  const properties =
+    inputSchema.properties && typeof inputSchema.properties === 'object' && !Array.isArray(inputSchema.properties)
+      ? (inputSchema.properties as Record<string, unknown>)
+      : {}
+  const required = Array.isArray(inputSchema.required)
+    ? new Set(inputSchema.required.filter((value): value is string => typeof value === 'string'))
+    : new Set<string>()
+
+  const fields = Object.keys(properties)
+  if (fields.length === 0) {
+    return 'no explicit fields'
+  }
+
+  return fields
+    .map((field) => `${field}${required.has(field) ? ' (required)' : ''}`)
+    .join(', ')
+}
+
+async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 async function requestStructuredResponse(params: {
   apiKey: string
   model: string
@@ -543,14 +578,14 @@ async function requestStructuredResponse(params: {
     body.temperature = 0.2
   }
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
+  const response = await fetchJsonWithTimeout('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${params.apiKey}`,
     },
     body: JSON.stringify(body),
-  })
+  }, OPENAI_REQUEST_TIMEOUT_MS)
 
   const payload = await response.json().catch(() => null) as ResponsesApiResponse | null
   if (!response.ok) {
@@ -658,7 +693,7 @@ ${options.assistantProfile.executiveMode
   risk: ${tool.riskLevel}
   deterministic: ${tool.deterministic ? 'yes' : 'no'}
   zero data movement: ${tool.zeroDataMovement ? 'yes' : 'no'}
-  input schema: ${JSON.stringify(tool.inputSchema)}`
+  input fields: ${buildToolInputSummary(tool.inputSchema)}`
           )
           .join('\n')}`
       : ''

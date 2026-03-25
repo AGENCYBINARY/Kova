@@ -159,8 +159,8 @@ export async function persistGoogleTokens(params: {
   const expiresAt = new Date(Date.now() + params.expiresIn * 1000)
 
   await Promise.all(
-    GOOGLE_PROVIDER_TYPES.map((type) =>
-      prisma.integration.updateMany({
+    GOOGLE_PROVIDER_TYPES.map(async (type) => {
+      const result = await prisma.integration.updateMany({
         where: {
           type,
           userId: params.userId,
@@ -179,7 +179,27 @@ export async function persistGoogleTokens(params: {
           },
         },
       })
-    )
+
+      if (result.count === 0) {
+        await prisma.integration.create({
+          data: {
+            type,
+            accessToken: encryptedAccessToken,
+            refreshToken: encryptedRefreshToken,
+            expiresAt,
+            status: 'connected',
+            lastSyncAt: new Date(),
+            metadata: {
+              connectedAccount: params.connectedAccount,
+              provider: 'google',
+              grantedScopes: params.grantedScopes || [],
+            },
+            workspaceId: params.workspaceId,
+            userId: params.userId,
+          },
+        })
+      }
+    })
   )
 }
 
