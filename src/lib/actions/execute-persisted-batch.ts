@@ -53,6 +53,7 @@ export async function executePersistedActionBatch(params: {
   actions: PersistedActionRecord[]
   trigger: 'auto' | 'approval' | 'api'
 }) {
+  const persistedActionsById = new Map(params.actions.map((action) => [action.id, action]))
   const actions = params.actions.map((action) => ({
     id: action.id,
     type: action.type,
@@ -66,7 +67,7 @@ export async function executePersistedActionBatch(params: {
     resolveParameters: (parameters, priorOutputs) =>
       injectExecutionOutputsIntoParameters(parameters, priorOutputs) as Record<string, unknown>,
     execute: async (action, effectiveParameters) => {
-      const persistedAction = params.actions.find((item) => item.id === action.id)
+      const persistedAction = persistedActionsById.get(action.id)
       if (!persistedAction) {
         throw new Error('Action not found.')
       }
@@ -84,7 +85,7 @@ export async function executePersistedActionBatch(params: {
       })
     },
     onSuccess: async (action, effectiveParameters, execution) => {
-      const persistedAction = params.actions.find((item) => item.id === action.id)
+      const persistedAction = persistedActionsById.get(action.id)
       if (!persistedAction) {
         throw new Error('Action not found.')
       }
@@ -129,7 +130,7 @@ export async function executePersistedActionBatch(params: {
       })
     },
     onFailure: async (action, effectiveParameters, error) => {
-      const persistedAction = params.actions.find((item) => item.id === action.id)
+      const persistedAction = persistedActionsById.get(action.id)
       if (!persistedAction) {
         throw new Error('Action not found.')
       }
@@ -163,7 +164,7 @@ export async function executePersistedActionBatch(params: {
       })
     },
     onBlocked: async (action, effectiveParameters, error) => {
-      const persistedAction = params.actions.find((item) => item.id === action.id)
+      const persistedAction = persistedActionsById.get(action.id)
       if (!persistedAction) {
         throw new Error('Action not found.')
       }

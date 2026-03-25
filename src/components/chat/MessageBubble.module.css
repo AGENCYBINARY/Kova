@@ -1,8 +1,8 @@
 .message {
   display: flex;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  max-width: 80%;
+  gap: 10px;
+  padding: 10px 18px;
+  max-width: 82%;
 }
 
 .message.user {
@@ -22,8 +22,8 @@
 }
 
 .aiAvatar {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent-gold), var(--accent-blue));
   display: flex;
@@ -73,25 +73,26 @@
 }
 
 .bubble {
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  border-radius: 18px;
   position: relative;
 }
 
 .user .bubble {
-  background: var(--bg-tertiary);
-  border-bottom-right-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom-right-radius: 6px;
 }
 
 .assistant .bubble {
   background: rgba(79, 169, 205, 0.08);
-  border: 1px solid rgba(79, 169, 205, 0.18);
-  border-bottom-left-radius: var(--radius-sm);
+  border: 1px solid rgba(79, 169, 205, 0.16);
+  border-bottom-left-radius: 6px;
 }
 
 .text {
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.72;
   color: var(--text-primary);
   white-space: pre-wrap;
 }

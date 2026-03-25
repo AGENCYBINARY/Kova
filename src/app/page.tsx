@@ -22,32 +22,32 @@ const KovaDemoVideo = dynamic(() => import('@/components/landing/KovaDemoVideo')
 
 const features = [
   {
-    icon: '💬',
+    eyebrow: 'Chat orchestration',
     title: 'Copilot Chat',
     desc: 'Parle en langage naturel. Kova comprend ce que tu veux faire, prépare l\'action, et te la soumet.',
   },
   {
-    icon: '✅',
+    eyebrow: 'Human approval',
     title: 'Approval Queue',
     desc: 'Chaque action passe par validation avant de toucher un outil externe. Tu gardes un contrôle total.',
   },
   {
-    icon: '📋',
+    eyebrow: 'Full audit trail',
     title: 'Execution History',
     desc: 'Un audit complet de toutes les actions exécutées, rejetées ou en échec. Rien n\'est perdu.',
   },
   {
-    icon: '🔗',
+    eyebrow: 'Native connections',
     title: '5 Integrations',
     desc: 'Gmail, Google Calendar, Notion, Google Docs et Google Drive. Tout connecté en quelques secondes.',
   },
   {
-    icon: '📊',
+    eyebrow: 'Operator visibility',
     title: 'Workspace View',
     desc: 'Vue opérateur avec métriques en temps réel, santé des intégrations et activité récente.',
   },
   {
-    icon: '⚡',
+    eyebrow: 'Controlled automation',
     title: 'Auto Execution',
     desc: 'Configure les politiques d\'approbation : demander toujours, ou exécuter automatiquement les actions à faible risque.',
   },
@@ -59,6 +59,12 @@ const integrations = [
   { name: 'Notion', color: '#ffffff', icon: 'N' },
   { name: 'Google Docs', color: '#34A853', icon: 'G' },
   { name: 'Drive', color: '#0F9D58', icon: '▲' },
+]
+
+const proofPoints = [
+  { label: 'Workflow', value: 'Chat -> Review -> Execute' },
+  { label: 'Control', value: 'Approval-first by default' },
+  { label: 'Focus', value: 'Email, calendar, docs, Notion' },
 ]
 
 export default function HomePage() {
@@ -94,44 +100,59 @@ export default function HomePage() {
 
       {/* ── Hero ── */}
       <section className={styles.hero}>
-        <div className={styles.heroBadge}>
-          <span className={styles.badgePulse} />
-          AI Executive Assistant · v1.0
+        <div className={styles.heroCopy}>
+          <div className={styles.heroBadge}>
+            <span className={styles.badgePulse} />
+            AI executive operator
+          </div>
+
+          <h1 className={styles.heroTitle}>
+            Fais avancer
+            <br />
+            le travail
+            <br />
+            <span className={styles.heroGradient}>sans friction.</span>
+          </h1>
+
+          <p className={styles.heroSub}>
+            Kova orchestre les actions entre tes outils, prépare les exécutions et te laisse le dernier mot
+            quand le risque l&apos;exige.
+          </p>
+
+          <div className={styles.heroCtas}>
+            <Link href="/sign-up" className={styles.ctaPrimary}>
+              Ouvrir mon espace de travail
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </Link>
+            <a href="#demo" className={styles.ctaGhost}>
+              Voir la démo
+            </a>
+          </div>
         </div>
 
-        <h1 className={styles.heroTitle}>
-          Les opérations,
-          <br />
-          <span className={styles.heroGradient}>à la vitesse de la pensée</span>
-        </h1>
-
-        <p className={styles.heroSub}>
-          Connecte tes outils. Délègue à l&apos;IA.
-          <br />
-          Valide avant que rien ne parte.
-        </p>
-
-        <div className={styles.heroCtas}>
-          <Link href="/sign-up" className={styles.ctaPrimary}>
-            Ouvrir mon espace de travail
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
-          </Link>
-          <a href="#demo" className={styles.ctaGhost}>
-            Voir la démo ↓
-          </a>
-        </div>
-
-        {/* Integration chips */}
-        <div className={styles.integRow}>
-          {integrations.map((app) => (
-            <div key={app.name} className={styles.integChip}>
-              <span className={styles.integIcon} style={{ color: app.color }}>{app.icon}</span>
-              {app.name}
+        <div className={styles.heroAside}>
+          <div className={styles.proofPanel}>
+            <p className={styles.proofEyebrow}>Designed for operators</p>
+            <div className={styles.proofList}>
+              {proofPoints.map((point) => (
+                <div key={point.label} className={styles.proofItem}>
+                  <span>{point.label}</span>
+                  <strong>{point.value}</strong>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+          <div className={styles.integRow}>
+            {integrations.map((app) => (
+              <div key={app.name} className={styles.integChip}>
+                <span className={styles.integIcon} style={{ color: app.color }}>{app.icon}</span>
+                {app.name}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -156,7 +177,7 @@ export default function HomePage() {
         <div className={styles.featGrid}>
           {features.map((f) => (
             <div key={f.title} className={styles.featCard}>
-              <div className={styles.featEmoji}>{f.icon}</div>
+              <div className={styles.featEyebrow}>{f.eyebrow}</div>
               <h3 className={styles.featTitle}>{f.title}</h3>
               <p className={styles.featDesc}>{f.desc}</p>
             </div>

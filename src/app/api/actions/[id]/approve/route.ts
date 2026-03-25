@@ -72,38 +72,39 @@ export async function POST(
       trigger: 'approval',
     })
 
-    const updatedActions = await prisma.action.findMany({
-      where: {
-        id: {
-          in: actionsToExecute.map((item) => item.id),
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    })
-
     const primaryAction = actionsToExecute[0]
 
-    const assistantMessage = await prisma.message.create({
-      data: {
-        content:
-          batchResult.failed
-            ? batchResult.blocked.length > 0
-              ? `${batchResult.completed.length} action(s) executee(s). Echec sur "${batchResult.failed.action.title}": ${batchResult.failed.error}. ${batchResult.blocked.length} action(s) restent en attente.`
-              : `Echec sur "${batchResult.failed.action.title}": ${batchResult.failed.error}.`
-            : batchResult.completed.length > 1
-              ? `C'est bon. ${batchResult.completed.length} actions ont ete executees avec succes.`
-              : `C'est bon. "${batchResult.completed[0].action.title}" a ete execute. ${batchResult.completed[0].execution.details}`,
-        role: 'assistant',
-        metadata: {
-          actionId: primaryAction.id,
-          actionStatus: batchResult.failed ? 'partial_failure' : 'completed',
-          actionCount: updatedActions.length,
-          blockedActionCount: batchResult.blocked.length,
+    const [updatedActions, assistantMessage] = await Promise.all([
+      prisma.action.findMany({
+        where: {
+          id: {
+            in: actionsToExecute.map((item) => item.id),
+          },
         },
-        workspaceId,
-        userId: dbUserId,
-      },
-    })
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.message.create({
+        data: {
+          content:
+            batchResult.failed
+              ? batchResult.blocked.length > 0
+                ? `${batchResult.completed.length} action(s) executee(s). Echec sur "${batchResult.failed.action.title}": ${batchResult.failed.error}. ${batchResult.blocked.length} action(s) restent en attente.`
+                : `Echec sur "${batchResult.failed.action.title}": ${batchResult.failed.error}.`
+              : batchResult.completed.length > 1
+                ? `C'est bon. ${batchResult.completed.length} actions ont ete executees avec succes.`
+                : `C'est bon. "${batchResult.completed[0].action.title}" a ete execute. ${batchResult.completed[0].execution.details}`,
+          role: 'assistant',
+          metadata: {
+            actionId: primaryAction.id,
+            actionStatus: batchResult.failed ? 'partial_failure' : 'completed',
+            actionCount: actionsToExecute.length,
+            blockedActionCount: batchResult.blocked.length,
+          },
+          workspaceId,
+          userId: dbUserId,
+        },
+      }),
+    ])
 
     return NextResponse.json({
       actions: updatedActions,

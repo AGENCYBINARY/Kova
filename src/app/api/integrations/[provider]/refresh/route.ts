@@ -41,22 +41,40 @@ export async function POST(
       },
     })
 
-    await Promise.all(
-      googleIntegrations.map((record) => {
+    const now = new Date()
+    const groupedStatuses = googleIntegrations.reduce(
+      (groups, record) => {
         const capabilityState = getGoogleIntegrationCapabilityState(
           record.type as 'gmail' | 'calendar' | 'google_docs' | 'google_drive',
           record.metadata
         )
 
-        return prisma.integration.update({
-          where: { id: record.id },
-          data: {
-            lastSyncAt: new Date(),
-            status: capabilityState.needsReconnect ? 'error' : 'connected',
-          },
-        })
-      })
+        groups[capabilityState.needsReconnect ? 'error' : 'connected'].push(record.id)
+        return groups
+      },
+      { connected: [] as string[], error: [] as string[] }
     )
+
+    await Promise.all([
+      groupedStatuses.connected.length > 0
+        ? prisma.integration.updateMany({
+            where: { id: { in: groupedStatuses.connected } },
+            data: {
+              lastSyncAt: now,
+              status: 'connected',
+            },
+          })
+        : Promise.resolve(),
+      groupedStatuses.error.length > 0
+        ? prisma.integration.updateMany({
+            where: { id: { in: groupedStatuses.error } },
+            data: {
+              lastSyncAt: now,
+              status: 'error',
+            },
+          })
+        : Promise.resolve(),
+    ])
   } else if (params.provider === 'notion') {
     getValidNotionAccessToken(integration)
     await prisma.integration.update({
