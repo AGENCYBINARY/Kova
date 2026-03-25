@@ -250,6 +250,27 @@ function buildEmailProposal(input: string, profile?: AssistantProfile): AgentPro
   }
 }
 
+function buildEmailReplyProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const language = profile?.defaultLanguage || 'fr'
+
+  return {
+    type: 'reply_to_email',
+    title: language === 'en' ? 'Reply to email thread' : 'Répondre au thread email',
+    description:
+      language === 'en'
+        ? 'Prepare a reply to the relevant Gmail thread using the connected inbox context.'
+        : 'Préparer une réponse au bon thread Gmail à partir du contexte connecté.',
+    parameters: {
+      threadId: '',
+      messageId: '',
+      to: [],
+      subject: '',
+      body: buildExecutiveEmailBody(input, profile),
+    },
+    confidenceScore: 0.8,
+  }
+}
+
 function buildResolvedEmailProposal(input: string, contact: KnownContact, profile?: AssistantProfile): AgentProposal {
   return {
     type: 'send_email',
@@ -262,6 +283,58 @@ function buildResolvedEmailProposal(input: string, contact: KnownContact, profil
       resolvedContactName: contact.name,
     },
     confidenceScore: 0.93,
+  }
+}
+
+function buildDeleteCalendarProposal(profile?: AssistantProfile): AgentProposal {
+  const language = profile?.defaultLanguage || 'fr'
+
+  return {
+    type: 'delete_calendar_event',
+    title: language === 'en' ? 'Delete calendar event' : 'Supprimer un événement agenda',
+    description:
+      language === 'en'
+        ? 'Delete the matching Google Calendar event resolved from the connected calendar context.'
+        : "Supprimer l'événement Google Calendar correspondant résolu depuis le contexte connecté.",
+    parameters: {
+      eventId: '',
+    },
+    confidenceScore: 0.78,
+  }
+}
+
+function buildUpdateGoogleDocProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const language = profile?.defaultLanguage || 'fr'
+
+  return {
+    type: 'update_google_doc',
+    title: language === 'en' ? 'Update Google Doc' : 'Mettre à jour le Google Doc',
+    description:
+      language === 'en'
+        ? 'Update the matching Google Doc with structured content.'
+        : 'Mettre à jour le Google Doc correspondant avec un contenu structuré.',
+    parameters: {
+      documentId: '',
+      content: input,
+    },
+    confidenceScore: 0.81,
+  }
+}
+
+function buildDeleteGoogleDriveProposal(profile?: AssistantProfile): AgentProposal {
+  const language = profile?.defaultLanguage || 'fr'
+
+  return {
+    type: 'delete_google_drive_file',
+    title: language === 'en' ? 'Delete Drive file' : 'Supprimer le fichier Drive',
+    description:
+      language === 'en'
+        ? 'Delete the matching Google Drive file resolved from the connected Drive context.'
+        : 'Supprimer le fichier Google Drive correspondant résolu depuis le contexte connecté.',
+    parameters: {
+      fileId: '',
+    },
+    confidenceScore: 0.79,
   }
 }
 
@@ -370,6 +443,28 @@ function buildFallbackResponseWithContactsAndProfile(
   const explicitlyWantsSeparateEmail =
     /(send an email|send email|email recap|mail recap|follow-up email|envoie un mail|envoyer un mail|envoie un email|envoyer un email|courriel distinct)/.test(normalized)
   const explicitEmailIntent = isEmailSendIntent(normalized)
+  const explicitReplyIntent =
+    /(reply|reponds|repondre|reponse|réponds|répondre|réponse|answer this email|reply to|reponds-lui|reponds lui)/.test(
+      normalized
+    )
+  const deleteIntent = /(delete|remove|supprime|supprimer|efface|annule|cancel)/.test(normalized)
+  const updateIntent = /(update|edit|revise|rewrite|modifie|modifier|mets a jour|mettre a jour|complete|compl[eè]te)/.test(
+    normalized
+  )
+
+  if (
+    isMeetingRequest &&
+    deleteIntent &&
+    !explicitEmailIntent
+  ) {
+    return {
+      response:
+        language === 'en'
+          ? 'Event deletion ready for review.'
+          : "Suppression d'événement prête à valider.",
+      proposals: [buildDeleteCalendarProposal(assistantProfile)],
+    }
+  }
 
   if (
     isMeetingRequest &&
@@ -422,7 +517,27 @@ function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
+  if (explicitReplyIntent && /(gmail|email|e-mail|mail|message|messages|thread)/.test(normalized)) {
+    return {
+      response:
+        language === 'en'
+          ? 'Reply draft ready. Review and confirm.'
+          : 'Réponse prête. Vérifie et confirme.',
+      proposals: [buildEmailReplyProposal(input, assistantProfile)],
+    }
+  }
+
   if (/(google doc|google docs|doc\b|document|brief|report|summary|compte rendu|compte-rendu|rapport|note)/.test(normalized)) {
+    if (updateIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Document update ready. Review and confirm.'
+            : 'Mise à jour du document prête. Vérifie et confirme.',
+        proposals: [buildUpdateGoogleDocProposal(input, assistantProfile)],
+      }
+    }
+
     return {
       response:
         language === 'en'
@@ -433,6 +548,16 @@ function buildFallbackResponseWithContactsAndProfile(
   }
 
   if (/(google drive|drive\b|dossier|folder|upload|save to drive|save in drive|enregistrer dans drive|mettre dans drive|stocke.*drive)/.test(normalized)) {
+    if (deleteIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Drive deletion ready for review.'
+            : 'Suppression Drive prête à valider.',
+        proposals: [buildDeleteGoogleDriveProposal(assistantProfile)],
+      }
+    }
+
     return {
       response:
         language === 'en'
@@ -646,7 +771,11 @@ export async function runAgentTurn(
       }
     } catch {
       const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
-      const filteredProposals = fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type))
+      const filteredProposals = resolveActionReferences({
+        proposals: fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type)),
+        userInput: input,
+        connectedContextMetadata: options.connectedContextMetadata,
+      })
 
       return {
         response:
@@ -661,7 +790,11 @@ export async function runAgentTurn(
   }
 
   const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
-  const filteredProposals = fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type))
+  const filteredProposals = resolveActionReferences({
+    proposals: fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type)),
+    userInput: input,
+    connectedContextMetadata: options.connectedContextMetadata,
+  })
 
   return {
     response:
