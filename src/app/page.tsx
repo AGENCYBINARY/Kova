@@ -107,9 +107,7 @@ export default function HomePage() {
           </div>
 
           <h1 className={styles.heroTitle}>
-            Fais avancer
-            <br />
-            le travail
+            Fais avancer le travail
             <br />
             <span className={styles.heroGradient}>sans friction.</span>
           </h1>

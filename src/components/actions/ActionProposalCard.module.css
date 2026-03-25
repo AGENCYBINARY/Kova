@@ -1,23 +1,22 @@
 .card {
-  margin: 16px;
-  padding: 20px;
-  background: rgba(9, 12, 18, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  margin: var(--space-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
 }
 
 .header {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
 }
 
 .iconWrapper {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  background: rgba(245, 158, 11, 0.12);
-  color: var(--accent-gold);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-amber);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -29,36 +28,47 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-sm);
 }
 
 .title {
-  font-size: 18px;
-  line-height: 1.15;
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: -0.03em;
   color: var(--text-primary);
 }
 
 .description {
   font-size: 14px;
-  line-height: 1.7;
   color: var(--text-secondary);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-md);
+  line-height: 1.5;
 }
 
-.parametersCompact,
+.parameters {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.parametersCompact {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
 .previewBlock {
-  background: rgba(255, 255, 255, 0.024);
-  border-radius: 18px;
+  background: var(--bg-tertiary);
+  border-radius: 14px;
   padding: 14px;
-  margin-bottom: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: var(--space-md);
+  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .previewRow {
   display: grid;
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 44px 1fr;
   gap: 10px;
   align-items: start;
   margin-bottom: 8px;
@@ -67,14 +77,14 @@
 .previewLabel {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: var(--text-tertiary);
 }
 
 .previewValue {
   font-size: 13px;
   color: var(--text-primary);
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 .previewBody {
@@ -83,7 +93,7 @@
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   white-space: pre-wrap;
   font-size: 13px;
-  line-height: 1.65;
+  line-height: 1.6;
   color: var(--text-secondary);
 }
 
@@ -100,6 +110,15 @@
   font-size: 12px;
 }
 
+.paramsTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-xs);
+}
+
 .paramsJson {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
   font-size: 12px;
@@ -112,6 +131,5 @@
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: var(--space-sm);
 }

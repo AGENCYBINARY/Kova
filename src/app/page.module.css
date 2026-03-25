@@ -119,13 +119,15 @@
 .hero {
   position: relative;
   z-index: 1;
-  max-width: 1240px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 138px 32px 72px;
+  padding: 156px 32px 78px;
 }
 
 .heroCopy {
-  max-width: 780px;
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: center;
 }
 
 .heroBadge {
@@ -140,7 +142,7 @@
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: 28px;
+  margin-bottom: 22px;
 }
 
 .badgePulse {
@@ -157,11 +159,11 @@
 }
 
 .heroTitle {
-  font-size: clamp(56px, 7vw, 94px);
-  line-height: 0.92;
+  font-size: clamp(36px, 4.8vw, 62px);
+  line-height: 1.02;
   letter-spacing: -0.06em;
   color: var(--text-primary);
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .heroGradient {
@@ -172,9 +174,11 @@
 }
 
 .heroSub {
-  max-width: 42ch;
-  font-size: 17px;
-  line-height: 1.68;
+  max-width: 38ch;
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 15px;
+  line-height: 1.72;
   color: var(--text-secondary);
   margin-bottom: 28px;
 }
@@ -182,6 +186,7 @@
 .heroCtas {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 14px;
   flex-wrap: wrap;
   margin-bottom: 26px;
@@ -226,9 +231,10 @@
 
 .proofRow {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 190px));
+  justify-content: center;
   gap: 10px;
-  max-width: 920px;
+  max-width: 760px;
   margin-bottom: 16px;
 }
 
@@ -236,11 +242,12 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-height: 92px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  min-height: 78px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.014);
+  text-align: left;
 }
 
 .proofItem span {
@@ -251,7 +258,7 @@
 }
 
 .proofItem strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.45;
   letter-spacing: -0.02em;
@@ -261,6 +268,7 @@
 .integRow {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
 }
 
@@ -284,7 +292,8 @@
 .sectionHead {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
   gap: 12px;
   margin-bottom: 40px;
 }
@@ -297,7 +306,7 @@
 }
 
 .sectionTitle {
-  font-size: clamp(30px, 3.2vw, 44px);
+  font-size: clamp(26px, 3vw, 38px);
   letter-spacing: -0.05em;
   line-height: 1;
   color: var(--text-primary);
@@ -306,8 +315,8 @@
 
 .sectionSub {
   max-width: 44ch;
-  font-size: 15px;
-  line-height: 1.65;
+  font-size: 14px;
+  line-height: 1.7;
   color: var(--text-secondary);
 }
 
@@ -320,6 +329,62 @@
   margin: 0 auto;
   padding: 62px 32px 82px;
   content-visibility: auto;
+}
+
+.heroBadge,
+.heroTitle,
+.heroSub,
+.heroCtas,
+.proofRow,
+.integRow,
+.sectionHead,
+.featGrid,
+.ctaBannerInner {
+  animation: fadeUp 0.65s ease-out both;
+}
+
+.heroTitle {
+  animation-delay: 0.06s;
+}
+
+.heroSub {
+  animation-delay: 0.12s;
+}
+
+.heroCtas {
+  animation-delay: 0.18s;
+}
+
+.proofRow {
+  animation-delay: 0.24s;
+}
+
+.integRow {
+  animation-delay: 0.3s;
+}
+
+.sectionHead {
+  animation-delay: 0.08s;
+}
+
+.featGrid {
+  animation-delay: 0.14s;
+}
+
+.ctaBannerInner {
+  animation-delay: 0.1s;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .demoSection {
@@ -402,8 +467,8 @@
 }
 
 .featCard {
-  min-height: 196px;
-  padding: 22px;
+  min-height: 184px;
+  padding: 20px;
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   background:
@@ -429,7 +494,7 @@
 }
 
 .featTitle {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.08;
   letter-spacing: -0.03em;
   color: var(--text-primary);
@@ -437,7 +502,7 @@
 }
 
 .featDesc {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.7;
   color: var(--text-secondary);
   max-width: 30ch;
@@ -474,7 +539,7 @@
 }
 
 .ctaBannerTitle {
-  font-size: clamp(30px, 3.4vw, 44px);
+  font-size: clamp(28px, 3vw, 38px);
   letter-spacing: -0.05em;
   line-height: 1;
   color: var(--text-primary);
@@ -484,7 +549,7 @@
 .ctaBannerSub {
   max-width: 40ch;
   margin: 0 auto 28px;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.68;
   color: var(--text-secondary);
 }
@@ -534,7 +599,7 @@
 
   .proofRow {
     grid-template-columns: 1fr;
-    max-width: 520px;
+    max-width: 420px;
   }
 }
 
@@ -558,7 +623,7 @@
   }
 
   .heroTitle {
-    font-size: clamp(46px, 14vw, 72px);
+    font-size: clamp(32px, 10vw, 44px);
   }
 
   .demoPlaceholderFrame {
@@ -582,7 +647,7 @@
   .heroSub,
   .sectionSub,
   .ctaBannerSub {
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .proofItem {
@@ -612,5 +677,19 @@
 
   .footerLinks {
     margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroBadge,
+  .heroTitle,
+  .heroSub,
+  .heroCtas,
+  .proofRow,
+  .integRow,
+  .sectionHead,
+  .featGrid,
+  .ctaBannerInner {
+    animation: none;
   }
 }

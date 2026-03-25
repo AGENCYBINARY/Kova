@@ -1,104 +1,92 @@
 .container {
   min-height: 100vh;
-  padding: 24px;
 }
 
 .header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
-  padding: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 30px;
-  background:
-    radial-gradient(circle at top right, rgba(79, 169, 205, 0.14), transparent 24%),
-    linear-gradient(180deg, rgba(11, 14, 20, 0.94), rgba(8, 10, 15, 0.98));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
 }
 
 .headerBadges {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
 .eyebrow {
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  font-size: 12px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent-blue);
-  margin-bottom: 10px;
+  margin-bottom: var(--space-xs);
 }
 
 .title {
-  font-size: clamp(34px, 4vw, 54px);
+  font-size: 24px;
   font-weight: 600;
-  line-height: 0.95;
-  letter-spacing: -0.05em;
   color: var(--text-primary);
-  margin-bottom: 10px;
+  margin-bottom: var(--space-xs);
 }
 
 .subtitle {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text-secondary);
-  line-height: 1.7;
 }
 
 .content {
-  padding-top: 12px;
+  padding: var(--space-lg);
 }
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
 }
 
 .statCard {
-  min-height: 164px;
-  padding: 22px;
+  padding: var(--space-md);
+  text-align: center;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  text-align: left;
 }
 
 .statValue {
-  font-size: 52px;
+  font-size: 32px;
   font-weight: 700;
-  line-height: 0.9;
-  letter-spacing: -0.05em;
   color: var(--text-primary);
 }
 
 .statLabel {
   font-size: 13px;
   color: var(--text-secondary);
-  margin-top: 10px;
+  margin-top: var(--space-xs);
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-md);
 }
 
 .card {
-  padding: 22px;
+  padding: var(--space-md);
 }
 
 .cardHeader {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: var(--space-md);
 }
 
 .iconWrapper {
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -106,17 +94,17 @@
 }
 
 .iconWrapper[data-status="completed"] {
-  background: rgba(16, 185, 129, 0.12);
+  background: rgba(16, 185, 129, 0.15);
   color: var(--accent-green);
 }
 
 .iconWrapper[data-status="failed"] {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(239, 68, 68, 0.15);
   color: var(--accent-red);
 }
 
 .iconWrapper[data-status="rejected"] {
-  background: rgba(245, 158, 11, 0.12);
+  background: rgba(245, 158, 11, 0.15);
   color: var(--accent-amber);
 }
 
@@ -125,26 +113,22 @@
 }
 
 .cardTitle {
-  font-size: 18px;
-  line-height: 1.15;
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-xs);
 }
 
 .cardDetails {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.7;
 }
 
 .meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
   font-size: 12px;
   color: var(--text-tertiary);
 }
@@ -159,13 +143,13 @@
 .cardError {
   font-size: 13px;
   color: var(--accent-red);
-  margin-top: 10px;
+  margin-top: var(--space-xs);
 }
 
 .cardFooter {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border);
 }
 
 .timestamp {
@@ -174,15 +158,11 @@
 }
 
 @media (max-width: 900px) {
-  .container {
-    padding: 18px;
-  }
-
   .stats {
     grid-template-columns: 1fr;
   }
 
   .header {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 }
