@@ -756,7 +756,20 @@ export async function runAgentTurn(
       })
 
       const allowProposals = isActionRequest(input)
-      const deniedByRole = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
+      const hadModelProposalButNoneValidated = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
+      const fallbackForInvalidModelProposal = hadModelProposalButNoneValidated
+        ? resolveActionReferences({
+            proposals: buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).proposals.filter(
+              (proposal) => allowedActionTypes.includes(proposal.type)
+            ),
+            userInput: input,
+            connectedContextMetadata: options.connectedContextMetadata,
+          })
+        : []
+      const deniedByRole =
+        hadModelProposalButNoneValidated &&
+        fallbackForInvalidModelProposal.length === 0 &&
+        availableTools.length === 0
 
       return {
         response:
@@ -764,10 +777,17 @@ export async function runAgentTurn(
             ? assistantProfile?.defaultLanguage === 'en'
               ? 'I understood the request, but your workspace role is not allowed to use that tool.'
               : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
+            : fallbackForInvalidModelProposal.length > 0
+            ? buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).response
             : !allowProposals && safeProposals.length > 0
             ? buildConversationalResponse(input, assistantProfile)
             : aiResult.response,
-        proposals: allowProposals ? safeProposals : [],
+        proposals:
+          allowProposals
+            ? safeProposals.length > 0
+              ? safeProposals
+              : fallbackForInvalidModelProposal
+            : [],
       }
     } catch {
       const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)

@@ -50,7 +50,7 @@ export interface ActionProposal {
   confidenceScore?: number
 }
 
-const actionProposalSchema = z.object({
+const normalizedActionProposalSchema = z.object({
   type: z.string().min(1),
   title: z.string().min(1),
   description: z.string().min(1),
@@ -58,9 +58,22 @@ const actionProposalSchema = z.object({
   parameters: z.record(z.unknown()),
 })
 
-const analysisResponseSchema = z.object({
+const normalizedAnalysisResponseSchema = z.object({
   response: z.string().min(1),
-  proposals: z.array(actionProposalSchema),
+  proposals: z.array(normalizedActionProposalSchema),
+})
+
+const rawActionProposalSchema = z.object({
+  type: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  confidenceScore: z.number().min(0).max(1),
+  parameters_json: z.string().min(2),
+})
+
+const rawAnalysisResponseSchema = z.object({
+  response: z.string().min(1),
+  proposals: z.array(rawActionProposalSchema),
 })
 
 const responseFormatJsonSchema = {
@@ -78,7 +91,7 @@ const responseFormatJsonSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['type', 'title', 'description', 'confidenceScore', 'parameters'],
+        required: ['type', 'title', 'description', 'confidenceScore', 'parameters_json'],
         properties: {
           type: {
             type: 'string',
@@ -92,15 +105,45 @@ const responseFormatJsonSchema = {
           confidenceScore: {
             type: 'number',
           },
-          parameters: {
-            type: 'object',
-            additionalProperties: true,
+          parameters_json: {
+            type: 'string',
+            description: 'A JSON object encoded as a string. It must parse into the action parameters object.',
           },
         },
       },
     },
   },
 } as const
+
+function parseParametersJson(value: string) {
+  try {
+    const parsed = JSON.parse(value)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('parameters_json must decode to an object.')
+    }
+
+    return parsed as Record<string, unknown>
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? `Invalid parameters_json: ${error.message}` : 'Invalid parameters_json.'
+    )
+  }
+}
+
+export function parseStructuredAnalysisResponse(payload: unknown) {
+  const raw = rawAnalysisResponseSchema.parse(payload)
+
+  return normalizedAnalysisResponseSchema.parse({
+    response: raw.response,
+    proposals: raw.proposals.map((proposal) => ({
+      type: proposal.type,
+      title: proposal.title,
+      description: proposal.description,
+      confidenceScore: proposal.confidenceScore,
+      parameters: parseParametersJson(proposal.parameters_json),
+    })),
+  })
+}
 
 const systemPrompt = `You are Kova — not a chatbot, not a generic assistant. You are the user's right hand at work.
 
@@ -628,7 +671,7 @@ async function analyzeWithOpenAI(
         throw new Error(payload.incomplete_details?.reason || 'OpenAI returned an empty response.')
       }
 
-      const parsed = analysisResponseSchema.parse(JSON.parse(rawText))
+      const parsed = parseStructuredAnalysisResponse(JSON.parse(rawText))
       return {
         response: parsed.response.trim() || buildNonEmptyResponse(userMessage, parsed.proposals),
         proposals: parsed.proposals,
@@ -684,7 +727,11 @@ ${options.assistantProfile.executiveMode
 
   const toolsContext =
     options.tools && options.tools.length > 0
-      ? `\nRuntime tool catalog:\n${options.tools
+      ? `\nRuntime tool catalog:
+- You may only use action types that appear exactly in this catalog.
+- Never invent action types such as "draft_email", "email_reply", or other aliases.
+- If no catalog action fits, return an empty proposals array.
+${options.tools
           .map(
             (tool) =>
               `- ${tool.actionType} (${tool.name}) via ${tool.provider}
