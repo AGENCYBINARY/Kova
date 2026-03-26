@@ -72,3 +72,34 @@ test('specific capability-style calendar requests still create proposals', async
     }
   }
 })
+
+test('capability wording with savoir stays conversational and does not create a calendar action', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Est ce que tu sais faire des evenement calendrier google ?', [], [])
+    assert.equal(result.proposals.length, 0)
+    assert.match(result.response, /Oui|oui/)
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('calendar requests phrased with faire remain actionable and do not fall back to capability mode', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Tu peux me faire un evenement dans calendar google le motif est un rdv avec Maxime', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event'])
+    assert.equal(result.proposals[0]?.parameters.createMeetLink, false)
+    assert.match(result.response, /C'est prêt|prêt/)
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})

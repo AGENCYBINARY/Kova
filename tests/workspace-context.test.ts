@@ -45,6 +45,21 @@ test('explicit send requests still stay in the email action path', () => {
   assert.equal(isReadOnlyWorkspaceQuestion('envoie un mail a paul pour confirmer le rendez-vous'), false)
 })
 
+test('calendar action phrasing with faire stays out of read-only mode', () => {
+  assert.deepEqual(parseConnectedContextRequest('tu peux me faire un evenement dans calendar google le motif est un rdv avec Maxime'), {
+    mode: 'action',
+    sources: ['calendar'],
+    timeframe: 'recent',
+    asksForAvailability: false,
+    asksForPriorities: false,
+    searchQuery: 'peux faire evenement motif rdv maxime',
+  })
+})
+
+test('calendar capability questions are not treated as read-only summaries', () => {
+  assert.equal(isReadOnlyWorkspaceQuestion('est ce que tu sais faire des evenement calendrier google ?'), false)
+})
+
 test('priority requests automatically load the cross-app connected context', () => {
   assert.deepEqual(parseConnectedContextRequest("prepare-moi mes priorites du jour a partir de mes mails et de mon agenda"), {
     mode: 'read',

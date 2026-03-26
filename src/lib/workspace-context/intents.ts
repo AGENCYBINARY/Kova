@@ -35,7 +35,7 @@ const docsPattern =
 const notionPattern =
   /\b(notion|wiki|knowledge base|base de connaissances|database|base de donnees|base de donnees|page notion)\b/
 const readVerbPattern =
-  /\b(resum|summary|summarize|summarise|liste|list|montre|show|check|review|analyse|analyze|consulte|read|voir|vois|donne|what|quels|which|cherche|search|find|retrouve|trouve|explique|prepare moi|prepare-moi)\b/
+  /\b(resum(?:e|er)?|summary|summarize|summarise|liste|list|montre|show|check|review|analyse|analyze|consulte|read|voir|vois|donne|what|quels|which|cherche|search|find|retrouve|trouve|explique|prepare moi|prepare-moi)\b/
 const explicitActionPattern =
   /\b(send|draft|reply|write|compose|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|rename|mark|star|unstar|trash|copy|duplicate|revoke|unshare|folder|envoie|envoyer|redige|ecris|cree|creer|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|deconnecte|actualise|rafraichis|range|ranger|move|moved|deplace|deplacer|archiver|restaure|restaurer|labelliser|transfere|transferer|renomme|renommer|marque|corbeille|brouillon|duplique|dupliquer|retire|retirer|dossier)\b/
 const emailActionPattern =
@@ -102,6 +102,8 @@ const stopWords = new Set([
   'cherche',
   'search',
   'find',
+  'google',
+  'est',
   'prepare',
   'preparemoi',
   'prepare-moi',
@@ -192,7 +194,8 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   const asksForAvailability = availabilityPattern.test(normalized)
   const asksForPriorities = priorityPattern.test(normalized)
   const explicitRead = readVerbPattern.test(normalized) || /\?$/.test(normalized)
-  const explicitAction = explicitActionPattern.test(normalized)
+  const softActionVerb = /\b(faire|fais|fait|refais|refaire|recree|recreer|recr[eé]e)\b/.test(normalized)
+  const explicitAction = explicitActionPattern.test(normalized) || (softActionVerb && !readVerbPattern.test(normalized))
   const referencesAllApps = allAppsPattern.test(normalized)
   const wantsMailboxListing =
     mentionsGmail &&

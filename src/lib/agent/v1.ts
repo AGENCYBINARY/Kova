@@ -71,7 +71,7 @@ const greetingOnlyPattern =
 const conversationalPattern =
   /^(bonjour|salut|hello|hey|coucou|bonsoir|hi|parle moi|parle-moi|on peut parler|tu peux m'aider|tu peux m’aider|j'ai une question|j’ai une question|comment ca va|comment ça va|qui es tu|qui es-tu|explique moi|explique-moi|ça va|ca va)\b/i
 const capabilityQuestionPattern =
-  /^(est ce que tu peux|est-ce que tu peux|est ce que vous pouvez|est-ce que vous pouvez|tu peux|peux tu|peux-tu|vous pouvez|can you|could you|would you)\b/i
+  /^(est ce que tu peux|est-ce que tu peux|est ce que vous pouvez|est-ce que vous pouvez|tu peux|peux tu|peux-tu|vous pouvez|est ce que tu sais|est-ce que tu sais|tu sais|est ce que vous savez|est-ce que vous savez|vous savez|est ce possible|est-ce possible|possible de|possible d'|can you|could you|would you)\b/i
 
 function hasPlaceholderRecipient(parameters: Record<string, unknown>) {
   const recipients = Array.isArray(parameters.to) ? parameters.to : []
@@ -217,12 +217,24 @@ function proposalNeedsClarification(proposal: AgentProposal, input: string) {
 
 function isCapabilityQuestion(input: string, proposals: AgentProposal[]) {
   const trimmed = input.trim()
-  if (!trimmed || !capabilityQuestionPattern.test(normalizeInput(trimmed))) {
+  const normalized = normalizeInput(trimmed)
+  if (!trimmed || !capabilityQuestionPattern.test(normalized)) {
     return false
   }
 
-  const questionLike = trimmed.endsWith('?') || /^(est ce que|est-ce que|tu peux|peux-tu|can you|could you|would you)/i.test(trimmed)
-  if (!questionLike) {
+  const asksAboutCapability =
+    /\b(sais faire|savez faire|possible|capable|capable de)\b/.test(normalized) ||
+    /^tu sais\b/.test(normalized) ||
+    /^vous savez\b/.test(normalized)
+  const isQuestionLead = /^(est ce que|est-ce que|tu peux|peux-tu|peux tu|vous pouvez|can you|could you|would you)\b/i.test(
+    trimmed
+  )
+
+  if (!(trimmed.endsWith('?') && (isQuestionLead || asksAboutCapability))) {
+    return false
+  }
+
+  if (hasTemporalOrTargetingDetails(input)) {
     return false
   }
 
@@ -391,13 +403,13 @@ function buildCalendarProposal(input: string, profile?: AssistantProfile, contac
   return {
     type: 'create_calendar_event',
     title: contact ? `Create meeting invite for ${contact.name}` : 'Create calendar event',
-    description: 'Create a Google Calendar invite with a meeting link and attendee-ready scheduling details.',
+    description: 'Create a Google Calendar invite with attendee-ready scheduling details.',
     parameters: {
       title: meetingTitle,
       startTime: start.toISOString(),
       endTime: end.toISOString(),
       attendees: contact ? [contact.email] : [],
-      createMeetLink: true,
+      createMeetLink: requestNeedsMeetLink(input),
       description:
         profile?.defaultLanguage === 'en'
           ? 'Prepared by Kova from the user request.'

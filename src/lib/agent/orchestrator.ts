@@ -10,6 +10,7 @@ import {
 } from '@/lib/audit/service'
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
+import { buildCalendarRedoFollowUp } from '@/lib/agent/follow-up'
 import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import { getWorkspaceGovernance } from '@/lib/agent/governance'
@@ -154,15 +155,34 @@ export async function orchestrateChatTurn(params: {
     orderBy: { createdAt: 'desc' },
     take: 10,
   })
+  const recentActionsPromise = prisma.action.findMany({
+    where: {
+      userId,
+      workspaceId,
+      status: {
+        in: ['pending', 'rejected'],
+      },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 10,
+  })
 
   const previousMessages = [...(await previousMessagesPromise)].reverse()
-  const [knownContacts, assistantProfile, governance, pendingActionsRaw] = await Promise.all([
+  const [knownContacts, assistantProfile, governance, pendingActionsRaw, recentActionsRaw] = await Promise.all([
     knownContactsPromise,
     assistantProfilePromise,
     governancePromise,
     pendingActionsPromise,
+    recentActionsPromise,
   ])
   const pendingActions = pendingActionsRaw.map((action) => ({
+    id: action.id,
+    type: action.type,
+    title: action.title,
+    description: action.description,
+    parameters: asRecord(action.parameters),
+  })) satisfies PendingActionRecord[]
+  const recentActions = recentActionsRaw.map((action) => ({
     id: action.id,
     type: action.type,
     title: action.title,
@@ -285,17 +305,29 @@ export async function orchestrateChatTurn(params: {
       ]
     : contactsAfterCorrection
 
-  const agentResult = await runAgentTurn(
-    params.content,
-    conversationHistory,
-    effectiveKnownContacts,
-    assistantProfile,
-    governance.allowedActionTypes,
-    {
-      workspaceContext: connectedContextResult?.workspaceContext,
-      connectedContextMetadata: connectedContextResult?.metadata,
-    }
-  )
+  const calendarRedoFollowUp = buildCalendarRedoFollowUp({
+    input: params.content,
+    recentActions,
+    language: assistantProfile.defaultLanguage,
+  })
+
+  const agentResult = calendarRedoFollowUp
+    ? {
+        response: calendarRedoFollowUp.response,
+        proposals: calendarRedoFollowUp.proposals,
+        disambiguations: [],
+      }
+    : await runAgentTurn(
+        params.content,
+        conversationHistory,
+        effectiveKnownContacts,
+        assistantProfile,
+        governance.allowedActionTypes,
+        {
+          workspaceContext: connectedContextResult?.workspaceContext,
+          connectedContextMetadata: connectedContextResult?.metadata,
+        }
+      )
   const agentDisambiguations = agentResult.disambiguations || []
 
   const executionDecision = resolveExecutionDecision({
