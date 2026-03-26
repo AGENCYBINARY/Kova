@@ -70,6 +70,12 @@ interface RankedCandidate<T> {
   score: number
 }
 
+interface ExplicitSelection {
+  source: ReferenceDisambiguation['source']
+  field: string
+  id: string
+}
+
 export interface ReferenceDisambiguation {
   actionType: AgentProposal['type']
   source: 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'notion'
@@ -108,10 +114,44 @@ const stopWords = new Set([
 
 function tokenize(value: string) {
   return normalize(value)
+    .replace(/\[\[kova-ref:[^\]]+\]\]/g, ' ')
     .replace(/[^a-z0-9@._ -]/g, ' ')
     .split(/\s+/)
     .map((token) => token.trim())
     .filter((token) => token.length > 2 && !stopWords.has(token))
+}
+
+function extractExplicitSelections(value: string) {
+  const matches: ExplicitSelection[] = []
+  const pattern = /\[\[kova-ref:([^:\]]+):([^:\]]+):([^\]]+)\]\]/g
+
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(value)) !== null) {
+    const source = match[1]
+    const field = match[2]
+    const id = match[3]
+    if (
+      (source === 'gmail' || source === 'calendar' || source === 'google_drive' || source === 'google_docs' || source === 'notion') &&
+      field &&
+      id
+    ) {
+      matches.push({
+        source,
+        field,
+        id,
+      } satisfies ExplicitSelection)
+    }
+  }
+
+  return matches
+}
+
+function findExplicitSelection(
+  value: string,
+  source: ReferenceDisambiguation['source'],
+  field: string
+) {
+  return extractExplicitSelections(value).find((selection) => selection.source === source && selection.field === field) || null
 }
 
 function includesPlaceholder(value: unknown) {
@@ -131,6 +171,12 @@ function includesPlaceholder(value: unknown) {
     normalized === 'message-id' ||
     normalized === 'notion-page-id'
   )
+}
+
+function needsReferenceResolution(value: unknown, explicitReference: ExplicitSelection | null) {
+  if (explicitReference) return true
+  if (typeof value !== 'string') return true
+  return includesPlaceholder(value) || value.trim().length === 0
 }
 
 function scoreCandidate(haystacks: Array<string | null | undefined>, tokens: string[]) {
@@ -231,6 +277,44 @@ function resolveReplyProposal(
     return { proposal, disambiguation: null as ReferenceDisambiguation | null }
   }
 
+  const explicitThreadSelection = findExplicitSelection(userInput, 'gmail', 'threadId')
+  const explicitMessageSelection = findExplicitSelection(userInput, 'gmail', 'messageId')
+  const explicitlyChosen =
+    messages.find((message) =>
+      (explicitThreadSelection && (message.threadId || message.messageId) === explicitThreadSelection.id) ||
+      (explicitMessageSelection && message.messageId === explicitMessageSelection.id)
+    ) || null
+
+  if (explicitlyChosen) {
+    const chosenSubject = explicitlyChosen.subject?.trim()
+    const normalizedChosenSubject = chosenSubject ? normalize(chosenSubject) : ''
+    const explicitReplySubject =
+      !chosenSubject
+        ? proposal.parameters.subject
+        : normalizedChosenSubject.startsWith('re:')
+          ? chosenSubject
+          : `Re: ${chosenSubject}`
+
+    return {
+      proposal: {
+        ...proposal,
+        parameters: {
+          ...proposal.parameters,
+          threadId: explicitlyChosen.threadId || explicitlyChosen.messageId,
+          messageId: explicitlyChosen.messageId,
+          to: currentRecipients.length > 0
+            ? currentRecipients
+            : explicitlyChosen.fromEmail
+              ? [explicitlyChosen.fromEmail]
+              : proposal.parameters.to,
+          subject: hasSubject ? proposal.parameters.subject : explicitReplySubject,
+        },
+        confidenceScore: Math.max(proposal.confidenceScore, 0.95),
+      },
+      disambiguation: null as ReferenceDisambiguation | null,
+    }
+  }
+
   const tokens = tokenize(userInput)
   const ranked = rankMatches(messages, tokens, (message) => [message.from, message.fromEmail, message.subject, message.snippet])
   if (shouldDisambiguate(ranked, tokens)) {
@@ -284,8 +368,30 @@ function resolveGmailMessageProposal(
 ) {
   const gmailSummary = getSourceSummary(metadata, 'gmail')
   const messages = Array.isArray(gmailSummary?.messages) ? gmailSummary.messages : []
-  if (messages.length === 0 || !includesPlaceholder(proposal.parameters[options.field])) {
+  const explicitReference = findExplicitSelection(userInput, 'gmail', options.field)
+  if (messages.length === 0 || !needsReferenceResolution(proposal.parameters[options.field], explicitReference)) {
     return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  if (explicitReference) {
+    const chosen = messages.find((message) =>
+      (options.field === 'threadId' ? (message.threadId || message.messageId) : message.messageId) === explicitReference.id
+    )
+
+    if (chosen) {
+      return {
+        proposal: {
+          ...proposal,
+          parameters: {
+            ...proposal.parameters,
+            [options.field]: options.field === 'threadId' ? chosen.threadId || chosen.messageId : chosen.messageId,
+            ...(proposal.type === 'forward_email' && chosen.threadId ? { threadId: chosen.threadId } : {}),
+          },
+          confidenceScore: Math.max(proposal.confidenceScore, 0.97),
+        },
+        disambiguation: null as ReferenceDisambiguation | null,
+      }
+    }
   }
 
   const tokens = tokenize(userInput)
@@ -331,8 +437,26 @@ function resolveCalendarProposal(
 ) {
   const calendarSummary = getSourceSummary(metadata, 'calendar')
   const events = Array.isArray(calendarSummary?.events) ? calendarSummary.events : []
-  if (events.length === 0 || !includesPlaceholder(proposal.parameters.eventId)) {
+  const explicitReference = findExplicitSelection(userInput, 'calendar', 'eventId')
+  if (events.length === 0 || !needsReferenceResolution(proposal.parameters.eventId, explicitReference)) {
     return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  if (explicitReference) {
+    const chosen = events.find((event) => event.eventId === explicitReference.id)
+    if (chosen?.eventId) {
+      return {
+        proposal: {
+          ...proposal,
+          parameters: {
+            ...proposal.parameters,
+            eventId: chosen.eventId,
+          },
+          confidenceScore: Math.max(proposal.confidenceScore, 0.97),
+        },
+        disambiguation: null as ReferenceDisambiguation | null,
+      }
+    }
   }
 
   const tokens = tokenize(userInput)
@@ -377,8 +501,26 @@ function resolveDocProposal(
 ) {
   const docSummary = getSourceSummary(metadata, 'google_docs')
   const docs = Array.isArray(docSummary?.docs) ? docSummary.docs : []
-  if (docs.length === 0 || !includesPlaceholder(proposal.parameters.documentId)) {
+  const explicitReference = findExplicitSelection(userInput, 'google_docs', 'documentId')
+  if (docs.length === 0 || !needsReferenceResolution(proposal.parameters.documentId, explicitReference)) {
     return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  if (explicitReference) {
+    const chosen = docs.find((doc) => doc.documentId === explicitReference.id)
+    if (chosen?.documentId) {
+      return {
+        proposal: {
+          ...proposal,
+          parameters: {
+            ...proposal.parameters,
+            documentId: chosen.documentId,
+          },
+          confidenceScore: Math.max(proposal.confidenceScore, 0.97),
+        },
+        disambiguation: null as ReferenceDisambiguation | null,
+      }
+    }
   }
 
   const tokens = tokenize(userInput)
@@ -423,8 +565,26 @@ function resolveDriveProposal(
 ) {
   const driveSummary = getSourceSummary(metadata, 'google_drive')
   const files = Array.isArray(driveSummary?.files) ? driveSummary.files : []
-  if (files.length === 0 || !includesPlaceholder(proposal.parameters.fileId)) {
+  const explicitReference = findExplicitSelection(userInput, 'google_drive', 'fileId')
+  if (files.length === 0 || !needsReferenceResolution(proposal.parameters.fileId, explicitReference)) {
     return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  if (explicitReference) {
+    const chosen = files.find((file) => file.fileId === explicitReference.id)
+    if (chosen?.fileId) {
+      return {
+        proposal: {
+          ...proposal,
+          parameters: {
+            ...proposal.parameters,
+            fileId: chosen.fileId,
+          },
+          confidenceScore: Math.max(proposal.confidenceScore, 0.97),
+        },
+        disambiguation: null as ReferenceDisambiguation | null,
+      }
+    }
   }
 
   const tokens = tokenize(userInput)
@@ -469,8 +629,26 @@ function resolveNotionPageProposal(
 ) {
   const notionSummary = getSourceSummary(metadata, 'notion')
   const pages = Array.isArray(notionSummary?.pages) ? notionSummary.pages : []
-  if (pages.length === 0 || !includesPlaceholder(proposal.parameters.pageId)) {
+  const explicitReference = findExplicitSelection(userInput, 'notion', 'pageId')
+  if (pages.length === 0 || !needsReferenceResolution(proposal.parameters.pageId, explicitReference)) {
     return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  if (explicitReference) {
+    const chosen = pages.find((page) => page.pageId === explicitReference.id)
+    if (chosen?.pageId) {
+      return {
+        proposal: {
+          ...proposal,
+          parameters: {
+            ...proposal.parameters,
+            pageId: chosen.pageId,
+          },
+          confidenceScore: Math.max(proposal.confidenceScore, 0.97),
+        },
+        disambiguation: null as ReferenceDisambiguation | null,
+      }
+    }
   }
 
   const tokens = tokenize(userInput)
@@ -515,8 +693,26 @@ function resolveNotionDatabaseParentProposal(
 ) {
   const notionSummary = getSourceSummary(metadata, 'notion')
   const databases = Array.isArray(notionSummary?.databases) ? notionSummary.databases : []
-  if (databases.length === 0 || !includesPlaceholder(proposal.parameters.parentDatabaseId)) {
+  const explicitReference = findExplicitSelection(userInput, 'notion', 'parentDatabaseId')
+  if (databases.length === 0 || !needsReferenceResolution(proposal.parameters.parentDatabaseId, explicitReference)) {
     return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  if (explicitReference) {
+    const chosen = databases.find((database) => database.databaseId === explicitReference.id)
+    if (chosen?.databaseId) {
+      return {
+        proposal: {
+          ...proposal,
+          parameters: {
+            ...proposal.parameters,
+            parentDatabaseId: chosen.databaseId,
+          },
+          confidenceScore: Math.max(proposal.confidenceScore, 0.97),
+        },
+        disambiguation: null as ReferenceDisambiguation | null,
+      }
+    }
   }
 
   const tokens = tokenize(userInput)
@@ -572,7 +768,10 @@ export function resolveActionReferencesDetailed(params: {
       proposal.type === 'archive_gmail_thread' ||
       proposal.type === 'label_gmail_thread' ||
       proposal.type === 'mark_gmail_thread_read' ||
-      proposal.type === 'mark_gmail_thread_unread'
+      proposal.type === 'mark_gmail_thread_unread' ||
+      proposal.type === 'star_gmail_thread' ||
+      proposal.type === 'unstar_gmail_thread' ||
+      proposal.type === 'trash_gmail_thread'
     ) {
       const result = resolveGmailMessageProposal(proposal, params.userInput, params.connectedContextMetadata, {
         field: 'threadId',
@@ -607,7 +806,9 @@ export function resolveActionReferencesDetailed(params: {
       proposal.type === 'delete_google_drive_file' ||
       proposal.type === 'move_google_drive_file' ||
       proposal.type === 'rename_google_drive_file' ||
-      proposal.type === 'share_google_drive_file'
+      proposal.type === 'share_google_drive_file' ||
+      proposal.type === 'copy_google_drive_file' ||
+      proposal.type === 'unshare_google_drive_file'
     ) {
       const result = resolveDriveProposal(proposal, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)

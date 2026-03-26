@@ -244,3 +244,48 @@ test('ambiguous gmail matches return an explicit disambiguation shortlist', () =
   assert.equal(result.disambiguations[0]?.source, 'gmail')
   assert.equal(result.disambiguations[0]?.options.length, 2)
 })
+
+test('explicit shortlist selections resolve the chosen candidate deterministically', () => {
+  const result = resolveActionReferencesDetailed({
+    userInput: 'Utilise "Martin Sales | Sales review".\n[[kova-ref:gmail:threadId:thread_martin_sales]]',
+    proposals: [
+      {
+        type: 'archive_gmail_thread',
+        title: 'Archive',
+        description: 'Archive a thread.',
+        parameters: { threadId: 'thread-id' },
+        confidenceScore: 0.8,
+      },
+    ],
+    connectedContextMetadata: {
+      connectedContextSummary: [
+        {
+          source: 'gmail',
+          messages: [
+            {
+              messageId: 'msg_martin_ops',
+              threadId: 'thread_martin_ops',
+              from: 'Martin Ops <martin@ops.com>',
+              fromEmail: 'martin@ops.com',
+              subject: 'Launch plan',
+              snippet: 'Plan de lancement',
+              unread: true,
+            },
+            {
+              messageId: 'msg_martin_sales',
+              threadId: 'thread_martin_sales',
+              from: 'Martin Sales <martin@sales.com>',
+              fromEmail: 'martin@sales.com',
+              subject: 'Sales review',
+              snippet: 'Revue commerciale',
+              unread: false,
+            },
+          ],
+        },
+      ],
+    },
+  })
+
+  assert.equal(result.proposals[0].parameters.threadId, 'thread_martin_sales')
+  assert.equal(result.disambiguations.length, 0)
+})

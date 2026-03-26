@@ -48,7 +48,7 @@ export function prepareActionParameters(
     }
   }
 
-  if (actionType === 'send_email') {
+  if (actionType === 'send_email' || actionType === 'create_gmail_draft') {
     return {
       ...normalized,
       subject: typeof normalized.subject === 'string' ? collapseWhitespace(normalized.subject) : 'Kova message',
@@ -83,6 +83,26 @@ export function prepareActionParameters(
     return {
       ...normalized,
       message: typeof normalized.message === 'string' ? normalizeMultiline(normalized.message) : '',
+    }
+  }
+
+  if (actionType === 'copy_google_drive_file') {
+    return {
+      ...normalized,
+      name: typeof normalized.name === 'string' ? collapseWhitespace(normalized.name) : normalized.name,
+      destinationFolderName:
+        typeof normalized.destinationFolderName === 'string'
+          ? collapseWhitespace(normalized.destinationFolderName)
+          : normalized.destinationFolderName,
+    }
+  }
+
+  if (actionType === 'unshare_google_drive_file') {
+    return {
+      ...normalized,
+      emails: Array.isArray(normalized.emails)
+        ? normalized.emails.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        : [],
     }
   }
 

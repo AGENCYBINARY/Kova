@@ -341,6 +341,26 @@ function encodeMimeHeader(value: string) {
     : plain
 }
 
+function buildPlainTextMimeMessage(params: {
+  to?: string
+  cc?: string
+  subject?: string
+  body?: string
+  headers?: string[]
+}) {
+  return [
+    ...(params.to ? [`To: ${params.to}`] : []),
+    ...(params.cc ? [`Cc: ${params.cc}`] : []),
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: 8bit',
+    'MIME-Version: 1.0',
+    `Subject: ${encodeMimeHeader(params.subject || '')}`,
+    ...(params.headers || []),
+    '',
+    params.body || '',
+  ].join('\r\n')
+}
+
 function extractEmailAddress(value: string) {
   const match = value.match(/<([^>]+)>/)
   if (match?.[1]) {
@@ -484,15 +504,11 @@ export async function sendGmailMessage(accessToken: string, parameters: Record<s
   const recipients = Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')
   const subject = String(parameters.subject || 'Kova message')
   const body = String(parameters.body || '')
-  const mime = [
-    `To: ${recipients}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: 8bit',
-    'MIME-Version: 1.0',
-    `Subject: ${encodeMimeHeader(subject)}`,
-    '',
+  const mime = buildPlainTextMimeMessage({
+    to: recipients,
+    subject,
     body,
-  ].join('\r\n')
+  })
 
   const response = await googleFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
@@ -675,17 +691,21 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
   const nameTokens = normalizedName
     .split(/\s+/)
     .map((token) => token.trim())
-    .filter((token) => token.length >= 2)
+    .filter((token) => token.length >= 3)
 
   const queries = Array.from(new Set([
     `"${name}"`,
     `to:"${name}"`,
     `from:"${name}"`,
-    `cc:"${name}"`,
-    ...nameTokens.map((token) => `from:"${token}"`),
-    ...nameTokens.map((token) => `to:"${token}"`),
+    ...(nameTokens.length <= 2
+      ? nameTokens
+          .filter((token) => token.length >= 4)
+          .flatMap((token) => [`from:"${token}"`, `to:"${token}"`])
+      : []),
   ]))
   const candidateScores = new Map<string, number>()
+  const inspectedMessageIds = new Set<string>()
+  let inspectedCount = 0
 
   for (const query of queries) {
     const listResponse = await googleFetch(
@@ -707,6 +727,15 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
     }
 
     for (const message of listData.messages || []) {
+      if (inspectedCount >= 8) {
+        break
+      }
+      if (inspectedMessageIds.has(message.id)) {
+        continue
+      }
+      inspectedMessageIds.add(message.id)
+      inspectedCount += 1
+
       const detailResponse = await googleFetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc`,
         {
@@ -760,10 +789,18 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
         }
       }
     }
+
+    if (inspectedCount >= 8) {
+      break
+    }
   }
 
   const ranked = Array.from(candidateScores.entries()).sort((left, right) => right[1] - left[1])
-  if (!ranked[0] || ranked[0][1] < 4) {
+  if (!ranked[0] || ranked[0][1] < 6) {
+    return null
+  }
+
+  if (ranked[1] && ranked[0][1] - ranked[1][1] < 2) {
     return null
   }
 
@@ -797,6 +834,61 @@ export async function archiveGmailThread(accessToken: string, parameters: Record
       provider: 'gmail',
       threadId,
       archived: true,
+    },
+  }
+}
+
+export async function setGmailThreadStarredState(
+  accessToken: string,
+  parameters: Record<string, unknown>,
+  options: { starred: boolean }
+): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  if (!threadId) {
+    throw new Error('threadId is required to update a Gmail thread star state.')
+  }
+
+  await modifyGmailThreadLabels(accessToken, threadId, options.starred
+    ? { addLabelIds: ['STARRED'] }
+    : { removeLabelIds: ['STARRED'] })
+
+  return {
+    details: options.starred ? 'Gmail thread starred.' : 'Gmail thread unstarred.',
+    output: {
+      provider: 'gmail',
+      threadId,
+      starred: options.starred,
+    },
+  }
+}
+
+export async function trashGmailThread(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  if (!threadId) {
+    throw new Error('threadId is required to trash a Gmail thread.')
+  }
+
+  const response = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}/trash`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Gmail thread trash failed: ${response.status}`)
+  }
+
+  return {
+    details: 'Gmail thread moved to trash.',
+    output: {
+      provider: 'gmail',
+      threadId,
+      trashed: true,
     },
   }
 }
@@ -895,6 +987,51 @@ export async function forwardGmailMessage(accessToken: string, parameters: Recor
     subject: subject.toLowerCase().startsWith('fwd:') ? subject : `Fwd: ${subject || 'Message'}`,
     body,
   })
+}
+
+export async function createGmailDraft(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const to = Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')
+  const subject = String(parameters.subject || 'Kova draft')
+  const body = String(parameters.body || '')
+
+  const mime = buildPlainTextMimeMessage({
+    to,
+    subject,
+    body,
+  })
+
+  const response = await googleFetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: {
+        raw: toBase64Url(mime),
+      },
+    }),
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+  if (!response.ok) {
+    throw new Error(`Gmail draft creation failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    id?: string
+    message?: { id?: string }
+  }
+
+  return {
+    details: 'Draft created in Gmail.',
+    output: {
+      provider: 'gmail',
+      draftId: data.id || null,
+      messageId: data.message?.id || null,
+      recipients: to,
+      subject,
+    },
+  }
 }
 
 export async function searchGmailMessages(
@@ -1123,17 +1260,15 @@ export async function replyToGmailMessage(accessToken: string, parameters: Recor
     }
   }
 
-  const mime = [
-    `To: ${to}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: 8bit',
-    'MIME-Version: 1.0',
-    `Subject: ${encodeMimeHeader(subject)}`,
-    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
-    ...(references ? [`References: ${references}`] : []),
-    '',
+  const mime = buildPlainTextMimeMessage({
+    to,
+    subject,
     body,
-  ].join('\r\n')
+    headers: [
+      ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
+      ...(references ? [`References: ${references}`] : []),
+    ],
+  })
 
   const response = await googleFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
@@ -1429,32 +1564,36 @@ export async function shareGoogleDriveFile(accessToken: string, parameters: Reco
     throw new Error('emails is required to share a Drive file.')
   }
 
-  await Promise.all(
-    emails.map(async (email) => {
-      const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`)
-      url.searchParams.set('sendNotificationEmail', notify ? 'true' : 'false')
-      if (message) {
-        url.searchParams.set('emailMessage', message)
-      }
+  const grantedRecipients: string[] = []
+  for (const email of emails) {
+    const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`)
+    url.searchParams.set('sendNotificationEmail', notify ? 'true' : 'false')
+    if (message) {
+      url.searchParams.set('emailMessage', message)
+    }
 
-      const response = await googleFetch(url.toString(), {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          role,
-          type: 'user',
-          emailAddress: email,
-        }),
-      }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+    const response = await googleFetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        role,
+        type: 'user',
+        emailAddress: email,
+      }),
+    }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
 
-      if (!response.ok) {
-        throw new Error(`Google Drive share failed: ${response.status}`)
+    if (!response.ok) {
+      if (grantedRecipients.length > 0) {
+        throw new Error(`Google Drive share partially succeeded for ${grantedRecipients.join(', ')} before failing with ${response.status}`)
       }
-    })
-  )
+      throw new Error(`Google Drive share failed: ${response.status}`)
+    }
+
+    grantedRecipients.push(email)
+  }
 
   const file = await getGoogleDriveFile(accessToken, fileId)
   return {
@@ -1464,6 +1603,145 @@ export async function shareGoogleDriveFile(accessToken: string, parameters: Reco
       fileId,
       emails,
       role,
+      name: file.name || null,
+      link: file.webViewLink || null,
+    },
+  }
+}
+
+export async function copyGoogleDriveFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const fileId = String(parameters.fileId || '')
+  const name = typeof parameters.name === 'string' ? parameters.name.trim() : ''
+  const destinationFolderId = typeof parameters.destinationFolderId === 'string' ? parameters.destinationFolderId.trim() : ''
+  const destinationFolderName = typeof parameters.destinationFolderName === 'string' ? parameters.destinationFolderName.trim() : ''
+
+  if (!fileId) {
+    throw new Error('fileId is required to copy a Drive file.')
+  }
+
+  const targetFolderId = destinationFolderId || (destinationFolderName ? await ensureDriveFolder(accessToken, destinationFolderName) : '')
+  const response = await googleFetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/copy?fields=id,name,mimeType,parents,webViewLink`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ...(name ? { name } : {}),
+        ...(targetFolderId ? { parents: [targetFolderId] } : {}),
+      }),
+    },
+    { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Google Drive copy failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    id: string
+    name?: string
+    mimeType?: string
+    parents?: string[]
+    webViewLink?: string
+  }
+
+  return {
+    details: 'Drive file copied.',
+    output: {
+      provider: 'google_drive',
+      sourceFileId: fileId,
+      fileId: data.id,
+      name: data.name || null,
+      mimeType: data.mimeType || null,
+      parentIds: Array.isArray(data.parents) ? data.parents : (targetFolderId ? [targetFolderId] : []),
+      destinationFolderId: targetFolderId || null,
+      destinationFolderName: destinationFolderName || null,
+      link: data.webViewLink || null,
+    },
+  }
+}
+
+async function listGoogleDrivePermissions(accessToken: string, fileId: string) {
+  const response = await googleFetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?fields=permissions(id,emailAddress,role,type)`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Google Drive permissions read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    permissions?: Array<{ id?: string; emailAddress?: string; role?: string; type?: string }>
+  }
+
+  return (data.permissions || []).map((permission) => ({
+    id: permission.id || '',
+    emailAddress: permission.emailAddress || '',
+    role: permission.role || '',
+    type: permission.type || '',
+  }))
+}
+
+export async function unshareGoogleDriveFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const fileId = String(parameters.fileId || '')
+  const emails = Array.isArray(parameters.emails)
+    ? parameters.emails.filter((value): value is string => typeof value === 'string' && value.includes('@'))
+    : []
+
+  if (!fileId) {
+    throw new Error('fileId is required to unshare a Drive file.')
+  }
+
+  if (emails.length === 0) {
+    throw new Error('emails is required to unshare a Drive file.')
+  }
+
+  const permissions = await listGoogleDrivePermissions(accessToken, fileId)
+  const removed: string[] = []
+
+  for (const email of emails) {
+    const permission = permissions.find((entry) => entry.emailAddress.toLowerCase() === email.toLowerCase())
+    if (!permission?.id) {
+      continue
+    }
+
+    const response = await googleFetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}/permissions/${permission.id}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+      { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
+    )
+
+    if (!response.ok) {
+      if (removed.length > 0) {
+        throw new Error(`Google Drive unshare partially succeeded for ${removed.join(', ')} before failing with ${response.status}`)
+      }
+      throw new Error(`Google Drive unshare failed: ${response.status}`)
+    }
+
+    removed.push(email)
+  }
+
+  const file = await getGoogleDriveFile(accessToken, fileId)
+  return {
+    details: removed.length > 0 ? 'Drive access revoked.' : 'No matching Drive permissions were found to revoke.',
+    output: {
+      provider: 'google_drive',
+      fileId,
+      emails: removed,
       name: file.name || null,
       link: file.webViewLink || null,
     },

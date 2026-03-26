@@ -12,11 +12,15 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
   owner: [
     'send_email',
     'reply_to_email',
+    'create_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
     'label_gmail_thread',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
+    'star_gmail_thread',
+    'unstar_gmail_thread',
+    'trash_gmail_thread',
     'create_calendar_event',
     'update_calendar_event',
     'delete_calendar_event',
@@ -27,6 +31,8 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'move_google_drive_file',
     'rename_google_drive_file',
     'share_google_drive_file',
+    'copy_google_drive_file',
+    'unshare_google_drive_file',
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
@@ -34,11 +40,15 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
   admin: [
     'send_email',
     'reply_to_email',
+    'create_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
     'label_gmail_thread',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
+    'star_gmail_thread',
+    'unstar_gmail_thread',
+    'trash_gmail_thread',
     'create_calendar_event',
     'update_calendar_event',
     'delete_calendar_event',
@@ -49,6 +59,8 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'move_google_drive_file',
     'rename_google_drive_file',
     'share_google_drive_file',
+    'copy_google_drive_file',
+    'unshare_google_drive_file',
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
@@ -56,11 +68,15 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
   operator: [
     'send_email',
     'reply_to_email',
+    'create_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
     'label_gmail_thread',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
+    'star_gmail_thread',
+    'unstar_gmail_thread',
+    'trash_gmail_thread',
     'create_calendar_event',
     'update_calendar_event',
     'create_google_doc',
@@ -69,6 +85,8 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'move_google_drive_file',
     'rename_google_drive_file',
     'share_google_drive_file',
+    'copy_google_drive_file',
+    'unshare_google_drive_file',
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
@@ -108,11 +126,15 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
         const allowed = permissions.filter((permission): permission is DashboardAction['type'] =>
           permission === 'send_email' ||
           permission === 'reply_to_email' ||
+          permission === 'create_gmail_draft' ||
           permission === 'forward_email' ||
           permission === 'archive_gmail_thread' ||
           permission === 'label_gmail_thread' ||
           permission === 'mark_gmail_thread_read' ||
           permission === 'mark_gmail_thread_unread' ||
+          permission === 'star_gmail_thread' ||
+          permission === 'unstar_gmail_thread' ||
+          permission === 'trash_gmail_thread' ||
           permission === 'create_calendar_event' ||
           permission === 'update_calendar_event' ||
           permission === 'delete_calendar_event' ||
@@ -123,6 +145,8 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
           permission === 'move_google_drive_file' ||
           permission === 'rename_google_drive_file' ||
           permission === 'share_google_drive_file' ||
+          permission === 'copy_google_drive_file' ||
+          permission === 'unshare_google_drive_file' ||
           permission === 'create_notion_page' ||
           permission === 'update_notion_page' ||
           permission === 'update_notion_page_properties'

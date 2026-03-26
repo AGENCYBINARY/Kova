@@ -46,27 +46,38 @@ export function inferRiskLevel(
   if (
     actionType === 'delete_calendar_event' ||
     actionType === 'delete_google_drive_file' ||
-    actionType === 'share_google_drive_file'
+    actionType === 'share_google_drive_file' ||
+    actionType === 'trash_gmail_thread' ||
+    actionType === 'unshare_google_drive_file'
   ) {
     if (actionType !== 'share_google_drive_file' || hasExternalShareRecipients(parameters)) {
       return 'high'
     }
   }
 
-  if (actionType === 'label_gmail_thread' || actionType === 'move_google_drive_file' || actionType === 'forward_email') {
+  if (
+    actionType === 'label_gmail_thread' ||
+    actionType === 'move_google_drive_file' ||
+    actionType === 'forward_email' ||
+    actionType === 'copy_google_drive_file' ||
+    actionType === 'update_notion_page_properties'
+  ) {
     return 'medium'
   }
 
-  if (actionType === 'archive_gmail_thread' || actionType === 'mark_gmail_thread_read' || actionType === 'mark_gmail_thread_unread') {
+  if (
+    actionType === 'archive_gmail_thread' ||
+    actionType === 'mark_gmail_thread_read' ||
+    actionType === 'mark_gmail_thread_unread' ||
+    actionType === 'star_gmail_thread' ||
+    actionType === 'unstar_gmail_thread' ||
+    actionType === 'create_gmail_draft'
+  ) {
     return 'low'
   }
 
-  if (actionType === 'rename_google_drive_file' || actionType === 'update_notion_page_properties') {
+  if (actionType === 'rename_google_drive_file') {
     return 'medium'
-  }
-
-  if (actionType === 'share_google_drive_file') {
-    return 'high'
   }
 
   if (actionType === 'send_email') {
@@ -102,7 +113,8 @@ export function resolveExecutionDecision(params: {
 
   if (
     params.proposals.some((proposal) =>
-      (proposal.type === 'send_email' || proposal.type === 'forward_email') && hasPlaceholderRecipient(proposal.parameters)
+      (proposal.type === 'send_email' || proposal.type === 'forward_email' || proposal.type === 'create_gmail_draft') &&
+      hasPlaceholderRecipient(proposal.parameters)
     ) ||
     params.proposals.some((proposal) => proposal.type === 'share_google_drive_file' && hasPlaceholderShareRecipient(proposal.parameters))
   ) {

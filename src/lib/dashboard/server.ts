@@ -32,11 +32,15 @@ function targetAppForType(type: DashboardAction['type']): DashboardAction['targe
   if (
     type === 'send_email' ||
     type === 'reply_to_email' ||
+    type === 'create_gmail_draft' ||
     type === 'forward_email' ||
     type === 'archive_gmail_thread' ||
     type === 'label_gmail_thread' ||
     type === 'mark_gmail_thread_read' ||
-    type === 'mark_gmail_thread_unread'
+    type === 'mark_gmail_thread_unread' ||
+    type === 'star_gmail_thread' ||
+    type === 'unstar_gmail_thread' ||
+    type === 'trash_gmail_thread'
   ) {
     return 'Gmail'
   }
@@ -49,7 +53,9 @@ function targetAppForType(type: DashboardAction['type']): DashboardAction['targe
     type === 'delete_google_drive_file' ||
     type === 'move_google_drive_file' ||
     type === 'rename_google_drive_file' ||
-    type === 'share_google_drive_file'
+    type === 'share_google_drive_file' ||
+    type === 'copy_google_drive_file' ||
+    type === 'unshare_google_drive_file'
   ) {
     return 'Google Drive'
   }

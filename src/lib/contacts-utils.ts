@@ -7,6 +7,8 @@ export interface KnownContact {
 const emailAddressPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}/g
 const leadingCorrectionWordsPattern =
   /^(utilise|use|voici|voila|voilà|prends|take|mets|put|c est|c'est|pour|for|adresse|mail|email|le|la|du|de|des)\s+/i
+const noisyContactNamePattern =
+  /\b(utilise|use|voici|voila|voilà|prends|take|mets|put|mail|email|adresse|correcte?|bonne?|mauvaise?|remplace|plutot|plutôt|c est|c'est)\b/i
 
 export function normalizeContactValue(value: string) {
   return value
@@ -37,6 +39,10 @@ function sanitizeContactNameCandidate(value: string) {
 
   const words = cleaned.split(' ').filter(Boolean)
   if (words.length === 1 && words[0].length < 2) {
+    return null
+  }
+
+  if (words.length > 4 || noisyContactNamePattern.test(cleaned)) {
     return null
   }
 

@@ -3,6 +3,7 @@
 import { useUser } from '@clerk/nextjs'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageBubble } from '@/components/chat/MessageBubble'
+import { ChatDisambiguationCard, type ChatDisambiguation } from '@/components/chat/ChatDisambiguationCard'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { ActionProposalCard } from '@/components/actions/ActionProposalCard'
 import { useLang } from '@/lib/lang-context'
@@ -12,6 +13,9 @@ interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  metadata?: {
+    disambiguations?: ChatDisambiguation[]
+  }
 }
 
 interface ActionProposal {
@@ -31,6 +35,22 @@ interface ChatPageClientProps {
 
 const WELCOME_FR = "Je suis votre opérateur Kova. Demandez-moi de rédiger des emails, planifier des réunions, travailler dans Notion, créer des Google Docs ou enregistrer des fichiers sur Google Drive. Je préparerai l'action pour approbation avant exécution."
 const WELCOME_EN = "I'm your Kova operator. Ask me to draft emails, schedule meetings, work in Notion, create Google Docs, or save files to Google Drive. I will prepare the action for approval before execution."
+
+function buildDisambiguationReply(
+  item: ChatDisambiguation,
+  option: ChatDisambiguation['options'][number],
+  lang: 'fr' | 'en'
+) {
+  const displayContent =
+    lang === 'en'
+      ? `Use "${option.label}".`
+      : `Utilise "${option.label}".`
+  const requestContent = `${displayContent}\n[[kova-ref:${item.source}:${item.field}:${option.id}]]`
+  return {
+    displayContent,
+    requestContent,
+  }
+}
 
 export function ChatPageClient({ initialMessages, initialProposals }: ChatPageClientProps) {
   const { user } = useUser()
@@ -69,9 +89,13 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
     ])
   }, [t])
 
-  const handleSend = useCallback(async (content: string, executionMode: ExecutionMode) => {
-    const userMessage: Message = { id: Date.now().toString(), role: 'user', content }
-    setPreferredExecutionMode(executionMode)
+  const submitTurn = useCallback(async (params: {
+    displayContent: string
+    requestContent?: string
+    executionMode: ExecutionMode
+  }) => {
+    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: params.displayContent }
+    setPreferredExecutionMode(params.executionMode)
     setMessages((previous) => [...previous, userMessage])
     setIsLoading(true)
     setIsStreaming(true)
@@ -80,7 +104,7 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, executionMode }),
+        body: JSON.stringify({ content: params.requestContent || params.displayContent, executionMode: params.executionMode }),
       })
 
       if (!response.ok) {
@@ -129,8 +153,8 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
             id: `review-${Date.now()}`,
             role: 'assistant',
             content:
-              (data.effectiveExecutionMode || executionMode) === 'ask'
-                ? executionMode === 'auto'
+              (data.effectiveExecutionMode || params.executionMode) === 'ask'
+                ? params.executionMode === 'auto'
                   ? lang === 'en'
                     ? 'I prepared the action for review because a manual check is still required.'
                     : "J'ai préparé l'action pour révision car une vérification manuelle est encore requise."
@@ -154,6 +178,22 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
       setIsStreaming(false)
     }
   }, [appendSystemError, lang, t])
+
+  const handleSend = useCallback(async (content: string, executionMode: ExecutionMode) => {
+    await submitTurn({
+      displayContent: content,
+      executionMode,
+    })
+  }, [submitTurn])
+
+  const handleDisambiguationSelect = useCallback(async (item: ChatDisambiguation, option: ChatDisambiguation['options'][number]) => {
+    const reply = buildDisambiguationReply(item, option, lang)
+    await submitTurn({
+      displayContent: reply.displayContent,
+      requestContent: reply.requestContent,
+      executionMode: preferredExecutionMode,
+    })
+  }, [lang, preferredExecutionMode, submitTurn])
 
   const handleApprove = useCallback(async (id: string) => {
     setIsLoading(true)
@@ -216,13 +256,24 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
       </header>
       <div className={styles.messages}>
         {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            role={message.role}
-            content={message.content}
-            userFallback={userFallback}
-            isStreaming={isStreaming && message.role === 'assistant' && message.id === messages[messages.length - 1]?.id}
-          />
+          <div key={message.id}>
+            <MessageBubble
+              role={message.role}
+              content={message.content}
+              userFallback={userFallback}
+              isStreaming={isStreaming && message.role === 'assistant' && message.id === messages[messages.length - 1]?.id}
+            />
+            {message.role === 'assistant' && Array.isArray(message.metadata?.disambiguations)
+              ? message.metadata?.disambiguations.map((item, index) => (
+                  <ChatDisambiguationCard
+                    key={`${message.id}-${item.field}-${index}`}
+                    item={item}
+                    disabled={isLoading}
+                    onSelect={handleDisambiguationSelect}
+                  />
+                ))
+              : null}
+          </div>
         ))}
         {isLoading ? <MessageBubble role="assistant" content="" thinking userFallback={userFallback} /> : null}
         {proposals.map((proposal) => (

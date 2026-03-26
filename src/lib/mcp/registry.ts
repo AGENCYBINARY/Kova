@@ -4,6 +4,8 @@ import type { DashboardAction } from '@/lib/dashboard-data'
 import { prepareActionParameters } from '@/lib/agent/data-prep'
 import {
   archiveGmailThread,
+  copyGoogleDriveFile,
+  createGmailDraft,
   createGoogleCalendarEvent,
   createGoogleDoc,
   createGoogleDriveFile,
@@ -17,8 +19,11 @@ import {
   readGmailMessageBody,
   replyToGmailMessage,
   sendGmailMessage,
+  setGmailThreadStarredState,
   setGmailThreadReadState,
   shareGoogleDriveFile,
+  trashGmailThread,
+  unshareGoogleDriveFile,
   updateGoogleCalendarEvent,
   updateGoogleDoc,
 } from '@/lib/integrations/google'
@@ -87,6 +92,12 @@ const replyToEmailSchema = z.object({
   body: z.string().min(1),
 }).passthrough()
 
+const createGmailDraftSchema = z.object({
+  to: z.array(z.string().email()).min(1),
+  subject: z.string().min(1),
+  body: z.string().min(1),
+}).passthrough()
+
 const forwardEmailSchema = z.object({
   messageId: z.string().min(1).optional(),
   threadId: z.string().min(1).optional(),
@@ -141,6 +152,18 @@ const shareGoogleDriveFileSchema = z.object({
   role: z.enum(['reader', 'commenter', 'writer']).optional(),
   notify: z.boolean().optional(),
   message: z.string().optional(),
+}).passthrough()
+
+const copyGoogleDriveFileSchema = z.object({
+  fileId: z.string().min(1),
+  name: z.string().optional(),
+  destinationFolderId: z.string().min(1).optional(),
+  destinationFolderName: z.string().min(1).optional(),
+}).passthrough()
+
+const unshareGoogleDriveFileSchema = z.object({
+  fileId: z.string().min(1),
+  emails: z.array(z.string().email()).min(1),
 }).passthrough()
 
 const updateNotionPagePropertiesSchema = z.object({
@@ -226,6 +249,33 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'calendar')
       const accessToken = await getValidGoogleAccessToken(integration)
       return createGoogleCalendarEvent(accessToken, input)
+    },
+  },
+  {
+    name: 'gmail.create_draft',
+    actionType: 'create_gmail_draft',
+    provider: 'gmail',
+    title: 'Create Gmail draft',
+    description: 'Create a Gmail draft without sending it.',
+    version: '2026-03-26',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        to: { type: 'array', items: { type: 'string', format: 'email' } },
+        subject: { type: 'string' },
+        body: { type: 'string' },
+      },
+      required: ['to', 'subject', 'body'],
+      additionalProperties: true,
+    },
+    inputSchema: createGmailDraftSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return createGmailDraft(accessToken, input)
     },
   },
   {
@@ -355,6 +405,81 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'gmail')
       const accessToken = await getValidGoogleAccessToken(integration)
       return setGmailThreadReadState(accessToken, input, { unread: true })
+    },
+  },
+  {
+    name: 'gmail.star_thread',
+    actionType: 'star_gmail_thread',
+    provider: 'gmail',
+    title: 'Star Gmail thread',
+    description: 'Star a Gmail thread.',
+    version: '2026-03-26',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+      },
+      required: ['threadId'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailThreadSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return setGmailThreadStarredState(accessToken, input, { starred: true })
+    },
+  },
+  {
+    name: 'gmail.unstar_thread',
+    actionType: 'unstar_gmail_thread',
+    provider: 'gmail',
+    title: 'Unstar Gmail thread',
+    description: 'Remove the star from a Gmail thread.',
+    version: '2026-03-26',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+      },
+      required: ['threadId'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailThreadSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return setGmailThreadStarredState(accessToken, input, { starred: false })
+    },
+  },
+  {
+    name: 'gmail.trash_thread',
+    actionType: 'trash_gmail_thread',
+    provider: 'gmail',
+    title: 'Trash Gmail thread',
+    description: 'Move a Gmail thread to trash.',
+    version: '2026-03-26',
+    riskLevel: 'high',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+      },
+      required: ['threadId'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailThreadSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return trashGmailThread(accessToken, input)
     },
   },
   {
@@ -519,6 +644,60 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'google_drive')
       const accessToken = await getValidGoogleAccessToken(integration)
       return shareGoogleDriveFile(accessToken, input)
+    },
+  },
+  {
+    name: 'drive.copy_file',
+    actionType: 'copy_google_drive_file',
+    provider: 'google_drive',
+    title: 'Copy Drive file',
+    description: 'Copy an existing Google Drive file and optionally place the copy in another folder.',
+    version: '2026-03-26',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+        name: { type: 'string' },
+        destinationFolderId: { type: 'string' },
+        destinationFolderName: { type: 'string' },
+      },
+      required: ['fileId'],
+      additionalProperties: true,
+    },
+    inputSchema: copyGoogleDriveFileSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return copyGoogleDriveFile(accessToken, input)
+    },
+  },
+  {
+    name: 'drive.unshare_file',
+    actionType: 'unshare_google_drive_file',
+    provider: 'google_drive',
+    title: 'Unshare Drive file',
+    description: 'Remove access to a Google Drive file or folder for one or more recipients.',
+    version: '2026-03-26',
+    riskLevel: 'high',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+        emails: { type: 'array', items: { type: 'string', format: 'email' } },
+      },
+      required: ['fileId', 'emails'],
+      additionalProperties: true,
+    },
+    inputSchema: unshareGoogleDriveFileSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return unshareGoogleDriveFile(accessToken, input)
     },
   },
   {

@@ -25,7 +25,11 @@ async function rememberSuccessfulEmailRecipients(params: {
   action: PersistedActionRecord
   parameters: Record<string, unknown>
 }) {
-  if (params.action.type !== 'send_email' && params.action.type !== 'forward_email') {
+  if (
+    params.action.type !== 'send_email' &&
+    params.action.type !== 'forward_email' &&
+    params.action.type !== 'create_gmail_draft'
+  ) {
     return
   }
 

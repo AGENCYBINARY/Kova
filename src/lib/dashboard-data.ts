@@ -13,11 +13,15 @@ export interface DashboardAction {
   type:
     | 'send_email'
     | 'reply_to_email'
+    | 'create_gmail_draft'
     | 'forward_email'
     | 'archive_gmail_thread'
     | 'label_gmail_thread'
     | 'mark_gmail_thread_read'
     | 'mark_gmail_thread_unread'
+    | 'star_gmail_thread'
+    | 'unstar_gmail_thread'
+    | 'trash_gmail_thread'
     | 'create_calendar_event'
     | 'update_calendar_event'
     | 'delete_calendar_event'
@@ -31,6 +35,8 @@ export interface DashboardAction {
     | 'move_google_drive_file'
     | 'rename_google_drive_file'
     | 'share_google_drive_file'
+    | 'copy_google_drive_file'
+    | 'unshare_google_drive_file'
   title: string
   description: string
   parameters: Record<string, unknown>

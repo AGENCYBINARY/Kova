@@ -22,6 +22,7 @@ test('looksLikeContactCorrection detects recipient correction phrasing', () => {
 
 test('extractNameNearEmail and extractRecipientName capture likely recipient names', () => {
   assert.equal(extractNameNearEmail('utilise Marie Dupont marie@client.com', 'marie@client.com'), 'Marie Dupont')
+  assert.equal(extractNameNearEmail("non c'est pas ce mail, utilise marie@client.com", 'marie@client.com'), null)
   assert.equal(extractRecipientName('Envoie un mail à Marie Dupont pour le point de demain'), 'Marie Dupont')
 })
 

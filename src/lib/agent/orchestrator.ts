@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { analyzeUserRequest, isLowValueAssistantResponse } from '@/lib/ai/client'
 import {
@@ -27,6 +28,7 @@ import { findGoogleContactEmail, getValidGoogleAccessToken } from '@/lib/integra
 import { buildConnectedContextFallbackResponse, buildDeterministicConnectedResponse } from '@/lib/workspace-context/fallback'
 import { resolveConnectedWorkspaceContext } from '@/lib/workspace-context/service'
 import type { ConnectedContextSeed, ConnectedContextSource } from '@/lib/workspace-context/intents'
+import type { ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
 
 export type ChatExecutionMode = 'ask' | 'auto'
 
@@ -49,6 +51,10 @@ interface PendingActionRecord {
   parameters: Record<string, unknown>
 }
 
+interface ChatMessageMetadata {
+  disambiguations?: ReferenceDisambiguation[]
+}
+
 interface CorrectedContactResult {
   correctedContact: {
     name: string
@@ -69,6 +75,10 @@ function asRecord(value: unknown): Record<string, unknown> {
   }
 
   return {}
+}
+
+function toJsonValue(value: Record<string, unknown>) {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
 export async function getChatPageData(context: ChatContext) {
@@ -99,6 +109,7 @@ export async function getChatPageData(context: ChatContext) {
             id: message.id,
             role: mapChatRole(message.role),
             content: message.content,
+            metadata: asRecord(message.metadata) as ChatMessageMetadata,
           }))
         : [buildWelcomeMessage()],
     proposals: [...actions].reverse().map((action) => ({
@@ -242,6 +253,7 @@ export async function orchestrateChatTurn(params: {
       userMessage,
       assistantMessage,
       proposals: [correctedContact.updatedPendingAction],
+      disambiguations: [],
       executionMessages: [],
       effectiveExecutionMode: 'ask',
       executionModeReason: 'recipient_correction',
@@ -284,6 +296,7 @@ export async function orchestrateChatTurn(params: {
       connectedContextMetadata: connectedContextResult?.metadata,
     }
   )
+  const agentDisambiguations = agentResult.disambiguations || []
 
   const executionDecision = resolveExecutionDecision({
     requestedMode: params.executionMode,
@@ -295,6 +308,12 @@ export async function orchestrateChatTurn(params: {
     assistantProfile,
   })
   const effectiveExecutionMode = executionDecision.effectiveMode
+  const assistantMetadata = toJsonValue({
+    proposalCount: agentResult.proposals.length,
+    workspaceRole: governance.role,
+    ...(agentDisambiguations.length > 0 ? { disambiguations: agentDisambiguations } : {}),
+    ...(connectedContextResult?.metadata || {}),
+  })
 
   const [userMessage, assistantMessage] = await prisma.$transaction([
     prisma.message.create({
@@ -309,11 +328,7 @@ export async function orchestrateChatTurn(params: {
       data: {
         content: agentResult.response,
         role: 'assistant',
-        metadata: {
-          proposalCount: agentResult.proposals.length,
-          workspaceRole: governance.role,
-          ...(connectedContextResult?.metadata || {}),
-        },
+        metadata: assistantMetadata,
         userId,
         workspaceId,
       },
@@ -468,6 +483,7 @@ export async function orchestrateChatTurn(params: {
             parameters: createdAction.parameters,
           }))
         : [],
+    disambiguations: agentDisambiguations,
     executionMessages,
     effectiveExecutionMode: autoExecutionFailed ? 'ask' : effectiveExecutionMode,
     executionModeReason: autoExecutionFailed ? 'auto_execution_failed' : executionDecision.reason,
@@ -508,7 +524,11 @@ async function resolveCorrectedContactFromChatInput(params: {
 
   const email = emails[0]
   const latestPendingEmailAction = params.pendingActions.find(
-    (action) => action.type === 'send_email' || action.type === 'reply_to_email' || action.type === 'forward_email'
+    (action) =>
+      action.type === 'send_email' ||
+      action.type === 'create_gmail_draft' ||
+      action.type === 'reply_to_email' ||
+      action.type === 'forward_email'
   )
   const explicitNameFromMessage =
     extractRecipientName(params.content) ||
@@ -533,6 +553,7 @@ async function resolveCorrectedContactFromChatInput(params: {
   if (!name) {
     return null
   }
+  const shouldPersistContact = Boolean(explicitNameFromMessage || existingByEmail?.name)
 
   const correctedContact = {
     name,
@@ -549,12 +570,16 @@ async function resolveCorrectedContactFromChatInput(params: {
     const updatedTitle =
       latestPendingEmailAction.type === 'reply_to_email'
         ? `Reply to ${name}`
+        : latestPendingEmailAction.type === 'create_gmail_draft'
+          ? `Create draft for ${name}`
         : latestPendingEmailAction.type === 'forward_email'
           ? `Forward email to ${name}`
           : `Send email to ${name}`
     const updatedDescription =
       latestPendingEmailAction.type === 'reply_to_email'
         ? `Prepare a reply to ${name} in the relevant Gmail thread.`
+        : latestPendingEmailAction.type === 'create_gmail_draft'
+          ? `Prepare a Gmail draft for ${name}.`
         : latestPendingEmailAction.type === 'forward_email'
           ? `Forward the relevant Gmail message to ${name}.`
           : `Prepare and send an email to ${name} through Gmail.`
@@ -568,13 +593,15 @@ async function resolveCorrectedContactFromChatInput(params: {
       },
     })
 
-    await rememberContact({
-      userId: params.userId,
-      workspaceId: params.workspaceId,
-      email,
-      name,
-      aliases: explicitNameFromMessage ? [explicitNameFromMessage] : [],
-    })
+    if (shouldPersistContact) {
+      await rememberContact({
+        userId: params.userId,
+        workspaceId: params.workspaceId,
+        email,
+        name,
+        aliases: explicitNameFromMessage ? [explicitNameFromMessage] : [],
+      })
+    }
 
     return {
       correctedContact,

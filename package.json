@@ -11,6 +11,7 @@
     "mcp:test": "node scripts/test-mcp.mjs",
     "integration:smoke": "tsx scripts/integration-smoke.ts",
     "integration:live": "tsx scripts/integration-live-runner.ts",
+    "integration:live:setup": "KOVA_LIVE_WRITE_ENV=true tsx scripts/integration-live-runner.ts --setup-only",
     "mcp:standalone": "tsx src/lib/mcp/standalone-server.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

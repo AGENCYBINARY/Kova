@@ -7,18 +7,15 @@ import {
   searchGoogleDriveFiles,
 } from '../src/lib/integrations/google'
 import { getValidNotionAccessToken, searchNotionPages } from '../src/lib/integrations/notion'
-
-function requireEnv(name: string) {
-  const value = process.env[name]
-  if (!value) {
-    throw new Error(`${name} is required.`)
-  }
-  return value
-}
+import { resolveLiveTarget } from './live-targets'
 
 async function main() {
-  const workspaceId = requireEnv('KOVA_SMOKE_WORKSPACE_ID')
-  const userId = requireEnv('KOVA_SMOKE_USER_ID')
+  const target = await resolveLiveTarget()
+  const { workspaceId, userId } = target
+
+  console.log(
+    `Using ${target.autodiscovered ? 'autodiscovered' : 'configured'} live target ${workspaceId}/${userId} (${target.providers.join(', ') || 'no providers'})`
+  )
 
   const integrations = await prisma.integration.findMany({
     where: {

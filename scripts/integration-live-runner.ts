@@ -1,3 +1,4 @@
+import type { Integration } from '@prisma/client'
 import { prisma } from '../src/lib/db/prisma'
 import { getAssistantProfile } from '../src/lib/assistant/store'
 import { runAgentTurn } from '../src/lib/agent/v1'
@@ -15,19 +16,10 @@ import {
   searchNotionDatabases,
   searchNotionPages,
 } from '../src/lib/integrations/notion'
+import { getOptionalEnv, persistLiveTarget, resolveLiveTarget } from './live-targets'
 
-function requireEnv(name: string) {
-  const value = process.env[name]
-  if (!value) {
-    throw new Error(`${name} is required.`)
-  }
-  return value
-}
-
-function optionalEnv(name: string) {
-  const value = process.env[name]
-  return value && value.trim() ? value.trim() : null
-}
+const SUPPORTED_INTEGRATIONS = ['gmail', 'calendar', 'google_docs', 'google_drive', 'notion'] as const
+const setupOnly = process.argv.includes('--setup-only')
 
 async function previewPrompt(params: {
   workspaceId: string
@@ -67,25 +59,138 @@ async function previewPrompt(params: {
     prompt: params.prompt,
     response: result.response,
     proposals: result.proposals,
+    disambiguations: result.disambiguations || [],
   }
 }
 
+async function resolveScenarioDefaults(params: {
+  workspaceId: string
+  userId: string
+  integrations: Array<Pick<Integration, 'id' | 'type' | 'accessToken' | 'refreshToken' | 'expiresAt' | 'metadata'>>
+}) {
+  const byType = new Map<string, (typeof params.integrations)[number]>()
+  for (const integration of params.integrations) {
+    if (!byType.has(integration.type)) {
+      byType.set(integration.type, integration)
+    }
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: params.userId },
+    select: { email: true },
+  })
+
+  const knownContacts = await listKnownContacts({
+    workspaceId: params.workspaceId,
+    userId: params.userId,
+  })
+
+  let gmailQuery = getOptionalEnv('KOVA_LIVE_GMAIL_QUERY')
+  let driveQuery = getOptionalEnv('KOVA_LIVE_DRIVE_QUERY')
+  let notionPageQuery = getOptionalEnv('KOVA_LIVE_NOTION_PAGE_QUERY')
+  let notionDatabaseQuery = getOptionalEnv('KOVA_LIVE_NOTION_DATABASE_QUERY')
+  let gmailThreadId: string | null = null
+  let gmailMessageId: string | null = null
+  let driveFileId: string | null = null
+  let notionPageId: string | null = null
+  let notionDatabaseId: string | null = null
+
+  const gmail = byType.get('gmail')
+  if (gmail && !gmailQuery) {
+    const accessToken = await getValidGoogleAccessToken(gmail)
+    const messages = await searchGmailMessages(accessToken, { query: 'in:inbox', maxResults: 5 })
+    gmailQuery = messages[0]?.subject || messages[0]?.from || null
+    gmailThreadId = messages[0]?.threadId || null
+    gmailMessageId = messages[0]?.id || null
+  }
+
+  const drive = byType.get('google_drive')
+  if (drive && !driveQuery) {
+    const accessToken = await getValidGoogleAccessToken(drive)
+    const files = await searchGoogleDriveFiles(accessToken, { maxResults: 5 })
+    driveQuery = files[0]?.name || null
+    driveFileId = files[0]?.id || null
+  }
+
+  const notion = byType.get('notion')
+  if (notion && (!notionPageQuery || !notionDatabaseQuery)) {
+    const accessToken = getValidNotionAccessToken(notion)
+    if (!notionPageQuery) {
+      const pages = await searchNotionPages(accessToken, { maxResults: 5 })
+      notionPageQuery = pages[0]?.title || null
+      notionPageId = pages[0]?.id || null
+    }
+    if (!notionDatabaseQuery) {
+      const databases = await searchNotionDatabases(accessToken, { maxResults: 5 })
+      notionDatabaseQuery = databases[0]?.title || null
+      notionDatabaseId = databases[0]?.id || null
+    }
+  }
+
+  return {
+    gmailQuery,
+    gmailThreadId,
+    gmailMessageId,
+    gmailLabel: getOptionalEnv('KOVA_LIVE_GMAIL_LABEL') || 'À traiter',
+    forwardTo: getOptionalEnv('KOVA_LIVE_FORWARD_TO') || knownContacts[0]?.email || user?.email || null,
+    driveQuery,
+    driveFileId,
+    driveFolder: getOptionalEnv('KOVA_LIVE_DRIVE_FOLDER') || 'Kova Live Tests',
+    driveShareTo: getOptionalEnv('KOVA_LIVE_DRIVE_SHARE_TO') || knownContacts[0]?.email || user?.email || null,
+    notionPageQuery,
+    notionPageId,
+    notionDatabaseQuery,
+    notionDatabaseId,
+  }
+}
+
+function withReference(prompt: string, reference?: {
+  source: 'gmail' | 'google_drive' | 'notion'
+  field: string
+  id: string | null
+}) {
+  if (!reference?.id) {
+    return prompt
+  }
+
+  return `${prompt}\n[[kova-ref:${reference.source}:${reference.field}:${reference.id}]]`
+}
+
 async function main() {
-  const workspaceId = requireEnv('KOVA_SMOKE_WORKSPACE_ID')
-  const userId = requireEnv('KOVA_SMOKE_USER_ID')
   const execute = process.env.KOVA_LIVE_EXECUTE === 'true'
+  const target = await resolveLiveTarget()
+  if (setupOnly || process.env.KOVA_LIVE_WRITE_ENV === 'true') {
+    await persistLiveTarget({
+      workspaceId: target.workspaceId,
+      userId: target.userId,
+      providers: target.providers,
+    })
+  }
+
+  console.log(`LIVE_TARGET ${target.autodiscovered ? 'discovered' : 'env'} workspace=${target.workspaceId} user=${target.userId}`)
 
   const integrations = await prisma.integration.findMany({
     where: {
-      workspaceId,
-      userId,
+      workspaceId: target.workspaceId,
+      userId: target.userId,
       status: 'connected',
       type: {
-        in: ['gmail', 'calendar', 'google_docs', 'google_drive', 'notion'],
+        in: [...SUPPORTED_INTEGRATIONS],
       },
     },
     orderBy: [{ updatedAt: 'desc' }],
   })
+
+  const defaults = await resolveScenarioDefaults({
+    workspaceId: target.workspaceId,
+    userId: target.userId,
+    integrations,
+  })
+
+  if (setupOnly) {
+    console.log('LIVE_SETUP_READY')
+    return
+  }
 
   const byType = new Map<string, (typeof integrations)[number]>()
   for (const integration of integrations) {
@@ -97,51 +202,47 @@ async function main() {
   const results: Array<{ name: string; ok: boolean; detail: string }> = []
   const scenarios: Array<{ name: string; prompt: string }> = []
 
-  const gmailQuery = optionalEnv('KOVA_LIVE_GMAIL_QUERY')
-  const gmailLabel = optionalEnv('KOVA_LIVE_GMAIL_LABEL') || 'À traiter'
-  const forwardTo = optionalEnv('KOVA_LIVE_FORWARD_TO')
-
-  if (gmailQuery) {
-    scenarios.push({ name: 'gmail-archive-preview', prompt: `Archive le mail Gmail ${gmailQuery}` })
-    scenarios.push({ name: 'gmail-label-preview', prompt: `Ajoute le label "${gmailLabel}" au mail Gmail ${gmailQuery}` })
-    scenarios.push({ name: 'gmail-unread-preview', prompt: `Marque le mail Gmail ${gmailQuery} comme non lu` })
+  if (defaults.gmailQuery) {
+    scenarios.push({ name: 'gmail-archive-preview', prompt: withReference(`Archive le thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
+    scenarios.push({ name: 'gmail-label-preview', prompt: withReference(`Ajoute le label "${defaults.gmailLabel}" au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
+    scenarios.push({ name: 'gmail-unread-preview', prompt: withReference(`Marque le thread Gmail "${defaults.gmailQuery}" comme non lu`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
+    scenarios.push({ name: 'gmail-star-preview', prompt: withReference(`Ajoute une étoile au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
+    scenarios.push({ name: 'gmail-trash-preview', prompt: withReference(`Mets le thread Gmail "${defaults.gmailQuery}" dans la corbeille`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
   }
 
-  if (gmailQuery && forwardTo) {
-    scenarios.push({ name: 'gmail-forward-preview', prompt: `Transfère le mail Gmail ${gmailQuery} à ${forwardTo}` })
+  if (defaults.gmailQuery && defaults.forwardTo) {
+    scenarios.push({ name: 'gmail-forward-preview', prompt: withReference(`Transfère le mail Gmail "${defaults.gmailQuery}" à ${defaults.forwardTo}`, { source: 'gmail', field: 'messageId', id: defaults.gmailMessageId }) })
+    scenarios.push({ name: 'gmail-draft-preview', prompt: `Prépare un brouillon Gmail pour ${defaults.forwardTo} à propos de "${defaults.gmailQuery}"` })
   }
 
-  const driveQuery = optionalEnv('KOVA_LIVE_DRIVE_QUERY')
-  const driveFolder = optionalEnv('KOVA_LIVE_DRIVE_FOLDER') || 'Kova Live Tests'
-  const driveShareTo = optionalEnv('KOVA_LIVE_DRIVE_SHARE_TO')
-  if (driveQuery) {
-    scenarios.push({ name: 'drive-move-preview', prompt: `Déplace le fichier Drive ${driveQuery} dans ${driveFolder}` })
-    scenarios.push({ name: 'drive-rename-preview', prompt: `Renomme le fichier Drive ${driveQuery} en "kova-live-renamed"` })
+  if (defaults.driveQuery) {
+    scenarios.push({ name: 'drive-move-preview', prompt: withReference(`Déplace le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
+    scenarios.push({ name: 'drive-rename-preview', prompt: withReference(`Renomme le fichier Google Drive nommé "${defaults.driveQuery}" en "kova-live-renamed"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
+    scenarios.push({ name: 'drive-copy-preview', prompt: withReference(`Duplique le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
   }
-  if (driveQuery && driveShareTo) {
-    scenarios.push({ name: 'drive-share-preview', prompt: `Partage le fichier Drive ${driveQuery} avec ${driveShareTo}` })
+  if (defaults.driveQuery && defaults.driveShareTo) {
+    scenarios.push({ name: 'drive-share-preview', prompt: withReference(`Partage le fichier Google Drive sélectionné avec ${defaults.driveShareTo}`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
+    scenarios.push({ name: 'drive-unshare-preview', prompt: withReference(`Retire l'accès au fichier Google Drive sélectionné pour ${defaults.driveShareTo}`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
   }
 
-  const notionPageQuery = optionalEnv('KOVA_LIVE_NOTION_PAGE_QUERY')
-  const notionDatabaseQuery = optionalEnv('KOVA_LIVE_NOTION_DATABASE_QUERY')
-  if (notionPageQuery) {
-    scenarios.push({ name: 'notion-properties-preview', prompt: `Mets à jour le statut de la page Notion ${notionPageQuery} à Done` })
+  if (defaults.notionPageQuery) {
+    scenarios.push({ name: 'notion-properties-preview', prompt: withReference(`Mets à jour le statut de la page Notion "${defaults.notionPageQuery}" à Done`, { source: 'notion', field: 'pageId', id: defaults.notionPageId }) })
   }
-  if (notionDatabaseQuery) {
-    scenarios.push({ name: 'notion-database-preview', prompt: `Crée une page Notion dans la base ${notionDatabaseQuery} avec le titre Live Runner` })
+  if (defaults.notionDatabaseQuery) {
+    scenarios.push({ name: 'notion-database-preview', prompt: withReference(`Crée une page dans la base de données Notion sélectionnée avec le titre "Live Runner"`, { source: 'notion', field: 'parentDatabaseId', id: defaults.notionDatabaseId }) })
   }
 
   for (const scenario of scenarios) {
     try {
       const preview = await previewPrompt({
-        workspaceId,
-        userId,
+        workspaceId: target.workspaceId,
+        userId: target.userId,
         prompt: scenario.prompt,
       })
       results.push({
         name: scenario.name,
         ok: true,
-        detail: `${preview.proposals.length} proposal(s) | ${preview.response}`,
+        detail: `${preview.proposals.length} proposal(s) | types=${preview.proposals.map((proposal) => proposal.type).join(', ') || 'none'} | ${(preview.disambiguations || []).length} clarification(s) | ${preview.response}`,
       })
     } catch (error) {
       results.push({
@@ -154,17 +255,17 @@ async function main() {
 
   if (execute) {
     const gmail = byType.get('gmail')
-    if (gmail && gmailQuery) {
+    if (gmail && defaults.gmailQuery) {
       try {
         const accessToken = await getValidGoogleAccessToken(gmail)
-        const messages = await searchGmailMessages(accessToken, { query: gmailQuery, maxResults: 2 })
+        const messages = await searchGmailMessages(accessToken, { query: defaults.gmailQuery, maxResults: 2 })
         const firstMessage = messages[0]
         if (firstMessage?.threadId) {
           await executeAgentToolRequest({
             actionType: 'archive_gmail_thread',
             parameters: { threadId: firstMessage.threadId },
             requireApproval: false,
-            context: { workspaceId, userId },
+            context: { workspaceId: target.workspaceId, userId: target.userId },
           })
           results.push({ name: 'gmail-archive-execute', ok: true, detail: `thread ${firstMessage.threadId} archived` })
         }
@@ -174,17 +275,17 @@ async function main() {
     }
 
     const drive = byType.get('google_drive')
-    if (drive && driveQuery) {
+    if (drive && defaults.driveQuery) {
       try {
         const accessToken = await getValidGoogleAccessToken(drive)
-        const files = await searchGoogleDriveFiles(accessToken, { query: driveQuery, maxResults: 2 })
+        const files = await searchGoogleDriveFiles(accessToken, { query: defaults.driveQuery, maxResults: 2 })
         const firstFile = files[0]
         if (firstFile?.id) {
           await executeAgentToolRequest({
             actionType: 'rename_google_drive_file',
             parameters: { fileId: firstFile.id, name: `kova-live-${Date.now()}` },
             requireApproval: false,
-            context: { workspaceId, userId },
+            context: { workspaceId: target.workspaceId, userId: target.userId },
           })
           results.push({ name: 'drive-rename-execute', ok: true, detail: `file ${firstFile.id} renamed` })
         }
@@ -194,10 +295,10 @@ async function main() {
     }
 
     const notion = byType.get('notion')
-    if (notion && notionDatabaseQuery) {
+    if (notion && defaults.notionDatabaseQuery) {
       try {
         const accessToken = getValidNotionAccessToken(notion)
-        const databases = await searchNotionDatabases(accessToken, { query: notionDatabaseQuery, maxResults: 2 })
+        const databases = await searchNotionDatabases(accessToken, { query: defaults.notionDatabaseQuery, maxResults: 2 })
         const firstDatabase = databases[0]
         if (firstDatabase?.id) {
           await executeAgentToolRequest({
@@ -211,7 +312,7 @@ async function main() {
               },
             },
             requireApproval: false,
-            context: { workspaceId, userId },
+            context: { workspaceId: target.workspaceId, userId: target.userId },
           })
           results.push({ name: 'notion-database-execute', ok: true, detail: `page created in database ${firstDatabase.id}` })
         }
@@ -220,10 +321,10 @@ async function main() {
       }
     }
 
-    if (notion && notionPageQuery) {
+    if (notion && defaults.notionPageQuery) {
       try {
         const accessToken = getValidNotionAccessToken(notion)
-        const pages = await searchNotionPages(accessToken, { query: notionPageQuery, maxResults: 2 })
+        const pages = await searchNotionPages(accessToken, { query: defaults.notionPageQuery, maxResults: 2 })
         const firstPage = pages[0]
         if (firstPage?.id) {
           await executeAgentToolRequest({
@@ -235,7 +336,7 @@ async function main() {
               },
             },
             requireApproval: false,
-            context: { workspaceId, userId },
+            context: { workspaceId: target.workspaceId, userId: target.userId },
           })
           results.push({ name: 'notion-properties-execute', ok: true, detail: `page ${firstPage.id} updated` })
         }

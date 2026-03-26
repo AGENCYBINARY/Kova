@@ -386,11 +386,17 @@ function findNotionTitlePropertyName(properties: Record<string, { type?: string 
 
 function buildNotionPropertyValue(type: string, value: unknown) {
   if (type === 'title') {
+    const titleContent =
+      typeof value === 'string'
+        ? value
+        : value && typeof value === 'object' && 'name' in value
+          ? String((value as { name?: unknown }).name || '')
+          : String(value || '')
     return {
       title: [
         {
           text: {
-            content: String(value || ''),
+            content: titleContent,
           },
         },
       ],
@@ -398,11 +404,17 @@ function buildNotionPropertyValue(type: string, value: unknown) {
   }
 
   if (type === 'rich_text') {
+    const content =
+      typeof value === 'string'
+        ? value
+        : value && typeof value === 'object' && 'content' in value
+          ? String((value as { content?: unknown }).content || '')
+          : JSON.stringify(value)
     return {
       rich_text: [
         {
           text: {
-            content: String(value || ''),
+            content,
           },
         },
       ],
@@ -443,7 +455,16 @@ function buildNotionPropertyValue(type: string, value: unknown) {
   }
 
   if (type === 'select') {
-    return { select: value ? { name: String(value) } : null }
+    return {
+      select: value
+        ? {
+            name:
+              value && typeof value === 'object' && 'name' in value
+                ? String((value as { name?: unknown }).name || '')
+                : String(value),
+          }
+        : null,
+    }
   }
 
   if (type === 'multi_select') {
@@ -456,7 +477,89 @@ function buildNotionPropertyValue(type: string, value: unknown) {
   }
 
   if (type === 'status') {
-    return { status: value ? { name: String(value) } : null }
+    return {
+      status: value
+        ? {
+            name:
+              value && typeof value === 'object' && 'name' in value
+                ? String((value as { name?: unknown }).name || '')
+                : String(value),
+          }
+        : null,
+    }
+  }
+
+  if (type === 'people') {
+    const values = Array.isArray(value) ? value : [value]
+    return {
+      people: values
+        .map((item) => {
+          if (typeof item === 'string') {
+            return { id: item }
+          }
+          if (item && typeof item === 'object' && 'id' in item) {
+            return { id: String((item as { id?: unknown }).id || '') }
+          }
+          return null
+        })
+        .filter((item): item is { id: string } => Boolean(item?.id)),
+    }
+  }
+
+  if (type === 'relation') {
+    const values = Array.isArray(value) ? value : [value]
+    return {
+      relation: values
+        .map((item) => {
+          if (typeof item === 'string') {
+            return { id: item }
+          }
+          if (item && typeof item === 'object' && 'id' in item) {
+            return { id: String((item as { id?: unknown }).id || '') }
+          }
+          return null
+        })
+        .filter((item): item is { id: string } => Boolean(item?.id)),
+    }
+  }
+
+  if (type === 'files') {
+    const values = Array.isArray(value) ? value : [value]
+    return {
+      files: values
+        .map((item) => {
+          if (typeof item === 'string' && item.startsWith('http')) {
+            return {
+              name: item.split('/').pop() || 'Attachment',
+              type: 'external',
+              external: {
+                url: item,
+              },
+            }
+          }
+
+          if (
+            item &&
+            typeof item === 'object' &&
+            'url' in item &&
+            typeof (item as { url?: unknown }).url === 'string'
+          ) {
+            return {
+              name:
+                typeof (item as { name?: unknown }).name === 'string'
+                  ? String((item as { name?: unknown }).name)
+                  : String((item as { url?: string }).url?.split('/').pop() || 'Attachment'),
+              type: 'external',
+              external: {
+                url: String((item as { url?: string }).url),
+              },
+            }
+          }
+
+          return null
+        })
+        .filter((item): item is { name: string; type: 'external'; external: { url: string } } => Boolean(item?.external?.url)),
+    }
   }
 
   return {
