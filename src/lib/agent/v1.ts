@@ -70,6 +70,8 @@ const greetingOnlyPattern =
   /^(bonjour|salut|hello|hey|yo|coucou|bonsoir|good morning|good evening|hi|ça va|ca va)\b[ !?.]*$/i
 const conversationalPattern =
   /^(bonjour|salut|hello|hey|coucou|bonsoir|hi|parle moi|parle-moi|on peut parler|tu peux m'aider|tu peux m’aider|j'ai une question|j’ai une question|comment ca va|comment ça va|qui es tu|qui es-tu|explique moi|explique-moi|ça va|ca va)\b/i
+const capabilityQuestionPattern =
+  /^(est ce que tu peux|est-ce que tu peux|est ce que vous pouvez|est-ce que vous pouvez|tu peux|peux tu|peux-tu|vous pouvez|can you|could you|would you)\b/i
 
 function hasPlaceholderRecipient(parameters: Record<string, unknown>) {
   const recipients = Array.isArray(parameters.to) ? parameters.to : []
@@ -119,6 +121,167 @@ function isConversationalInput(input: string) {
   if (!normalized) return true
   if (isGreetingOnly(normalized)) return true
   return !isActionRequest(normalized) && conversationalPattern.test(normalized)
+}
+
+function hasTemporalOrTargetingDetails(input: string) {
+  const normalized = normalizeInput(input)
+  return (
+    emailPattern.test(input) ||
+    /["“][^"”]+["”]/.test(input) ||
+    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|semaine prochaine|next week|janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\b/.test(
+      normalized
+    ) ||
+    /\b\d{1,2}\s*(?:h|heure|heures|min|minutes)\b/.test(normalized) ||
+    /\b\d{1,2}:\d{2}\b/.test(normalized) ||
+    /\bavec\s+[a-z0-9]/.test(normalized) ||
+    /\bfor\s+[a-z0-9]/.test(normalized)
+  )
+}
+
+function hasGenericCalendarParameters(proposal: AgentProposal, input: string) {
+  const attendees = Array.isArray(proposal.parameters.attendees)
+    ? proposal.parameters.attendees.filter((value): value is string => typeof value === 'string' && value.includes('@'))
+    : []
+  const title = typeof proposal.parameters.title === 'string' ? normalizeInput(proposal.parameters.title) : ''
+  const genericTitles = new Set(['meeting', 'rendez-vous', 'rendez vous', 'point', 'point hebdo', 'call', 'dejeuner', 'cafe', 'presentation', 'debrief'])
+  return attendees.length === 0 && !hasTemporalOrTargetingDetails(input) && (!title || genericTitles.has(title))
+}
+
+function isPlaceholderIdentifier(value: unknown) {
+  if (typeof value !== 'string') return true
+  const normalized = normalizeInput(value)
+  return (
+    normalized.length === 0 ||
+    normalized === 'thread-id' ||
+    normalized === 'message-id' ||
+    normalized === 'event-id' ||
+    normalized === 'document-id' ||
+    normalized === 'file-id' ||
+    normalized === 'drive-folder-id' ||
+    normalized === 'page-id' ||
+    normalized === 'notion-page-id' ||
+    normalized === 'database-id'
+  )
+}
+
+function proposalNeedsClarification(proposal: AgentProposal, input: string) {
+  switch (proposal.type) {
+    case 'create_calendar_event':
+      return hasGenericCalendarParameters(proposal, input)
+    case 'send_email':
+    case 'create_gmail_draft':
+      return hasPlaceholderRecipient(proposal.parameters) && !hasTemporalOrTargetingDetails(input)
+    case 'forward_email':
+      return (
+        isPlaceholderIdentifier(proposal.parameters.messageId) &&
+        isPlaceholderIdentifier(proposal.parameters.threadId)
+      )
+    case 'archive_gmail_thread':
+    case 'unarchive_gmail_thread':
+    case 'label_gmail_thread':
+    case 'mark_gmail_thread_read':
+    case 'mark_gmail_thread_unread':
+    case 'star_gmail_thread':
+    case 'unstar_gmail_thread':
+    case 'trash_gmail_thread':
+      return isPlaceholderIdentifier(proposal.parameters.threadId)
+    case 'update_calendar_event':
+    case 'delete_calendar_event':
+      return isPlaceholderIdentifier(proposal.parameters.eventId)
+    case 'update_google_doc':
+      return isPlaceholderIdentifier(proposal.parameters.documentId)
+    case 'create_google_drive_folder': {
+      const name = typeof proposal.parameters.name === 'string' ? normalizeInput(proposal.parameters.name) : ''
+      return !hasTemporalOrTargetingDetails(input) && (name === 'new folder' || name === 'nouveau dossier')
+    }
+    case 'delete_google_drive_file':
+    case 'move_google_drive_file':
+    case 'rename_google_drive_file':
+    case 'share_google_drive_file':
+    case 'copy_google_drive_file':
+    case 'unshare_google_drive_file':
+      return isPlaceholderIdentifier(proposal.parameters.fileId)
+    case 'update_notion_page':
+    case 'update_notion_page_properties':
+    case 'archive_notion_page':
+      return isPlaceholderIdentifier(proposal.parameters.pageId)
+    case 'create_notion_page':
+      return (
+        isPlaceholderIdentifier(proposal.parameters.parentDatabaseId) &&
+        isPlaceholderIdentifier(proposal.parameters.parentPageId)
+      )
+    default:
+      return false
+  }
+}
+
+function isCapabilityQuestion(input: string, proposals: AgentProposal[]) {
+  const trimmed = input.trim()
+  if (!trimmed || !capabilityQuestionPattern.test(normalizeInput(trimmed))) {
+    return false
+  }
+
+  const questionLike = trimmed.endsWith('?') || /^(est ce que|est-ce que|tu peux|peux-tu|can you|could you|would you)/i.test(trimmed)
+  if (!questionLike) {
+    return false
+  }
+
+  if (proposals.length === 0) {
+    return appIntentPattern.test(trimmed) || actionIntentPattern.test(trimmed)
+  }
+
+  return proposals.every((proposal) => proposalNeedsClarification(proposal, input))
+}
+
+function buildCapabilityResponse(input: string, proposals: AgentProposal[], profile?: AssistantProfile) {
+  const language = profile?.defaultLanguage || 'fr'
+  const firstProposal = proposals[0]
+
+  switch (firstProposal?.type) {
+    case 'create_calendar_event':
+      return language === 'en'
+        ? 'Yes. I can prepare the event, but I need the title, date, time, and attendees first.'
+        : 'Oui. Je peux le préparer, mais il me faut d’abord le titre, la date, l’heure et les invités.'
+    case 'send_email':
+    case 'create_gmail_draft':
+    case 'forward_email':
+      return language === 'en'
+        ? 'Yes. I can handle the email, but I need the recipient and what you want to send.'
+        : 'Oui. Je peux gérer le mail, mais il me faut le destinataire et ce que tu veux envoyer.'
+    case 'archive_gmail_thread':
+    case 'unarchive_gmail_thread':
+    case 'label_gmail_thread':
+    case 'mark_gmail_thread_read':
+    case 'mark_gmail_thread_unread':
+    case 'star_gmail_thread':
+    case 'unstar_gmail_thread':
+    case 'trash_gmail_thread':
+      return language === 'en'
+        ? 'Yes. I can do that, but I need to know which Gmail thread you mean.'
+        : 'Oui. Je peux le faire, mais il faut que tu me dises quel thread Gmail tu vises.'
+    case 'create_google_drive_folder':
+    case 'create_google_drive_file':
+    case 'delete_google_drive_file':
+    case 'move_google_drive_file':
+    case 'rename_google_drive_file':
+    case 'share_google_drive_file':
+    case 'copy_google_drive_file':
+    case 'unshare_google_drive_file':
+      return language === 'en'
+        ? 'Yes. I can handle Drive, but I need the exact file or folder to act on.'
+        : 'Oui. Je peux gérer Drive, mais il me faut le fichier ou le dossier exact à utiliser.'
+    case 'update_notion_page':
+    case 'update_notion_page_properties':
+    case 'archive_notion_page':
+    case 'create_notion_page':
+      return language === 'en'
+        ? 'Yes. I can handle Notion, but I need the exact page or database you want.'
+        : 'Oui. Je peux gérer Notion, mais il me faut la page ou la base exacte que tu veux utiliser.'
+    default:
+      return language === 'en'
+        ? 'Yes. I can do that. Tell me exactly what you want me to prepare.'
+        : 'Oui. Je peux le faire. Dis-moi précisément ce que tu veux que je prépare.'
+  }
 }
 
 function shouldPreferDeterministicAction(input: string, proposals: AgentProposal[]) {
@@ -812,7 +975,7 @@ function buildFallbackResponseWithContactsAndProfile(
   const maybeRecipient = extractRecipientName(input)
   const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
   const isMeetingRequest =
-    /(calendar|calendrier|meeting|schedule|invite|appel|rdv|réunion|reunion|visio|visioconference|visioconférence|google meet|meet|zoom)/.test(intentText)
+    /(calendar|calendrier|meeting|schedule|invite|appel|rdv|réunion|reunion|visio|visioconference|visioconférence|google meet|meet|zoom|event|evenement|événement)/.test(intentText)
   const wantsMeetingConfirmation =
     /(confirmation|confirm|confirmer|lien|link|visio|meet|invite)/.test(intentText)
   const explicitlyWantsSeparateEmail =
@@ -1218,6 +1381,14 @@ export async function runAgentTurn(
     connectedContextMetadata: options.connectedContextMetadata,
   })
   const deterministicFilteredProposals = deterministicResolution.proposals
+
+  if (isCapabilityQuestion(input, deterministicFallback.proposals)) {
+    return {
+      response: buildCapabilityResponse(input, deterministicFallback.proposals, assistantProfile),
+      proposals: [],
+      disambiguations: [],
+    }
+  }
 
   if (shouldPreferDeterministicAction(input, deterministicFallback.proposals)) {
     return {

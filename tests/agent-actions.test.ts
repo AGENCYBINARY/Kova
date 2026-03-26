@@ -43,3 +43,32 @@ test('fallback routes Notion archive to the right action', async () => {
     }
   }
 })
+
+test('generic capability calendar questions do not create action proposals', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Tu peux me créer un événement calendrier pour moi ?', [], [])
+    assert.equal(result.proposals.length, 0)
+    assert.match(result.response, /Oui|oui/)
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('specific capability-style calendar requests still create proposals', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Peux-tu me créer un événement demain à 15h avec Martin ?', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
