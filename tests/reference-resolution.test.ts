@@ -198,6 +198,79 @@ test('forward, drive move/share, and notion database parent inherit ids from con
   assert.equal(proposals[3].parameters.parentDatabaseId, 'db_sales_crm')
 })
 
+test('drive folder creation proposals inherit parent folder ids from connected context', () => {
+  const [proposal] = resolveActionReferences({
+    userInput: 'Crée un dossier dans Board Ops',
+    proposals: [
+      {
+        type: 'create_google_drive_folder',
+        title: 'Create folder',
+        description: 'Create a Drive folder.',
+        parameters: { name: 'Kova Ops', folderName: 'Board Ops', parentFolderId: 'drive-folder-id' },
+        confidenceScore: 0.8,
+      },
+    ],
+    connectedContextMetadata: {
+      connectedContextSummary: [
+        {
+          source: 'google_drive',
+          files: [
+            {
+              fileId: 'folder_board_ops',
+              name: 'Board Ops',
+              mimeType: 'application/vnd.google-apps.folder',
+            },
+          ],
+        },
+      ],
+    },
+  })
+
+  assert.equal(proposal.parameters.parentFolderId, 'folder_board_ops')
+})
+
+test('ambiguous drive parent folders return an explicit disambiguation shortlist', () => {
+  const result = resolveActionReferencesDetailed({
+    userInput: 'Crée un dossier dans Archive',
+    proposals: [
+      {
+        type: 'create_google_drive_folder',
+        title: 'Create folder',
+        description: 'Create a Drive folder.',
+        parameters: { name: 'Kova Ops', folderName: 'Archive', parentFolderId: 'drive-folder-id' },
+        confidenceScore: 0.8,
+      },
+    ],
+    connectedContextMetadata: {
+      connectedContextSummary: [
+        {
+          source: 'google_drive',
+          files: [
+            {
+              fileId: 'folder_archive_ops',
+              name: 'Archive',
+              mimeType: 'application/vnd.google-apps.folder',
+              modifiedTime: '2026-03-26T09:00:00.000Z',
+            },
+            {
+              fileId: 'folder_archive_finance',
+              name: 'Archive',
+              mimeType: 'application/vnd.google-apps.folder',
+              modifiedTime: '2026-03-25T09:00:00.000Z',
+            },
+          ],
+        },
+      ],
+    },
+  })
+
+  assert.equal(result.proposals[0].parameters.parentFolderId, 'drive-folder-id')
+  assert.equal(result.disambiguations.length, 1)
+  assert.equal(result.disambiguations[0]?.source, 'google_drive')
+  assert.equal(result.disambiguations[0]?.field, 'parentFolderId')
+  assert.equal(result.disambiguations[0]?.options.length, 2)
+})
+
 test('ambiguous gmail matches return an explicit disambiguation shortlist', () => {
   const result = resolveActionReferencesDetailed({
     userInput: 'Archive le mail de Martin',

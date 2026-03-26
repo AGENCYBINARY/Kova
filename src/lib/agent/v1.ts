@@ -17,6 +17,7 @@ export const agentActionTypeSchema = z.enum([
   'create_gmail_draft',
   'forward_email',
   'archive_gmail_thread',
+  'unarchive_gmail_thread',
   'label_gmail_thread',
   'mark_gmail_thread_read',
   'mark_gmail_thread_unread',
@@ -28,10 +29,12 @@ export const agentActionTypeSchema = z.enum([
   'delete_calendar_event',
   'update_notion_page',
   'update_notion_page_properties',
+  'archive_notion_page',
   'create_notion_page',
   'create_google_doc',
   'update_google_doc',
   'create_google_drive_file',
+  'create_google_drive_folder',
   'delete_google_drive_file',
   'move_google_drive_file',
   'rename_google_drive_file',
@@ -60,7 +63,7 @@ export type AgentExecutionMode = 'ask' | 'auto'
 
 const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,})/
 const actionIntentPattern =
-  /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|envoie|envoyer|rédige|redige|écris|ecris|crée|cree|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|déconnecte|deconnecte|actualise|rafraichis|archiver|transférer|transferer|deplacer|deplace|renommer|renomme|labellise|labelise|duplique|dupliquer|corbeille|brouillon|brouillons|retire l acces|retirer l acces)/i
+  /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|envoie|envoyer|rédige|redige|écris|ecris|crée|cree|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|déconnecte|deconnecte|actualise|rafraichis|archiver|restaure|restaurer|transférer|transferer|deplacer|deplace|renommer|renomme|labellise|labelise|duplique|dupliquer|corbeille|brouillon|brouillons|retire l acces|retirer l acces|dossier)/i
 const appIntentPattern =
   /(gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\b)/i
 const greetingOnlyPattern =
@@ -124,21 +127,21 @@ function shouldPreferDeterministicAction(input: string, proposals: AgentProposal
 
   if (
     /(gmail|email|e-mail|mail|message|thread|inbox)/.test(normalized) &&
-    /(archive|archiver|label|labels|etiquette|etiquettes|marque|mark|star|etoile|étoile|trash|corbeille|forward|transfere|transferer|draft|brouillon|reply|repond)/.test(normalized)
+    /(archive|archiver|unarchive|restore|restaure|restaurer|label|labels|etiquette|etiquettes|marque|mark|star|etoile|étoile|trash|corbeille|forward|transfere|transferer|draft|brouillon|reply|repond)/.test(normalized)
   ) {
     return true
   }
 
   if (
     /(google drive|drive\b|folder|dossier|fichier|file)/.test(normalized) &&
-    /(move|deplace|deplacer|rename|renomme|renommer|share|partage|partager|copy|copie|duplique|duplicate|unshare|revoke|retire l acces|delete|supprime)/.test(normalized)
+    /(move|deplace|deplacer|rename|renomme|renommer|share|partage|partager|copy|copie|duplique|duplicate|unshare|revoke|retire l acces|delete|supprime|create folder|cree un dossier|creer un dossier|nouveau dossier)/.test(normalized)
   ) {
     return true
   }
 
   if (
     /(notion|database|base de donnees|base de données|page|wiki)/.test(normalized) &&
-    /(create|cr[eé]e|mets a jour|mettre a jour|update|status|statut|property|propriete|proprietes)/.test(normalized)
+    /(create|cr[eé]e|mets a jour|mettre a jour|update|status|statut|property|propriete|proprietes|archive|archiver|supprime)/.test(normalized)
   ) {
     return true
   }
@@ -374,6 +377,21 @@ function buildArchiveEmailProposal(profile?: AssistantProfile): AgentProposal {
       threadId: '',
     },
     confidenceScore: 0.82,
+  }
+}
+
+function buildUnarchiveEmailProposal(profile?: AssistantProfile): AgentProposal {
+  return {
+    type: 'unarchive_gmail_thread',
+    title: profile?.defaultLanguage === 'en' ? 'Restore Gmail thread' : 'Restaurer le thread Gmail',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Restore the matching Gmail thread to the inbox.'
+        : 'Restaurer le thread Gmail correspondant dans la boîte de réception.',
+    parameters: {
+      threadId: '',
+    },
+    confidenceScore: 0.8,
   }
 }
 
@@ -653,6 +671,31 @@ function buildGoogleDriveProposal(input: string, profile?: AssistantProfile): Ag
   }
 }
 
+function buildGoogleDriveFolderProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const quoted = input.match(/["“]([^"”]+)["”]/)
+  const folderMatch = input.match(/(?:dans|inside|into)\s+["“]?([^"”]+?)["”]?(?=$|[,.!?])/i)
+  const parentFolderName = folderMatch?.[1]?.trim()
+
+  return {
+    type: 'create_google_drive_folder',
+    title: profile?.defaultLanguage === 'en' ? 'Create Drive folder' : 'Créer un dossier Drive',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Create a new Google Drive folder.'
+        : 'Créer un nouveau dossier Google Drive.',
+    parameters: {
+      name: quoted?.[1]?.trim() || (profile?.defaultLanguage === 'en' ? 'New folder' : 'Nouveau dossier'),
+      ...(parentFolderName
+        ? {
+            folderName: parentFolderName,
+            parentFolderId: 'drive-folder-id',
+          }
+        : {}),
+    },
+    confidenceScore: 0.82,
+  }
+}
+
 function buildNotionProposal(input: string, profile?: AssistantProfile): AgentProposal {
   const wantsUpdate = /(update|refresh|edit|modify)/.test(input)
   const targetsDatabase = /(database|base de donnees|base de données)/.test(normalizeInput(input))
@@ -713,6 +756,21 @@ function buildNotionPropertyUpdateProposal(input: string, profile?: AssistantPro
   }
 }
 
+function buildArchiveNotionPageProposal(profile?: AssistantProfile): AgentProposal {
+  return {
+    type: 'archive_notion_page',
+    title: profile?.defaultLanguage === 'en' ? 'Archive Notion page' : 'Archiver la page Notion',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Archive the matching Notion page.'
+        : 'Archiver la page Notion correspondante.',
+    parameters: {
+      pageId: 'notion-page-id',
+    },
+    confidenceScore: 0.76,
+  }
+}
+
 function buildDisambiguationResponse(
   questions: Array<{
     question: string
@@ -767,6 +825,10 @@ function buildFallbackResponseWithContactsAndProfile(
   const explicitForwardIntent = /(forward|transfere|transferer|transmets|faire suivre)/.test(intentText)
   const draftIntent = /(draft|brouillon|prepare sans envoyer|prépare sans envoyer)/.test(intentText)
   const archiveIntent = /(archive|archiver|range|ranger)/.test(intentText)
+  const unarchiveIntent =
+    /(unarchive|restore|restaure|restaurer|remets?.*(boite de reception|inbox)|retablis?.*(boite de reception|inbox))/.test(
+      intentText
+    )
   const labelIntent = /(label|labels|etiquette|etiquettes|tag|tags)/.test(intentText)
   const markUnreadIntent = /(non lu|unread|marque.*non lu|mark.*unread)/.test(intentText)
   const markReadIntent = /(marque.*lu|mark.*read|\blu\b)/.test(intentText) && !markUnreadIntent
@@ -782,7 +844,9 @@ function buildFallbackResponseWithContactsAndProfile(
   const shareIntent = /(share|partage|partager)/.test(intentText)
   const copyIntent = /(copy|copie|duplique|dupliquer|duplicate)/.test(intentText)
   const unshareIntent = /(unshare|remove access|revoke|retire(?:r)? l[' ]acces|supprime l[' ]acces)/.test(intentText)
+  const createFolderIntent = /(create|cree|creer|nouveau|new).*(folder|dossier)|\b(folder|dossier)\b.*(create|cree|creer)/.test(intentText)
   const notionPropertiesIntent = /(status|statut|priority|priorite|priorité|property|properties|propriete|proprietes)/.test(intentText)
+  const notionArchiveIntent = /(archive|archiver|supprime|supprimer|retire|retirer)/.test(intentText)
 
   if (
     isMeetingRequest &&
@@ -848,7 +912,17 @@ function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
-  if ((archiveIntent || labelIntent || markReadIntent || markUnreadIntent || starIntent || unstarIntent || trashIntent) && /(gmail|email|e-mail|mail|message|messages|thread|inbox)/.test(intentText)) {
+  if ((archiveIntent || unarchiveIntent || labelIntent || markReadIntent || markUnreadIntent || starIntent || unstarIntent || trashIntent) && /(gmail|email|e-mail|mail|message|messages|thread|inbox)/.test(intentText)) {
+    if (unarchiveIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Inbox restore ready.'
+            : 'Restauration inbox prête.',
+        proposals: [buildUnarchiveEmailProposal(assistantProfile)],
+      }
+    }
+
     if (trashIntent) {
       return {
         response:
@@ -929,6 +1003,16 @@ function buildFallbackResponseWithContactsAndProfile(
   }
 
   if (/(google drive|drive\b|dossier|folder|upload|save to drive|save in drive|enregistrer dans drive|mettre dans drive|stocke.*drive)/.test(intentText)) {
+    if (createFolderIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Drive folder creation ready.'
+            : 'Création du dossier Drive prête.',
+        proposals: [buildGoogleDriveFolderProposal(input, assistantProfile)],
+      }
+    }
+
     if (deleteIntent) {
       return {
         response:
@@ -999,6 +1083,16 @@ function buildFallbackResponseWithContactsAndProfile(
   }
 
   if (/(notion|wiki|database|base de donnees|base de données|workspace|page)/.test(intentText)) {
+    if (notionArchiveIntent && !notionPropertiesIntent && !updateIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Notion archive ready for review.'
+            : 'Archivage Notion prêt à valider.',
+        proposals: [buildArchiveNotionPageProposal(assistantProfile)],
+      }
+    }
+
     if (notionPropertiesIntent && updateIntent) {
       return {
         response:

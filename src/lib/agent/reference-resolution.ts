@@ -165,12 +165,17 @@ function includesPlaceholder(value: unknown) {
     normalized === 'event-id' ||
     normalized === 'document-id' ||
     normalized === 'file-id' ||
+    normalized === 'drive-folder-id' ||
     normalized === 'page-id' ||
     normalized === 'database-id' ||
     normalized === 'thread-id' ||
     normalized === 'message-id' ||
     normalized === 'notion-page-id'
   )
+}
+
+function isDriveFolderCandidate(item: DriveSummaryItem) {
+  return item.mimeType === 'application/vnd.google-apps.folder'
 }
 
 function needsReferenceResolution(value: unknown, explicitReference: ExplicitSelection | null) {
@@ -622,6 +627,108 @@ function resolveDriveProposal(
   }
 }
 
+function resolveDriveParentFolderProposal(
+  proposal: AgentProposal,
+  userInput: string,
+  metadata: Record<string, unknown> | undefined
+) {
+  const driveSummary = getSourceSummary(metadata, 'google_drive')
+  const folders = Array.isArray(driveSummary?.files) ? driveSummary.files.filter(isDriveFolderCandidate) : []
+  const requestedFolderName =
+    typeof proposal.parameters.folderName === 'string' && proposal.parameters.folderName.trim().length > 0
+      ? proposal.parameters.folderName.trim()
+      : null
+  const explicitReference = findExplicitSelection(userInput, 'google_drive', 'parentFolderId')
+  if (folders.length === 0 || !needsReferenceResolution(proposal.parameters.parentFolderId, explicitReference)) {
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  if (explicitReference) {
+    const chosen = folders.find((folder) => folder.fileId === explicitReference.id)
+    if (chosen?.fileId) {
+      return {
+        proposal: {
+          ...proposal,
+          parameters: {
+            ...proposal.parameters,
+            parentFolderId: chosen.fileId,
+          },
+          confidenceScore: Math.max(proposal.confidenceScore, 0.97),
+        },
+        disambiguation: null as ReferenceDisambiguation | null,
+      }
+    }
+  }
+
+  if (requestedFolderName) {
+    const exactMatches = folders.filter(
+      (folder) => typeof folder.name === 'string' && normalize(folder.name) === normalize(requestedFolderName)
+    )
+    if (exactMatches.length > 1) {
+      return {
+        proposal,
+        disambiguation: buildDisambiguation({
+          actionType: proposal.type,
+          source: 'google_drive',
+          field: 'parentFolderId',
+          question: 'Plusieurs dossiers Drive portent ce nom. Dans lequel veux-tu créer ce dossier ?',
+          ranked: exactMatches.map((item) => ({ item, score: 1 })),
+          getId: (item) => item.fileId,
+          format: (item) => `${item.name || 'Dossier'}${item.modifiedTime ? ` | ${item.modifiedTime}` : ''}`,
+        }),
+      }
+    }
+
+    if (exactMatches.length === 1 && exactMatches[0]?.fileId) {
+      return {
+        proposal: {
+          ...proposal,
+          parameters: {
+            ...proposal.parameters,
+            parentFolderId: exactMatches[0].fileId,
+          },
+          confidenceScore: Math.max(proposal.confidenceScore, 0.94),
+        },
+        disambiguation: null as ReferenceDisambiguation | null,
+      }
+    }
+  }
+
+  const tokens = tokenize(userInput)
+  const ranked = rankMatches(folders, tokens, (folder) => [folder.name, ...(folder.owners || []), folder.webViewLink])
+  if (shouldDisambiguate(ranked, tokens)) {
+    return {
+      proposal,
+      disambiguation: buildDisambiguation({
+        actionType: proposal.type,
+        source: 'google_drive',
+        field: 'parentFolderId',
+        question: 'Plusieurs dossiers Drive correspondent. Dans lequel veux-tu créer ce dossier ?',
+        ranked,
+        getId: (item) => item.fileId,
+        format: (item) => `${item.name || 'Dossier'}${item.modifiedTime ? ` | ${item.modifiedTime}` : ''}`,
+      }),
+    }
+  }
+
+  const chosen = ranked[0]?.item || folders[0]
+  if (!chosen?.fileId) {
+    return { proposal, disambiguation: null as ReferenceDisambiguation | null }
+  }
+
+  return {
+    proposal: {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        parentFolderId: chosen.fileId,
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, ranked[0] && ranked[0].score > 0 ? 0.9 : 0.82),
+    },
+    disambiguation: null as ReferenceDisambiguation | null,
+  }
+}
+
 function resolveNotionPageProposal(
   proposal: AgentProposal,
   userInput: string,
@@ -766,6 +873,7 @@ export function resolveActionReferencesDetailed(params: {
 
     if (
       proposal.type === 'archive_gmail_thread' ||
+      proposal.type === 'unarchive_gmail_thread' ||
       proposal.type === 'label_gmail_thread' ||
       proposal.type === 'mark_gmail_thread_read' ||
       proposal.type === 'mark_gmail_thread_unread' ||
@@ -815,7 +923,17 @@ export function resolveActionReferencesDetailed(params: {
       return result.proposal
     }
 
-    if (proposal.type === 'update_notion_page' || proposal.type === 'update_notion_page_properties') {
+    if (proposal.type === 'create_google_drive_folder' && includesPlaceholder(proposal.parameters.parentFolderId)) {
+      const result = resolveDriveParentFolderProposal(proposal, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (
+      proposal.type === 'update_notion_page' ||
+      proposal.type === 'update_notion_page_properties' ||
+      proposal.type === 'archive_notion_page'
+    ) {
       const result = resolveNotionPageProposal(proposal, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
       return result.proposal

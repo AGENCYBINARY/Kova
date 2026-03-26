@@ -795,3 +795,29 @@ export async function updateNotionPageProperties(token: string, parameters: Reco
     },
   }
 }
+
+export async function archiveNotionPage(token: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const pageId = String(parameters.pageId || '')
+  if (!pageId) {
+    throw new Error('pageId is required to archive a Notion page.')
+  }
+
+  const page = await notionFetch(`/pages/${pageId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      archived: true,
+    }),
+  }, {
+    timeoutMs: NOTION_WRITE_TIMEOUT_MS,
+  }) as { id: string; url?: string }
+
+  return {
+    details: 'Notion page archived.',
+    output: {
+      provider: 'notion',
+      pageId: page.id,
+      archived: true,
+      url: page.url || null,
+    },
+  }
+}

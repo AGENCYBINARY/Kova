@@ -15,6 +15,7 @@ export interface ExecuteAgentActionInput {
     | 'create_gmail_draft'
     | 'forward_email'
     | 'archive_gmail_thread'
+    | 'unarchive_gmail_thread'
     | 'label_gmail_thread'
     | 'mark_gmail_thread_read'
     | 'mark_gmail_thread_unread'
@@ -27,6 +28,7 @@ export interface ExecuteAgentActionInput {
     | 'create_google_doc'
     | 'update_google_doc'
     | 'create_google_drive_file'
+    | 'create_google_drive_folder'
     | 'delete_google_drive_file'
     | 'move_google_drive_file'
     | 'rename_google_drive_file'
@@ -36,6 +38,7 @@ export interface ExecuteAgentActionInput {
     | 'create_notion_page'
     | 'update_notion_page'
     | 'update_notion_page_properties'
+    | 'archive_notion_page'
   parameters: Record<string, unknown>
   requireApproval?: boolean
 }

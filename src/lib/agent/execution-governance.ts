@@ -48,7 +48,8 @@ export function inferRiskLevel(
     actionType === 'delete_google_drive_file' ||
     actionType === 'share_google_drive_file' ||
     actionType === 'trash_gmail_thread' ||
-    actionType === 'unshare_google_drive_file'
+    actionType === 'unshare_google_drive_file' ||
+    actionType === 'archive_notion_page'
   ) {
     if (actionType !== 'share_google_drive_file' || hasExternalShareRecipients(parameters)) {
       return 'high'
@@ -67,11 +68,13 @@ export function inferRiskLevel(
 
   if (
     actionType === 'archive_gmail_thread' ||
+    actionType === 'unarchive_gmail_thread' ||
     actionType === 'mark_gmail_thread_read' ||
     actionType === 'mark_gmail_thread_unread' ||
     actionType === 'star_gmail_thread' ||
     actionType === 'unstar_gmail_thread' ||
-    actionType === 'create_gmail_draft'
+    actionType === 'create_gmail_draft' ||
+    actionType === 'create_google_drive_folder'
   ) {
     return 'low'
   }

@@ -35,6 +35,7 @@ function targetAppForType(type: DashboardAction['type']): DashboardAction['targe
     type === 'create_gmail_draft' ||
     type === 'forward_email' ||
     type === 'archive_gmail_thread' ||
+    type === 'unarchive_gmail_thread' ||
     type === 'label_gmail_thread' ||
     type === 'mark_gmail_thread_read' ||
     type === 'mark_gmail_thread_unread' ||
@@ -50,6 +51,7 @@ function targetAppForType(type: DashboardAction['type']): DashboardAction['targe
   if (type === 'create_google_doc' || type === 'update_google_doc') return 'Google Docs'
   if (
     type === 'create_google_drive_file' ||
+    type === 'create_google_drive_folder' ||
     type === 'delete_google_drive_file' ||
     type === 'move_google_drive_file' ||
     type === 'rename_google_drive_file' ||

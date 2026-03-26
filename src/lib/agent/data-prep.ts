@@ -79,6 +79,18 @@ export function prepareActionParameters(
     }
   }
 
+  if (actionType === 'create_google_drive_folder') {
+    return {
+      ...normalized,
+      name: typeof normalized.name === 'string' ? collapseWhitespace(normalized.name) : 'New folder',
+      folderName: typeof normalized.folderName === 'string' ? collapseWhitespace(normalized.folderName) : normalized.folderName,
+      parentFolderId:
+        typeof normalized.parentFolderId === 'string'
+          ? collapseWhitespace(normalized.parentFolderId)
+          : normalized.parentFolderId,
+    }
+  }
+
   if (actionType === 'share_google_drive_file') {
     return {
       ...normalized,
@@ -90,6 +102,10 @@ export function prepareActionParameters(
     return {
       ...normalized,
       name: typeof normalized.name === 'string' ? collapseWhitespace(normalized.name) : normalized.name,
+      destinationFolderId:
+        typeof normalized.destinationFolderId === 'string'
+          ? collapseWhitespace(normalized.destinationFolderId)
+          : normalized.destinationFolderId,
       destinationFolderName:
         typeof normalized.destinationFolderName === 'string'
           ? collapseWhitespace(normalized.destinationFolderName)

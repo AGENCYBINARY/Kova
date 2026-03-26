@@ -15,6 +15,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
+    'unarchive_gmail_thread',
     'label_gmail_thread',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
@@ -27,6 +28,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_google_doc',
     'update_google_doc',
     'create_google_drive_file',
+    'create_google_drive_folder',
     'delete_google_drive_file',
     'move_google_drive_file',
     'rename_google_drive_file',
@@ -36,6 +38,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
+    'archive_notion_page',
   ],
   admin: [
     'send_email',
@@ -43,6 +46,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
+    'unarchive_gmail_thread',
     'label_gmail_thread',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
@@ -55,6 +59,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_google_doc',
     'update_google_doc',
     'create_google_drive_file',
+    'create_google_drive_folder',
     'delete_google_drive_file',
     'move_google_drive_file',
     'rename_google_drive_file',
@@ -64,6 +69,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
+    'archive_notion_page',
   ],
   operator: [
     'send_email',
@@ -71,6 +77,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
+    'unarchive_gmail_thread',
     'label_gmail_thread',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
@@ -82,6 +89,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_google_doc',
     'update_google_doc',
     'create_google_drive_file',
+    'create_google_drive_folder',
     'move_google_drive_file',
     'rename_google_drive_file',
     'share_google_drive_file',
@@ -90,6 +98,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
+    'archive_notion_page',
   ],
   viewer: [],
 }
@@ -129,6 +138,7 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
           permission === 'create_gmail_draft' ||
           permission === 'forward_email' ||
           permission === 'archive_gmail_thread' ||
+          permission === 'unarchive_gmail_thread' ||
           permission === 'label_gmail_thread' ||
           permission === 'mark_gmail_thread_read' ||
           permission === 'mark_gmail_thread_unread' ||
@@ -141,6 +151,7 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
           permission === 'create_google_doc' ||
           permission === 'update_google_doc' ||
           permission === 'create_google_drive_file' ||
+          permission === 'create_google_drive_folder' ||
           permission === 'delete_google_drive_file' ||
           permission === 'move_google_drive_file' ||
           permission === 'rename_google_drive_file' ||
@@ -149,7 +160,8 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
           permission === 'unshare_google_drive_file' ||
           permission === 'create_notion_page' ||
           permission === 'update_notion_page' ||
-          permission === 'update_notion_page_properties'
+          permission === 'update_notion_page_properties' ||
+          permission === 'archive_notion_page'
         )
         return [normalizedRole, allowed] as const
       })

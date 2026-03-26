@@ -92,6 +92,7 @@ async function resolveScenarioDefaults(params: {
   let gmailThreadId: string | null = null
   let gmailMessageId: string | null = null
   let driveFileId: string | null = null
+  let driveFolderId: string | null = null
   let notionPageId: string | null = null
   let notionDatabaseId: string | null = null
 
@@ -105,11 +106,14 @@ async function resolveScenarioDefaults(params: {
   }
 
   const drive = byType.get('google_drive')
-  if (drive && !driveQuery) {
+  if (drive && (!driveQuery || !driveFolderId)) {
     const accessToken = await getValidGoogleAccessToken(drive)
     const files = await searchGoogleDriveFiles(accessToken, { maxResults: 5 })
-    driveQuery = files[0]?.name || null
-    driveFileId = files[0]?.id || null
+    const firstFile = files.find((file) => file.mimeType !== 'application/vnd.google-apps.folder') || files[0]
+    const firstFolder = files.find((file) => file.mimeType === 'application/vnd.google-apps.folder') || null
+    driveQuery = driveQuery || firstFile?.name || null
+    driveFileId = firstFile?.id || null
+    driveFolderId = firstFolder?.id || null
   }
 
   const notion = byType.get('notion')
@@ -136,6 +140,7 @@ async function resolveScenarioDefaults(params: {
     driveQuery,
     driveFileId,
     driveFolder: getOptionalEnv('KOVA_LIVE_DRIVE_FOLDER') || 'Kova Live Tests',
+    driveFolderId,
     driveShareTo: getOptionalEnv('KOVA_LIVE_DRIVE_SHARE_TO') || knownContacts[0]?.email || user?.email || null,
     notionPageQuery,
     notionPageId,
@@ -204,6 +209,7 @@ async function main() {
 
   if (defaults.gmailQuery) {
     scenarios.push({ name: 'gmail-archive-preview', prompt: withReference(`Archive le thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
+    scenarios.push({ name: 'gmail-unarchive-preview', prompt: withReference(`Remets le thread Gmail "${defaults.gmailQuery}" dans la boîte de réception`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
     scenarios.push({ name: 'gmail-label-preview', prompt: withReference(`Ajoute le label "${defaults.gmailLabel}" au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
     scenarios.push({ name: 'gmail-unread-preview', prompt: withReference(`Marque le thread Gmail "${defaults.gmailQuery}" comme non lu`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
     scenarios.push({ name: 'gmail-star-preview', prompt: withReference(`Ajoute une étoile au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
@@ -216,6 +222,13 @@ async function main() {
   }
 
   if (defaults.driveQuery) {
+    scenarios.push({
+      name: 'drive-folder-preview',
+      prompt: withReference(
+        `Crée un dossier Google Drive "Kova Live Folder ${new Date().toISOString().slice(0, 10)}" dans "${defaults.driveFolder}"`,
+        { source: 'google_drive', field: 'parentFolderId', id: defaults.driveFolderId }
+      ),
+    })
     scenarios.push({ name: 'drive-move-preview', prompt: withReference(`Déplace le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
     scenarios.push({ name: 'drive-rename-preview', prompt: withReference(`Renomme le fichier Google Drive nommé "${defaults.driveQuery}" en "kova-live-renamed"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
     scenarios.push({ name: 'drive-copy-preview', prompt: withReference(`Duplique le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
@@ -227,6 +240,7 @@ async function main() {
 
   if (defaults.notionPageQuery) {
     scenarios.push({ name: 'notion-properties-preview', prompt: withReference(`Mets à jour le statut de la page Notion "${defaults.notionPageQuery}" à Done`, { source: 'notion', field: 'pageId', id: defaults.notionPageId }) })
+    scenarios.push({ name: 'notion-archive-preview', prompt: withReference(`Archive la page Notion "${defaults.notionPageQuery}"`, { source: 'notion', field: 'pageId', id: defaults.notionPageId }) })
   }
   if (defaults.notionDatabaseQuery) {
     scenarios.push({ name: 'notion-database-preview', prompt: withReference(`Crée une page dans la base de données Notion sélectionnée avec le titre "Live Runner"`, { source: 'notion', field: 'parentDatabaseId', id: defaults.notionDatabaseId }) })

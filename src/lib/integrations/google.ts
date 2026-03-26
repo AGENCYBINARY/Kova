@@ -838,6 +838,26 @@ export async function archiveGmailThread(accessToken: string, parameters: Record
   }
 }
 
+export async function unarchiveGmailThread(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  if (!threadId) {
+    throw new Error('threadId is required to unarchive a Gmail thread.')
+  }
+
+  await modifyGmailThreadLabels(accessToken, threadId, {
+    addLabelIds: ['INBOX'],
+  })
+
+  return {
+    details: 'Gmail thread restored to inbox.',
+    output: {
+      provider: 'gmail',
+      threadId,
+      archived: false,
+    },
+  }
+}
+
 export async function setGmailThreadStarredState(
   accessToken: string,
   parameters: Record<string, unknown>,
@@ -2090,7 +2110,8 @@ export async function createGoogleDriveFile(accessToken: string, parameters: Rec
   const mimeType = String(parameters.mimeType || 'text/plain')
   const content = typeof parameters.content === 'string' ? parameters.content : ''
   const folderName = typeof parameters.folderName === 'string' ? parameters.folderName.trim() : ''
-  const parentFolderId = folderName ? await ensureDriveFolder(accessToken, folderName) : null
+  const parentFolderIdParam = typeof parameters.parentFolderId === 'string' ? parameters.parentFolderId.trim() : ''
+  const parentFolderId = parentFolderIdParam || (folderName ? await ensureDriveFolder(accessToken, folderName) : null)
 
   const metadata = {
     name,
@@ -2152,4 +2173,11 @@ export async function createGoogleDriveFile(accessToken: string, parameters: Rec
       link: data.webViewLink || data.webContentLink || null,
     },
   }
+}
+
+export async function createGoogleDriveFolder(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  return createGoogleDriveFile(accessToken, {
+    ...parameters,
+    mimeType: 'application/vnd.google-apps.folder',
+  })
 }

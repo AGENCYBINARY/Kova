@@ -9,6 +9,7 @@ import {
   createGoogleCalendarEvent,
   createGoogleDoc,
   createGoogleDriveFile,
+  createGoogleDriveFolder,
   deleteGoogleCalendarEvent,
   deleteGoogleDriveFile,
   forwardGmailMessage,
@@ -23,11 +24,13 @@ import {
   setGmailThreadReadState,
   shareGoogleDriveFile,
   trashGmailThread,
+  unarchiveGmailThread,
   unshareGoogleDriveFile,
   updateGoogleCalendarEvent,
   updateGoogleDoc,
 } from '@/lib/integrations/google'
 import {
+  archiveNotionPage,
   createNotionPage,
   getValidNotionAccessToken,
   updateNotionPage,
@@ -68,7 +71,14 @@ const createGoogleDriveFileSchema = z.object({
   name: z.string().min(1),
   content: z.string().optional(),
   folderName: z.string().optional(),
+  parentFolderId: z.string().optional(),
   mimeType: z.string().optional(),
+}).passthrough()
+
+const createGoogleDriveFolderSchema = z.object({
+  name: z.string().min(1),
+  folderName: z.string().optional(),
+  parentFolderId: z.string().optional(),
 }).passthrough()
 
 const createNotionPageSchema = z.object({
@@ -82,6 +92,10 @@ const createNotionPageSchema = z.object({
 const updateNotionPageSchema = z.object({
   pageId: z.string().min(1),
   content: z.string().min(1),
+}).passthrough()
+
+const notionPageIdentifierSchema = z.object({
+  pageId: z.string().min(1),
 }).passthrough()
 
 const replyToEmailSchema = z.object({
@@ -332,6 +346,31 @@ const tools: Array<McpToolDefinition> = [
     },
   },
   {
+    name: 'gmail.unarchive_thread',
+    actionType: 'unarchive_gmail_thread',
+    provider: 'gmail',
+    title: 'Unarchive Gmail thread',
+    description: 'Restore a Gmail thread to the inbox.',
+    version: '2026-03-26',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+      },
+      required: ['threadId'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailThreadSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return unarchiveGmailThread(accessToken, input)
+    },
+  },
+  {
     name: 'gmail.label_thread',
     actionType: 'label_gmail_thread',
     provider: 'gmail',
@@ -552,6 +591,7 @@ const tools: Array<McpToolDefinition> = [
         name: { type: 'string' },
         content: { type: 'string' },
         folderName: { type: 'string' },
+        parentFolderId: { type: 'string' },
         mimeType: { type: 'string' },
       },
       required: ['name'],
@@ -562,6 +602,33 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'google_drive')
       const accessToken = await getValidGoogleAccessToken(integration)
       return createGoogleDriveFile(accessToken, input)
+    },
+  },
+  {
+    name: 'drive.create_folder',
+    actionType: 'create_google_drive_folder',
+    provider: 'google_drive',
+    title: 'Create Drive folder',
+    description: 'Create a new Google Drive folder, optionally inside another folder.',
+    version: '2026-03-26',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        folderName: { type: 'string' },
+        parentFolderId: { type: 'string' },
+      },
+      required: ['name'],
+      additionalProperties: true,
+    },
+    inputSchema: createGoogleDriveFolderSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return createGoogleDriveFolder(accessToken, input)
     },
   },
   {
@@ -780,6 +847,31 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'notion')
       const accessToken = getValidNotionAccessToken(integration)
       return updateNotionPageProperties(accessToken, input)
+    },
+  },
+  {
+    name: 'notion.archive_page',
+    actionType: 'archive_notion_page',
+    provider: 'notion',
+    title: 'Archive Notion page',
+    description: 'Archive an existing Notion page.',
+    version: '2026-03-26',
+    riskLevel: 'high',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        pageId: { type: 'string' },
+      },
+      required: ['pageId'],
+      additionalProperties: true,
+    },
+    inputSchema: notionPageIdentifierSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'notion')
+      const accessToken = getValidNotionAccessToken(integration)
+      return archiveNotionPage(accessToken, input)
     },
   },
   {

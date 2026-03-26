@@ -50,4 +50,11 @@ test('destructive actions stay high risk', () => {
     }),
     'high'
   )
+
+  assert.equal(
+    inferRiskLevel('archive_notion_page', {
+      pageId: 'notion_123',
+    }),
+    'high'
+  )
 })
