@@ -1,11 +1,12 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Badge, Card } from '@/components/ui'
 import { useLang } from '@/lib/lang-context'
 import type { HistoryPageData } from '@/lib/dashboard/server'
 import styles from '@/app/(dashboard)/history/page.module.css'
 
-const statusColors = { completed: 'success', failed: 'danger', rejected: 'warning', pending: 'info' }
+const statusColors = { completed: 'success', failed: 'danger', rejected: 'warning', expired: 'warning', pending: 'info' }
 
 const actionIcons: Record<string, JSX.Element> = {
   send_email: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>,
@@ -16,7 +17,51 @@ const actionIcons: Record<string, JSX.Element> = {
 export function HistoryPageClient({ data }: { data: HistoryPageData }) {
   const { t, lang } = useLang()
   const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
-  const { executionHistory } = data
+  const [query, setQuery] = useState(data.query || '')
+  const [items, setItems] = useState(data.executionHistory)
+  const [isSearching, setIsSearching] = useState(false)
+
+  useEffect(() => {
+    setItems(data.executionHistory)
+    setQuery(data.query || '')
+  }, [data.executionHistory, data.query])
+
+  useEffect(() => {
+    const trimmedQuery = query.trim()
+    if (trimmedQuery === (data.query || '').trim()) {
+      setItems(data.executionHistory)
+      setIsSearching(false)
+      return
+    }
+
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setIsSearching(true)
+        const response = await fetch(`/api/dashboard/history?q=${encodeURIComponent(trimmedQuery)}`, {
+          signal: controller.signal,
+        })
+        if (!response.ok) {
+          throw new Error('Failed to search history.')
+        }
+        const payload = (await response.json()) as { items?: HistoryPageData['executionHistory'] }
+        setItems(Array.isArray(payload.items) ? payload.items : [])
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          setItems(data.executionHistory)
+        }
+      } finally {
+        setIsSearching(false)
+      }
+    }, 200)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [data.executionHistory, data.query, query])
+
+  const executionHistory = items
 
   return (
     <div className={styles.container}>
@@ -32,6 +77,18 @@ export function HistoryPageClient({ data }: { data: HistoryPageData }) {
         </div>
       </header>
       <div className={styles.content}>
+        <div className={styles.toolbar}>
+          <input
+            className={styles.searchInput}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={lang === 'fr' ? 'Rechercher dans l’historique…' : 'Search history…'}
+          />
+          <span className={styles.searchMeta}>
+            {isSearching ? (lang === 'fr' ? 'Recherche…' : 'Searching…') : `${executionHistory.length} / ${data.executionHistory.length}`}
+          </span>
+        </div>
         <div className={styles.stats}>
           <Card className={styles.statCard}>
             <span className={styles.statValue}>{executionHistory.filter((entry) => entry.status === 'completed').length}</span>
@@ -74,6 +131,12 @@ export function HistoryPageClient({ data }: { data: HistoryPageData }) {
               </div>
             </Card>
           ))}
+          {executionHistory.length === 0 ? (
+            <Card variant="bordered" className={styles.emptyState}>
+              <strong>{lang === 'fr' ? 'Aucun résultat' : 'No results'}</strong>
+              <p>{lang === 'fr' ? 'Essaie un autre mot-clé pour retrouver un log d’exécution.' : 'Try another keyword to find an execution log.'}</p>
+            </Card>
+          ) : null}
         </div>
       </div>
     </div>

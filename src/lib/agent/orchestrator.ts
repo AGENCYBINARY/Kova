@@ -1,4 +1,3 @@
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { analyzeUserRequest, isLowValueAssistantResponse } from '@/lib/ai/client'
 import {
@@ -13,113 +12,32 @@ import { runAgentTurn } from '@/lib/agent/v1'
 import { buildCalendarRedoFollowUp } from '@/lib/agent/follow-up'
 import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
+import {
+  type ChatContext,
+  buildWelcomeMessage,
+  extractConnectedContextSeed,
+  loadChatPageState,
+  loadChatRuntimeState,
+  toJsonValue,
+} from '@/lib/agent/chat-state'
 import { getWorkspaceGovernance } from '@/lib/agent/governance'
 import { inferRiskLevel, resolveExecutionDecision } from '@/lib/agent/policy'
+import { listKnownContacts } from '@/lib/contacts'
 import {
-  extractEmailAddresses,
-  extractNameBeforeEmail,
-  extractNameNearEmail,
-  extractRecipientName,
-  findContactByName,
-  listKnownContacts,
-  looksLikeContactCorrection,
-  rememberContact,
-} from '@/lib/contacts'
-import { findGoogleContactEmail, getValidGoogleAccessToken } from '@/lib/integrations/google'
+  resolveCorrectedContactFromChatInput,
+  resolveEmailContactFromGoogle,
+} from '@/lib/agent/orchestrator-contacts'
 import { buildConnectedContextFallbackResponse, buildDeterministicConnectedResponse } from '@/lib/workspace-context/fallback'
 import { resolveConnectedWorkspaceContext } from '@/lib/workspace-context/service'
-import type { ConnectedContextSeed, ConnectedContextSource } from '@/lib/workspace-context/intents'
-import type { ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
 
 export type ChatExecutionMode = 'ask' | 'auto'
 
-interface ChatContext {
-  userId: string
-  workspaceId: string
-}
-
-interface PersistedMessageRecord {
-  role: string
-  content: string
-  metadata: unknown
-}
-
-interface PendingActionRecord {
-  id: string
-  type: string
-  title: string
-  description: string
-  parameters: Record<string, unknown>
-}
-
-interface ChatMessageMetadata {
-  disambiguations?: ReferenceDisambiguation[]
-}
-
-interface CorrectedContactResult {
-  correctedContact: {
-    name: string
-    email: string
-    aliases: string[]
-  }
-  updatedPendingAction?: PendingActionRecord
-  assistantResponse?: string
-}
-
-function mapChatRole(role: string): 'user' | 'assistant' {
-  return role === 'user' ? 'user' : 'assistant'
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>
-  }
-
-  return {}
-}
-
-function toJsonValue(value: Record<string, unknown>) {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
-}
-
 export async function getChatPageData(context: ChatContext) {
-  const [messages, actions] = await Promise.all([
-    prisma.message.findMany({
-      where: {
-        userId: context.userId,
-        workspaceId: context.workspaceId,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 60,
-    }),
-    prisma.action.findMany({
-      where: {
-        userId: context.userId,
-        workspaceId: context.workspaceId,
-        status: 'pending',
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    }),
-  ])
+  const { messages, proposals } = await loadChatPageState(context)
 
   return {
-    messages:
-      messages.length > 0
-        ? [...messages].reverse().map((message) => ({
-            id: message.id,
-            role: mapChatRole(message.role),
-            content: message.content,
-            metadata: asRecord(message.metadata) as ChatMessageMetadata,
-          }))
-        : [buildWelcomeMessage()],
-    proposals: [...actions].reverse().map((action) => ({
-      id: action.id,
-      type: action.type,
-      title: action.title,
-      description: action.description,
-      parameters: asRecord(action.parameters),
-    })),
+    messages: messages.length > 0 ? messages : [buildWelcomeMessage()],
+    proposals,
   }
 }
 
@@ -129,14 +47,6 @@ export async function orchestrateChatTurn(params: {
   context: ChatContext
 }) {
   const { userId, workspaceId } = params.context
-  const previousMessagesPromise = prisma.message.findMany({
-    where: {
-      userId,
-      workspaceId,
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-  })
   const knownContactsPromise = listKnownContacts({
     userId,
     workspaceId,
@@ -146,49 +56,15 @@ export async function orchestrateChatTurn(params: {
     workspaceId,
     userId,
   })
-  const pendingActionsPromise = prisma.action.findMany({
-    where: {
-      userId,
-      workspaceId,
-      status: 'pending',
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  })
-  const recentActionsPromise = prisma.action.findMany({
-    where: {
-      userId,
-      workspaceId,
-      status: {
-        in: ['pending', 'rejected'],
-      },
-    },
-    orderBy: { updatedAt: 'desc' },
-    take: 10,
-  })
+  const chatRuntimeStatePromise = loadChatRuntimeState(params.context)
 
-  const previousMessages = [...(await previousMessagesPromise)].reverse()
-  const [knownContacts, assistantProfile, governance, pendingActionsRaw, recentActionsRaw] = await Promise.all([
+  const [knownContacts, assistantProfile, governance, chatRuntimeState] = await Promise.all([
     knownContactsPromise,
     assistantProfilePromise,
     governancePromise,
-    pendingActionsPromise,
-    recentActionsPromise,
+    chatRuntimeStatePromise,
   ])
-  const pendingActions = pendingActionsRaw.map((action) => ({
-    id: action.id,
-    type: action.type,
-    title: action.title,
-    description: action.description,
-    parameters: asRecord(action.parameters),
-  })) satisfies PendingActionRecord[]
-  const recentActions = recentActionsRaw.map((action) => ({
-    id: action.id,
-    type: action.type,
-    title: action.title,
-    description: action.description,
-    parameters: asRecord(action.parameters),
-  })) satisfies PendingActionRecord[]
+  const { previousMessages, pendingActions, recentActions } = chatRuntimeState
 
   await createToolVisibilityAuditLog({
     workspaceId,
@@ -523,146 +399,6 @@ export async function orchestrateChatTurn(params: {
   }
 }
 
-function extractResolvedContactNameFromPendingAction(action: PendingActionRecord) {
-  if (typeof action.parameters.resolvedContactName === 'string' && action.parameters.resolvedContactName.trim()) {
-    return action.parameters.resolvedContactName.trim()
-  }
-
-  const titleMatch = action.title.match(/send email to\s+(.+)$/i)
-  if (titleMatch?.[1]) {
-    return titleMatch[1].trim()
-  }
-
-  const descriptionMatch = action.description.match(/email to\s+(.+?)\s+(through|via|par|with)\b/i)
-  if (descriptionMatch?.[1]) {
-    return descriptionMatch[1].trim()
-  }
-
-  return null
-}
-
-async function resolveCorrectedContactFromChatInput(params: {
-  content: string
-  previousMessages: PersistedMessageRecord[]
-  pendingActions: PendingActionRecord[]
-  knownContacts: Awaited<ReturnType<typeof listKnownContacts>>
-  userId: string
-  workspaceId: string
-}): Promise<CorrectedContactResult | null> {
-  const emails = extractEmailAddresses(params.content)
-  if (emails.length === 0 || !looksLikeContactCorrection(params.content)) {
-    return null
-  }
-
-  const email = emails[0]
-  const latestPendingEmailAction = params.pendingActions.find(
-    (action) =>
-      action.type === 'send_email' ||
-      action.type === 'create_gmail_draft' ||
-      action.type === 'reply_to_email' ||
-      action.type === 'forward_email'
-  )
-  const explicitNameFromMessage =
-    extractRecipientName(params.content) ||
-    extractNameBeforeEmail(params.content, email) ||
-    extractNameNearEmail(params.content, email)
-
-  const inferredName =
-    explicitNameFromMessage ||
-    (latestPendingEmailAction ? extractResolvedContactNameFromPendingAction(latestPendingEmailAction) : null) ||
-    (() => {
-      for (let index = params.previousMessages.length - 1; index >= 0; index -= 1) {
-        const message = params.previousMessages[index]
-        if (message.role !== 'user') continue
-        const fromPreviousMessage = extractRecipientName(message.content)
-        if (fromPreviousMessage) return fromPreviousMessage
-      }
-      return null
-    })()
-
-  const existingByEmail = params.knownContacts.find((contact) => contact.email.toLowerCase() === email)
-  const name = inferredName || existingByEmail?.name
-  if (!name) {
-    return null
-  }
-  const shouldPersistContact = Boolean(explicitNameFromMessage || existingByEmail?.name)
-
-  const correctedContact = {
-    name,
-    email,
-    aliases: explicitNameFromMessage ? [explicitNameFromMessage] : [],
-  }
-
-  if (latestPendingEmailAction) {
-    const updatedParameters = {
-      ...latestPendingEmailAction.parameters,
-      to: [email],
-      resolvedContactName: name,
-    }
-    const updatedTitle =
-      latestPendingEmailAction.type === 'reply_to_email'
-        ? `Reply to ${name}`
-        : latestPendingEmailAction.type === 'create_gmail_draft'
-          ? `Create draft for ${name}`
-        : latestPendingEmailAction.type === 'forward_email'
-          ? `Forward email to ${name}`
-          : `Send email to ${name}`
-    const updatedDescription =
-      latestPendingEmailAction.type === 'reply_to_email'
-        ? `Prepare a reply to ${name} in the relevant Gmail thread.`
-        : latestPendingEmailAction.type === 'create_gmail_draft'
-          ? `Prepare a Gmail draft for ${name}.`
-        : latestPendingEmailAction.type === 'forward_email'
-          ? `Forward the relevant Gmail message to ${name}.`
-          : `Prepare and send an email to ${name} through Gmail.`
-
-    const updatedAction = await prisma.action.update({
-      where: { id: latestPendingEmailAction.id },
-      data: {
-        title: updatedTitle,
-        description: updatedDescription,
-        parameters: updatedParameters,
-      },
-    })
-
-    if (shouldPersistContact) {
-      await rememberContact({
-        userId: params.userId,
-        workspaceId: params.workspaceId,
-        email,
-        name,
-        aliases: explicitNameFromMessage ? [explicitNameFromMessage] : [],
-      })
-    }
-
-    return {
-      correctedContact,
-      updatedPendingAction: {
-        id: updatedAction.id,
-        type: updatedAction.type,
-        title: updatedAction.title,
-        description: updatedAction.description,
-        parameters: asRecord(updatedAction.parameters),
-      },
-      assistantResponse: `Adresse corrigée pour ${name}. Vérifie puis confirme.`,
-    }
-  }
-
-  if (!explicitNameFromMessage) {
-    return null
-  }
-
-  await rememberContact({
-    userId: params.userId,
-    workspaceId: params.workspaceId,
-    email,
-    name,
-    aliases: [explicitNameFromMessage],
-  })
-
-  return { correctedContact }
-}
-
 async function orchestrateConnectedReadTurn(params: {
   content: string
   context: ChatContext
@@ -797,134 +533,4 @@ async function orchestrateConnectedReadTurn(params: {
     executionModeReason: 'connected_workspace_read',
     workspaceRole: params.governanceRole,
   }
-}
-
-async function resolveEmailContactFromGoogle(params: {
-  content: string
-  knownContacts: Awaited<ReturnType<typeof listKnownContacts>>
-  userId: string
-  workspaceId: string
-}) {
-  const requestedName = extractRecipientName(params.content)
-  if (!requestedName) {
-    return null
-  }
-
-  const knownContact = findContactByName(requestedName, params.knownContacts)
-  if (knownContact) {
-    return knownContact
-  }
-
-  const gmailIntegration = await prisma.integration.findFirst({
-    where: {
-      type: 'gmail',
-      userId: params.userId,
-      workspaceId: params.workspaceId,
-      status: 'connected',
-    },
-  })
-
-  if (!gmailIntegration) {
-    return null
-  }
-
-  try {
-    const accessToken = await getValidGoogleAccessToken(gmailIntegration)
-    const email = await findGoogleContactEmail(accessToken, requestedName)
-    if (!email) {
-      return null
-    }
-
-    await rememberContact({
-      userId: params.userId,
-      workspaceId: params.workspaceId,
-      email,
-      name: requestedName,
-    })
-
-    return {
-      name: requestedName,
-      email,
-      aliases: [requestedName],
-    }
-  } catch {
-    return null
-  }
-}
-
-function buildWelcomeMessage() {
-  return {
-    id: 'welcome',
-    role: 'assistant' as const,
-    content:
-      "I'm your Kova operator. Ask me to draft emails, schedule meetings, work in Notion, create Google Docs, or save files to Google Drive. I will prepare the action for approval before execution.",
-  }
-}
-
-function extractConnectedContextSeed(messages: PersistedMessageRecord[]): ConnectedContextSeed | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message.role !== 'assistant') {
-      continue
-    }
-
-    if (message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata)) {
-      const metadata = message.metadata as Record<string, unknown>
-      const sources = Array.isArray(metadata.connectedContextSources)
-        ? metadata.connectedContextSources.filter(
-            (value): value is ConnectedContextSource =>
-              value === 'gmail' || value === 'calendar' || value === 'google_drive' || value === 'google_docs' || value === 'notion'
-          )
-        : []
-      const timeframe = metadata.connectedContextTimeframe
-
-      if (sources.length > 0 && (timeframe === 'today' || timeframe === 'week' || timeframe === 'recent')) {
-        return {
-          sources,
-          timeframe,
-          asksForAvailability: metadata.connectedContextAvailabilityMode === true,
-          asksForPriorities: metadata.connectedContextPriorityMode === true,
-        }
-      }
-    }
-
-    const content = String(message.content || '')
-    if (/gmail:/i.test(content)) {
-      return {
-        sources: ['gmail'],
-        timeframe: /aujourd'hui|today/i.test(content) ? 'today' : 'recent',
-        asksForAvailability: false,
-        asksForPriorities: false,
-      }
-    }
-
-    if (/calendar:/i.test(content) || /creneaux libres|free windows/i.test(content)) {
-      return {
-        sources: ['calendar'],
-        timeframe: /cette semaine|this week/i.test(content) ? 'week' : 'today',
-        asksForAvailability: /creneaux libres|free windows/i.test(content),
-        asksForPriorities: false,
-      }
-    }
-
-    if (/drive:/i.test(content) || /fichiers drive|drive files/i.test(content)) {
-      return {
-        sources: ['google_drive'],
-        timeframe: 'recent',
-        asksForAvailability: false,
-        asksForPriorities: false,
-      }
-    }
-
-    if (/notion:/i.test(content) || /pages notion|notion pages/i.test(content)) {
-      return {
-        sources: ['notion'],
-        timeframe: 'recent',
-        asksForAvailability: false,
-        asksForPriorities: false,
-      }
-    }
-  }
-
-  return null
 }

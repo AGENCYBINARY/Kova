@@ -31,6 +31,7 @@ export function getErrorStatus(error: unknown) {
   if (
     message === 'Action is no longer pending.' ||
     message === 'Action group is no longer pending.' ||
+    message === 'Action expired.' ||
     message === 'Action execution requires manual review.'
   ) {
     return {

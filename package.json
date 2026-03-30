@@ -12,6 +12,7 @@
     "integration:smoke": "tsx scripts/integration-smoke.ts",
     "integration:live": "tsx --env-file-if-exists=.env.vercel.local scripts/run-integration-live.ts",
     "integration:live:setup": "KOVA_LIVE_WRITE_ENV=true tsx --env-file-if-exists=.env.vercel.local scripts/run-integration-live.ts --setup-only",
+    "logs:prune": "tsx scripts/prune-execution-logs.ts",
     "mcp:standalone": "tsx src/lib/mcp/standalone-server.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

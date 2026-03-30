@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Badge, Button, Card } from '@/components/ui'
 import { useLang } from '@/lib/lang-context'
 import type { ActionsPageData } from '@/lib/dashboard/server'
@@ -14,15 +15,97 @@ const actionIcons: Record<string, JSX.Element> = {
 export function ActionsPageClient({ data }: { data: ActionsPageData }) {
   const { t, lang } = useLang()
   const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
-  const { pendingActions } = data
+  const [pendingActions, setPendingActions] = useState(data.pendingActions)
+  const [loadingActionId, setLoadingActionId] = useState<string | null>(null)
+  const [isBatchLoading, setIsBatchLoading] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
   const highRiskCount = pendingActions.filter((action) => action.riskLevel === 'high').length
   const averageConfidence =
     pendingActions.length > 0
       ? Math.round((pendingActions.reduce((sum, action) => sum + action.confidenceScore, 0) / pendingActions.length) * 100)
       : 0
 
+  useEffect(() => {
+    if (!toast) return
+
+    const timeout = window.setTimeout(() => setToast(null), 3500)
+    return () => window.clearTimeout(timeout)
+  }, [toast])
+
+  async function handleSingleReview(id: string, decision: 'approve' | 'reject') {
+    setLoadingActionId(id)
+
+    try {
+      const response = await fetch(`/api/actions/${id}/${decision}`, {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': `${decision}-${id}-${crypto.randomUUID()}`,
+        },
+      })
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(typeof payload.error === 'string' ? payload.error : 'Action review failed.')
+      }
+
+      const handledIds = Array.isArray(payload.actions)
+        ? new Set((payload.actions as Array<{ id?: string }>).map((action) => action.id).filter(Boolean))
+        : new Set<string>([id])
+
+      setPendingActions((previous) => previous.filter((action) => !handledIds.has(action.id)))
+      if (typeof payload.assistantMessage?.content === 'string') {
+        setToast(payload.assistantMessage.content)
+      }
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Action review failed.')
+    } finally {
+      setLoadingActionId(null)
+    }
+  }
+
+  async function handleBatchReview(decision: 'approve' | 'reject') {
+    if (pendingActions.length === 0) {
+      return
+    }
+
+    setIsBatchLoading(true)
+
+    try {
+      const response = await fetch('/api/actions/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `${decision}-batch-${crypto.randomUUID()}`,
+        },
+        body: JSON.stringify({
+          decision,
+          actionIds: pendingActions.map((action) => action.id),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(typeof payload.error === 'string' ? payload.error : 'Batch review failed.')
+      }
+
+      const handledIds = Array.isArray(payload.actions)
+        ? new Set((payload.actions as Array<{ id?: string }>).map((action) => action.id).filter(Boolean))
+        : new Set<string>()
+
+      setPendingActions((previous) => previous.filter((action) => !handledIds.has(action.id)))
+      if (typeof payload.assistantMessage?.content === 'string') {
+        setToast(payload.assistantMessage.content)
+      }
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Batch review failed.')
+    } finally {
+      setIsBatchLoading(false)
+    }
+  }
+
   return (
     <div className={styles.container}>
+      {toast ? <div className={styles.toast}>{toast}</div> : null}
       <header className={styles.header}>
         <div className={styles.headerCopy}>
           <p className={styles.eyebrow}>{t.actions.eyebrow}</p>
@@ -36,6 +119,26 @@ export function ActionsPageClient({ data }: { data: ActionsPageData }) {
         </div>
       </header>
       <div className={styles.content}>
+        {pendingActions.length > 0 ? (
+          <div className={styles.bulkActions}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleBatchReview('reject')}
+              loading={isBatchLoading}
+            >
+              {lang === 'fr' ? 'Tout rejeter' : 'Reject all'}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => handleBatchReview('approve')}
+              loading={isBatchLoading}
+            >
+              {lang === 'fr' ? 'Tout approuver' : 'Approve all'}
+            </Button>
+          </div>
+        ) : null}
         <div className={styles.summary}>
           <Card variant="bordered" className={styles.summaryCard}>
             <span className={styles.summaryLabel}>{t.actions.queuePressure}</span>
@@ -90,9 +193,23 @@ export function ActionsPageClient({ data }: { data: ActionsPageData }) {
                   <pre>{JSON.stringify(action.parameters, null, 2)}</pre>
                 </div>
                 <div className={styles.cardActions}>
-                  <Button variant="ghost" size="sm">{t.actions.modify}</Button>
-                  <Button variant="danger" size="sm">{t.actions.reject}</Button>
-                  <Button variant="primary" size="sm">{t.actions.approve}</Button>
+                  <Button variant="ghost" size="sm" disabled>{t.actions.modify}</Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => handleSingleReview(action.id, 'reject')}
+                    loading={loadingActionId === action.id}
+                  >
+                    {t.actions.reject}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleSingleReview(action.id, 'approve')}
+                    loading={loadingActionId === action.id}
+                  >
+                    {t.actions.approve}
+                  </Button>
                 </div>
               </Card>
             ))}

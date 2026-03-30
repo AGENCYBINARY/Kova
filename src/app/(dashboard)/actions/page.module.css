@@ -2,6 +2,19 @@
   min-height: 100vh;
 }
 
+.toast {
+  position: sticky;
+  top: 16px;
+  z-index: 5;
+  margin: 16px 16px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.92);
+  color: var(--text-primary);
+  backdrop-filter: blur(12px);
+}
+
 .header {
   display: flex;
   align-items: flex-start;
@@ -43,6 +56,13 @@
 
 .content {
   padding: var(--space-lg);
+}
+
+.bulkActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
 }
 
 .summary {
@@ -206,6 +226,11 @@
 }
 
 @media (max-width: 900px) {
+  .bulkActions {
+    justify-content: stretch;
+    flex-direction: column-reverse;
+  }
+
   .summary {
     grid-template-columns: 1fr;
   }

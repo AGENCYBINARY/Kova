@@ -2,6 +2,7 @@ export type ActionStatus =
   | 'pending'
   | 'approved'
   | 'rejected'
+  | 'expired'
   | 'executing'
   | 'completed'
   | 'failed'

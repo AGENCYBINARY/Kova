@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { asActionParameters } from '@/lib/actions/parameter-resolution'
 import { createAuditLog } from '@/lib/audit/service'
+import { expirePendingActions } from '@/lib/actions/pending-expiration'
 import { getErrorStatus } from '@/lib/http/errors'
 import { buildIdempotencyFingerprint, executeIdempotentJsonRequest } from '@/lib/http/idempotency'
 
@@ -13,6 +14,11 @@ export async function POST(
 ) {
   try {
     const { dbUserId, workspaceId } = await getAppContext()
+    await expirePendingActions({
+      userId: dbUserId,
+      workspaceId,
+    })
+
     return await executeIdempotentJsonRequest({
       request,
       namespace: 'action-reject',
@@ -31,6 +37,13 @@ export async function POST(
           return {
             body: { error: 'Action not found.' },
             status: 404,
+          }
+        }
+
+        if (action.status === 'expired') {
+          return {
+            body: { error: 'Action expired.' },
+            status: 409,
           }
         }
 

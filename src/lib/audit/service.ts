@@ -8,6 +8,7 @@ export type AuditStatus =
   | 'success'
   | 'failure'
   | 'rejected'
+  | 'expired'
   | 'read'
   | 'decision'
   | 'fallback'
@@ -35,6 +36,16 @@ export interface AuditLogInput {
 
 function toJsonObject(value: Record<string, unknown> | undefined) {
   return (value || {}) as Prisma.JsonObject
+}
+
+export function resolveExecutionLogRetentionDays(rawValue: string | undefined) {
+  const DEFAULT_EXECUTION_LOG_RETENTION_DAYS = 90
+  const parsed = Number(rawValue || DEFAULT_EXECUTION_LOG_RETENTION_DAYS)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_EXECUTION_LOG_RETENTION_DAYS
+  }
+
+  return Math.min(parsed, 365)
 }
 
 export function buildAuditDetails(input: AuditLogInput) {

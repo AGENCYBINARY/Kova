@@ -4,6 +4,7 @@ import { inferRiskLevel } from '@/lib/agent/execution-governance'
 import { dashboardIntegrations, type DashboardAction, type DashboardIntegration } from '@/lib/dashboard-data'
 import { buildDashboardScopeWhere } from '@/lib/dashboard/query'
 import { getGoogleIntegrationCapabilityState } from '@/lib/integrations/google'
+import { expirePendingActions } from '@/lib/actions/pending-expiration'
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -18,6 +19,7 @@ function mapActionStatus(status: string): DashboardAction['status'] {
     status === 'pending' ||
     status === 'approved' ||
     status === 'rejected' ||
+    status === 'expired' ||
     status === 'executing' ||
     status === 'completed' ||
     status === 'failed'
@@ -251,6 +253,7 @@ export interface ActionsPageData {
 export interface HistoryPageData {
   executionHistory: DashboardAction[]
   source: 'database'
+  query?: string
 }
 
 export interface IntegrationsPageData {
@@ -268,6 +271,7 @@ async function getDashboardScope() {
 
 export async function getDashboardBundle(): Promise<DashboardBundle> {
   const scopeWhere = await getDashboardScope()
+  await expirePendingActions(scopeWhere)
   const [actions, integrations] = await Promise.all([
     prisma.action.findMany({
       where: scopeWhere,
@@ -334,6 +338,7 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
 
 export async function getActionsPageData(): Promise<ActionsPageData> {
   const scopeWhere = await getDashboardScope()
+  await expirePendingActions(scopeWhere)
   const actions = await prisma.action.findMany({
     where: {
       ...scopeWhere,
@@ -349,22 +354,40 @@ export async function getActionsPageData(): Promise<ActionsPageData> {
   }
 }
 
-export async function getHistoryPageData(): Promise<HistoryPageData> {
+function buildHistorySearchWhere(query: string) {
+  const trimmed = query.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  return {
+    OR: [
+      { title: { contains: trimmed, mode: 'insensitive' as const } },
+      { description: { contains: trimmed, mode: 'insensitive' as const } },
+      { type: { contains: trimmed, mode: 'insensitive' as const } },
+    ],
+  }
+}
+
+export async function getHistoryPageData(query = ''): Promise<HistoryPageData> {
   const scopeWhere = await getDashboardScope()
+  await expirePendingActions(scopeWhere)
   const actions = await prisma.action.findMany({
     where: {
       ...scopeWhere,
       status: {
         not: 'pending',
       },
+      ...buildHistorySearchWhere(query),
     },
     orderBy: [{ createdAt: 'desc' }],
-    take: 50,
+    take: 200,
   })
 
   return {
     executionHistory: actions.map(mapAction),
     source: 'database',
+    query,
   }
 }
 
