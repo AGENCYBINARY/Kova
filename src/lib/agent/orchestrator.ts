@@ -10,8 +10,6 @@ import {
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
 import { buildCalendarRedoFollowUp } from '@/lib/agent/follow-up'
-import { claimPendingActionIds } from '@/lib/actions/claim-pending'
-import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import {
   type ChatContext,
   buildWelcomeMessage,
@@ -27,6 +25,7 @@ import {
   resolveCorrectedContactFromChatInput,
   resolveEmailContactFromGoogle,
 } from '@/lib/agent/orchestrator-contacts'
+import { persistAndExecuteAgentProposals } from '@/lib/agent/orchestrator-actions'
 import { buildConnectedContextFallbackResponse, buildDeterministicConnectedResponse } from '@/lib/workspace-context/fallback'
 import { resolveConnectedWorkspaceContext } from '@/lib/workspace-context/service'
 
@@ -256,127 +255,14 @@ export async function orchestrateChatTurn(params: {
     },
   })
 
-  const requestGroupId = agentResult.proposals.length > 1 ? `group_${Date.now()}_${userId.slice(0, 6)}` : null
-
-  const createdActions = agentResult.proposals.length > 0
-    ? await Promise.all(
-        agentResult.proposals.map((proposal, index) =>
-          prisma.action.create({
-            data: {
-              type: proposal.type,
-              title: proposal.title,
-              description: proposal.description,
-              parameters: {
-                ...proposal.parameters,
-                confidenceScore: proposal.confidenceScore,
-                proposalIndex: index,
-                ...(requestGroupId ? { requestGroupId } : {}),
-              },
-              status: 'pending',
-              userId,
-              workspaceId,
-              ...(index === 0 ? { messageId: assistantMessage.id } : {}),
-            },
-          })
-        )
-      )
-    : []
-
-  if (createdActions.length > 0 && effectiveExecutionMode === 'ask') {
-    await Promise.all(
-      createdActions.map((action) =>
-        createAuditLog({
-          actionType: action.type,
-          status: 'review_required',
-          actionId: action.id,
-          workspaceId,
-          userId,
-          riskLevel: inferRiskLevel(action.type as typeof agentResult.proposals[number]['type'], action.parameters as Record<string, unknown>),
-          executionReason: executionDecision.reason,
-          executionTrigger: 'review',
-          details: {
-            source: 'chat',
-          },
-        })
-      )
-    )
-  }
-
-  let executionMessages: Array<Awaited<ReturnType<typeof prisma.message.create>>> = []
-  let autoExecutionFailed = false
-  let reviewableActions = createdActions
-
-  if (createdActions.length > 0 && effectiveExecutionMode === 'auto') {
-    await claimPendingActionIds(prisma, {
-      actionIds: createdActions.map((action) => action.id),
-      workspaceId,
-      userId,
-    })
-
-    const batchResult = await executePersistedActionBatch({
-      actions: createdActions.map((action) => ({
-        id: action.id,
-        type: action.type,
-        title: action.title,
-        description: action.description,
-        parameters: action.parameters,
-        workspaceId,
-        userId,
-      })),
-      trigger: 'auto',
-    })
-
-    if (batchResult.completed.length > 0) {
-      const executionMessage = await prisma.message.create({
-        data: {
-          content:
-            batchResult.completed.length === 1
-              ? `C'est bon. "${batchResult.completed[0].action.title}" a ete execute automatiquement. ${batchResult.completed[0].execution.details}`
-              : `C'est bon. ${batchResult.completed.length} actions ont ete executees automatiquement.`,
-          role: 'assistant',
-          metadata: {
-            actionStatus: 'completed',
-            actionCount: batchResult.completed.length,
-            executionMode: 'auto',
-            executionReason: executionDecision.reason,
-          },
-          userId,
-          workspaceId,
-        },
-      })
-
-      executionMessages.push(executionMessage)
-    }
-
-    if (batchResult.failed) {
-      autoExecutionFailed = true
-      reviewableActions = createdActions.filter((createdAction) =>
-        batchResult.blocked.some((blockedAction) => blockedAction.action.id === createdAction.id)
-      )
-
-      const executionMessage = await prisma.message.create({
-        data: {
-          content:
-            batchResult.blocked.length > 0
-              ? `L'execution automatique s'est arretee sur "${batchResult.failed.action.title}": ${batchResult.failed.error}. ${batchResult.blocked.length} action(s) restent en attente de validation.`
-              : `L'execution automatique s'est arretee sur "${batchResult.failed.action.title}": ${batchResult.failed.error}.`,
-          role: 'assistant',
-          metadata: {
-            actionId: batchResult.failed.action.id,
-            actionStatus: 'failed',
-            blockedActionCount: batchResult.blocked.length,
-            executionMode: 'auto',
-            autoExecutionFailed: true,
-            executionReason: executionDecision.reason,
-          },
-          userId,
-          workspaceId,
-        },
-      })
-
-      executionMessages.push(executionMessage)
-    }
-  }
+  const { reviewableActions, executionMessages, autoExecutionFailed } = await persistAndExecuteAgentProposals({
+    proposals: agentResult.proposals,
+    executionMode: effectiveExecutionMode,
+    executionReason: executionDecision.reason,
+    assistantMessageId: assistantMessage.id,
+    userId,
+    workspaceId,
+  })
 
   return {
     userMessage,

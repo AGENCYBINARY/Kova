@@ -15,16 +15,44 @@ import {
   GOOGLE_PROVIDER_TYPES,
   type GoogleIntegrationCapabilityState,
 } from '@/lib/integrations/google-auth'
+import {
+  computeCalendarAvailability,
+  createGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+  listGoogleCalendarEvents,
+  updateGoogleCalendarEvent,
+  type GoogleCalendarAvailabilityWindow,
+  type GoogleCalendarEventSummary,
+} from '@/lib/integrations/google-calendar'
+import {
+  createGoogleDoc,
+  listRecentGoogleDocs,
+  readGoogleDocContent,
+  updateGoogleDoc,
+  type GoogleDocSummary,
+} from '@/lib/integrations/google-docs'
 
 export {
   buildGoogleOAuthUrl,
+  computeCalendarAvailability,
+  createGoogleCalendarEvent,
+  createGoogleDoc,
+  deleteGoogleCalendarEvent,
   exchangeGoogleCodeForTokens,
   fetchGoogleAccountEmail,
   getGoogleGrantedScopes,
   getGoogleIntegrationCapabilityState,
   getValidGoogleAccessToken,
+  listGoogleCalendarEvents,
+  listRecentGoogleDocs,
   persistGoogleTokens,
   GOOGLE_PROVIDER_TYPES,
+  readGoogleDocContent,
+  type GoogleCalendarAvailabilityWindow,
+  type GoogleCalendarEventSummary,
+  type GoogleDocSummary,
+  updateGoogleCalendarEvent,
+  updateGoogleDoc,
 }
 
 function toBase64Url(value: string) {
@@ -104,23 +132,6 @@ export interface GmailThreadSummary {
   participants: string[]
   messageCount: number
   latestSnippet: string
-}
-
-export interface GoogleCalendarEventSummary {
-  id: string
-  title: string
-  startTime: string | null
-  endTime: string | null
-  attendees: string[]
-  location: string | null
-  htmlLink: string | null
-  meetLink: string | null
-  status: string | null
-}
-
-export interface GoogleCalendarAvailabilityWindow {
-  startTime: string
-  endTime: string
 }
 
 export interface GoogleDriveFileSummary {
@@ -795,109 +806,6 @@ export async function summarizeGmailThreads(messages: GmailMessageSummary[]) {
   return Array.from(byThread.values())
 }
 
-export async function listGoogleCalendarEvents(
-  accessToken: string,
-  options: {
-    timeMin: string
-    timeMax: string
-    maxResults?: number
-    query?: string
-  }
-) {
-  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
-  url.searchParams.set('singleEvents', 'true')
-  url.searchParams.set('orderBy', 'startTime')
-  url.searchParams.set('timeMin', options.timeMin)
-  url.searchParams.set('timeMax', options.timeMax)
-  url.searchParams.set('maxResults', String(Math.max(1, Math.min(options.maxResults || 20, 50))))
-
-  if (options.query?.trim()) {
-    url.searchParams.set('q', options.query.trim())
-  }
-
-  const response = await googleFetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
-
-  if (!response.ok) {
-    throw new Error(`Calendar read failed: ${response.status}`)
-  }
-
-  const data = await response.json() as {
-    items?: Array<{
-      id: string
-      summary?: string
-      status?: string
-      location?: string
-      htmlLink?: string
-      attendees?: Array<{ email?: string }>
-      start?: { dateTime?: string; date?: string }
-      end?: { dateTime?: string; date?: string }
-      hangoutLink?: string
-      conferenceData?: {
-        entryPoints?: Array<{ entryPointType?: string; uri?: string }>
-      }
-    }>
-  }
-
-  return (data.items || []).map((item) => ({
-    id: item.id,
-    title: item.summary || '(untitled event)',
-    startTime: item.start?.dateTime || item.start?.date || null,
-    endTime: item.end?.dateTime || item.end?.date || null,
-    attendees: (item.attendees || []).map((attendee) => attendee.email || '').filter(Boolean),
-    location: item.location || null,
-    htmlLink: item.htmlLink || null,
-    meetLink:
-      item.hangoutLink ||
-      item.conferenceData?.entryPoints?.find((entryPoint) => entryPoint.entryPointType === 'video')?.uri ||
-      null,
-    status: item.status || null,
-  } satisfies GoogleCalendarEventSummary))
-}
-
-export function computeCalendarAvailability(
-  events: GoogleCalendarEventSummary[],
-  options: {
-    rangeStart: string
-    rangeEnd: string
-  }
-) {
-  const windows: GoogleCalendarAvailabilityWindow[] = []
-  const sortedEvents = events
-    .filter((event) => event.startTime && event.endTime)
-    .sort((left, right) => new Date(left.startTime || 0).getTime() - new Date(right.startTime || 0).getTime())
-  let cursor = new Date(options.rangeStart)
-  const rangeEnd = new Date(options.rangeEnd)
-
-  for (const event of sortedEvents) {
-    const eventStart = new Date(event.startTime || cursor.toISOString())
-    const eventEnd = new Date(event.endTime || eventStart.toISOString())
-
-    if (eventStart > cursor) {
-      windows.push({
-        startTime: cursor.toISOString(),
-        endTime: eventStart.toISOString(),
-      })
-    }
-
-    if (eventEnd > cursor) {
-      cursor = eventEnd
-    }
-  }
-
-  if (cursor < rangeEnd) {
-    windows.push({
-      startTime: cursor.toISOString(),
-      endTime: rangeEnd.toISOString(),
-    })
-  }
-
-  return windows.filter((window) => new Date(window.endTime).getTime() > new Date(window.startTime).getTime())
-}
-
 function escapeDriveQueryValue(value: string) {
   return value.replace(/'/g, "\\'")
 }
@@ -1065,71 +973,6 @@ export async function readGmailMessageBody(accessToken: string, messageId: strin
   return extractText(data.payload).trim()
 }
 
-export async function updateGoogleCalendarEvent(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const eventId = String(parameters.eventId || '')
-  if (!eventId) throw new Error('eventId is required to update a calendar event.')
-
-  const body: Record<string, unknown> = {}
-  if (parameters.title) body.summary = parameters.title
-  if (parameters.description || parameters.notes) body.description = String(parameters.description || parameters.notes || '')
-  if (parameters.startTime) body.start = { dateTime: parameters.startTime }
-  if (parameters.endTime) body.end = { dateTime: parameters.endTime }
-  if (Array.isArray(parameters.attendees) && parameters.attendees.length > 0) {
-    body.attendees = parameters.attendees.map((email) => ({ email }))
-  }
-
-  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`)
-  if (Array.isArray(parameters.attendees) && parameters.attendees.length > 0) {
-    url.searchParams.set('sendUpdates', 'all')
-  }
-
-  const response = await googleFetch(url.toString(), {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
-
-  if (!response.ok) {
-    throw new Error(`Calendar event update failed: ${response.status}`)
-  }
-
-  const data = await response.json() as { id: string; htmlLink?: string; summary?: string }
-  return {
-    details: 'Calendar event updated.',
-    output: {
-      provider: 'google_calendar',
-      eventId: data.id,
-      title: data.summary || null,
-      link: data.htmlLink || null,
-    },
-  }
-}
-
-export async function deleteGoogleCalendarEvent(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const eventId = String(parameters.eventId || '')
-  if (!eventId) throw new Error('eventId is required to delete a calendar event.')
-
-  const response = await googleFetch(
-    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
-    {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    },
-    { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
-  )
-
-  if (!response.ok && response.status !== 204) {
-    throw new Error(`Calendar event deletion failed: ${response.status}`)
-  }
-
-  return {
-    details: 'Calendar event deleted.',
-    output: { provider: 'google_calendar', eventId, deleted: true },
-  }
-}
 
 export async function deleteGoogleDriveFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
   const fileId = String(parameters.fileId || '')
@@ -1469,303 +1312,6 @@ export async function unshareGoogleDriveFile(accessToken: string, parameters: Re
       emails: removed,
       name: file.name || null,
       link: file.webViewLink || null,
-    },
-  }
-}
-
-export async function createGoogleCalendarEvent(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const shouldCreateMeetLink = Boolean(parameters.createMeetLink)
-  const hasAttendees = Array.isArray(parameters.attendees) && parameters.attendees.length > 0
-  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
-
-  if (shouldCreateMeetLink) {
-    url.searchParams.set('conferenceDataVersion', '1')
-  }
-
-  if (hasAttendees) {
-    url.searchParams.set('sendUpdates', 'all')
-  }
-
-  const response = await googleFetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      summary: parameters.title || 'Kova event',
-      description: parameters.description || parameters.notes || '',
-      start: { dateTime: parameters.startTime },
-      end: { dateTime: parameters.endTime },
-      attendees: Array.isArray(parameters.attendees)
-        ? parameters.attendees.map((email) => ({ email }))
-        : [],
-      ...(shouldCreateMeetLink
-        ? {
-            conferenceData: {
-              createRequest: {
-                requestId: `kova-${Date.now()}`,
-                conferenceSolutionKey: {
-                  type: 'hangoutsMeet',
-                },
-              },
-            },
-          }
-        : {}),
-    }),
-  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
-
-  if (!response.ok) {
-    throw new Error(`Calendar event creation failed: ${response.status}`)
-  }
-
-  const data = await response.json() as {
-    id: string
-    htmlLink?: string
-    hangoutLink?: string
-    conferenceData?: {
-      entryPoints?: Array<{ entryPointType?: string; uri?: string }>
-    }
-  }
-
-  const meetLink =
-    data.hangoutLink ||
-    data.conferenceData?.entryPoints?.find((entryPoint) => entryPoint.entryPointType === 'video')?.uri ||
-    null
-
-  return {
-    details: 'Event created in Google Calendar.',
-    output: {
-      provider: 'google_calendar',
-      eventId: data.id,
-      link: data.htmlLink || null,
-      meetLink,
-      meet_link: meetLink,
-    },
-  }
-}
-
-async function insertTextIntoGoogleDoc(accessToken: string, documentId: string, text: string) {
-  const getResponse = await googleFetch(`https://docs.googleapis.com/v1/documents/${documentId}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
-
-  if (!getResponse.ok) {
-    throw new Error(`Google Docs read failed: ${getResponse.status}`)
-  }
-
-  const document = await getResponse.json() as { body?: { content?: Array<{ endIndex?: number }> } }
-  const endIndex = document.body?.content?.[document.body.content.length - 1]?.endIndex || 1
-
-  const updateResponse = await googleFetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      requests: [
-        {
-          insertText: {
-            location: { index: Math.max(1, endIndex - 1) },
-            text,
-          },
-        },
-      ],
-    }),
-  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
-
-  if (!updateResponse.ok) {
-    throw new Error(`Google Docs write failed: ${updateResponse.status}`)
-  }
-}
-
-export interface GoogleDocSummary {
-  id: string
-  title: string
-  modifiedTime: string | null
-  webViewLink: string | null
-  preview: string
-}
-
-export async function readGoogleDocContent(accessToken: string, documentId: string): Promise<string> {
-  const response = await googleFetch(`https://docs.googleapis.com/v1/documents/${documentId}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
-
-  if (!response.ok) {
-    throw new Error(`Google Docs read failed: ${response.status}`)
-  }
-
-  const doc = await response.json() as {
-    title?: string
-    body?: {
-      content?: Array<{
-        paragraph?: {
-          elements?: Array<{
-            textRun?: { content?: string }
-          }>
-        }
-        table?: {
-          tableRows?: Array<{
-            tableCells?: Array<{
-              content?: Array<{
-                paragraph?: {
-                  elements?: Array<{ textRun?: { content?: string } }>
-                }
-              }>
-            }>
-          }>
-        }
-      }>
-    }
-  }
-
-  const lines: string[] = []
-  for (const block of doc.body?.content || []) {
-    if (block.paragraph) {
-      const text = (block.paragraph.elements || [])
-        .map((el) => el.textRun?.content || '')
-        .join('')
-        .trimEnd()
-      if (text) lines.push(text)
-    } else if (block.table) {
-      for (const row of block.table.tableRows || []) {
-        const cells = (row.tableCells || []).map((cell) =>
-          (cell.content || [])
-            .flatMap((p) => (p.paragraph?.elements || []).map((el) => el.textRun?.content || ''))
-            .join('')
-            .trim()
-        )
-        if (cells.some(Boolean)) lines.push(cells.join(' | '))
-      }
-    }
-  }
-
-  return lines.join('\n').trim()
-}
-
-export async function listRecentGoogleDocs(
-  accessToken: string,
-  options: { query?: string; maxResults?: number } = {}
-): Promise<GoogleDocSummary[]> {
-  const url = new URL('https://www.googleapis.com/drive/v3/files')
-  const clauses = [
-    "trashed=false",
-    "mimeType='application/vnd.google-apps.document'",
-  ]
-
-  if (options.query?.trim()) {
-    const escaped = escapeDriveQueryValue(options.query.trim())
-    clauses.push(`(name contains '${escaped}' or fullText contains '${escaped}')`)
-  }
-
-  url.searchParams.set('q', clauses.join(' and '))
-  url.searchParams.set('orderBy', 'modifiedTime desc')
-  url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 8, 20))))
-  url.searchParams.set('fields', 'files(id,name,modifiedTime,webViewLink)')
-
-  const response = await googleFetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
-
-  if (!response.ok) {
-    throw new Error(`Google Drive Docs list failed: ${response.status}`)
-  }
-
-  const data = await response.json() as {
-    files?: Array<{
-      id: string
-      name?: string
-      modifiedTime?: string
-      webViewLink?: string
-    }>
-  }
-
-  const files = data.files || []
-
-  const enriched = await Promise.all(
-    files.slice(0, 4).map(async (file) => {
-      let preview = ''
-      try {
-        const content = await readGoogleDocContent(accessToken, file.id)
-        preview = content.slice(0, 300).replace(/\n+/g, ' ').trim()
-      } catch {
-        preview = ''
-      }
-      return {
-        id: file.id,
-        title: file.name || 'Untitled',
-        modifiedTime: file.modifiedTime || null,
-        webViewLink: file.webViewLink || null,
-        preview,
-      } satisfies GoogleDocSummary
-    })
-  )
-
-  const rest = files.slice(4).map((file) => ({
-    id: file.id,
-    title: file.name || 'Untitled',
-    modifiedTime: file.modifiedTime || null,
-    webViewLink: file.webViewLink || null,
-    preview: '',
-  } satisfies GoogleDocSummary))
-
-  return [...enriched, ...rest]
-}
-
-export async function createGoogleDoc(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const response = await googleFetch('https://docs.googleapis.com/v1/documents', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      title: parameters.title || 'Kova document',
-    }),
-  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
-
-  if (!response.ok) {
-    throw new Error(`Google Docs create failed: ${response.status}`)
-  }
-
-  const document = await response.json() as { documentId: string; title: string }
-  const sections = Array.isArray(parameters.sections) ? parameters.sections : []
-  const sourcePrompt = typeof parameters.sourcePrompt === 'string' ? parameters.sourcePrompt : ''
-  const text = `${sections.map((section) => `${section}\n`).join('\n')}\n${sourcePrompt}\n`
-  await insertTextIntoGoogleDoc(accessToken, document.documentId, text)
-
-  return {
-    details: 'Document created in Google Docs.',
-    output: {
-      provider: 'google_docs',
-      documentId: document.documentId,
-      title: document.title,
-    },
-  }
-}
-
-export async function updateGoogleDoc(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const documentId = String(parameters.documentId || '')
-  if (!documentId) {
-    throw new Error('documentId is required to update a Google Doc.')
-  }
-
-  const text = typeof parameters.content === 'string' ? parameters.content : JSON.stringify(parameters.content || '', null, 2)
-  await insertTextIntoGoogleDoc(accessToken, documentId, `\n${text}\n`)
-
-  return {
-    details: 'Document updated in Google Docs.',
-    output: {
-      provider: 'google_docs',
-      documentId,
     },
   }
 }
