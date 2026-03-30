@@ -8,6 +8,7 @@ import {
 
 export type { KnownContact } from '@/lib/contacts-utils'
 export {
+  deriveNameFromEmail,
   extractEmailAddresses,
   extractNameBeforeEmail,
   extractNameNearEmail,

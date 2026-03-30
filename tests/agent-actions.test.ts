@@ -88,15 +88,57 @@ test('capability wording with savoir stays conversational and does not create a 
   }
 })
 
-test('calendar requests phrased with faire remain actionable and do not fall back to capability mode', async () => {
+test('calendar requests phrased with faire stay assistant-like and ask for scheduling details when missing', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   delete process.env.OPENAI_API_KEY
 
   try {
     const result = await runAgentTurn('Tu peux me faire un evenement dans calendar google le motif est un rdv avec Maxime', [], [])
+    assert.equal(result.proposals.length, 0)
+    assert.match(result.response, /date/i)
+    assert.match(result.response, /heure/i)
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('calendar requests without explicit date and time ask for clarification instead of inventing a slot', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn(
+      'Tu peux me creer un evenement dans mon calendrier google pour une reunion et inviter massarelli.tristan@gmail.com',
+      [],
+      []
+    )
+    assert.equal(result.proposals.length, 0)
+    assert.match(result.response, /date/i)
+    assert.match(result.response, /heure/i)
+    assert.match(result.response, /massarelli\.tristan@gmail\.com/i)
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('calendar fallback keeps explicit attendee emails when schedule details are present', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn(
+      'Crée un événement demain à 15h pour une réunion avec massarelli.tristan@gmail.com',
+      [],
+      []
+    )
     assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event'])
+    assert.deepEqual(result.proposals[0]?.parameters.attendees, ['massarelli.tristan@gmail.com'])
     assert.equal(result.proposals[0]?.parameters.createMeetLink, false)
-    assert.match(result.response, /C'est prêt|prêt/)
+    assert.doesNotMatch(result.response, /Google Meet/i)
   } finally {
     if (previousKey) {
       process.env.OPENAI_API_KEY = previousKey

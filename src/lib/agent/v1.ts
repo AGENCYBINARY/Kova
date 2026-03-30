@@ -6,7 +6,7 @@ import {
   type AssistantProfile,
 } from '@/lib/assistant/profile'
 import { resolveActionReferencesDetailed, type ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
-import { extractRecipientName, findContactByName, type KnownContact } from '@/lib/contacts'
+import { deriveNameFromEmail, extractEmailAddresses, extractRecipientName, findContactByName, type KnownContact } from '@/lib/contacts'
 import { prepareActionParameters } from '@/lib/agent/data-prep'
 import { getToolByActionType, listMcpTools } from '@/lib/mcp/registry'
 import { isEmailSendIntent, isReadOnlyWorkspaceQuestion } from '@/lib/workspace-context/intents'
@@ -103,6 +103,58 @@ function requestNeedsMeetLink(input: string) {
   return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams)/.test(
     normalizeInput(input)
   )
+}
+
+function hasExplicitCalendarDate(input: string) {
+  const normalized = normalizeInput(input)
+  return (
+    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(
+      normalized
+    ) ||
+    /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(normalized) ||
+    /\b\d{1,2}\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(
+      normalized
+    )
+  )
+}
+
+function hasExplicitCalendarTime(input: string) {
+  const normalized = normalizeInput(input)
+  return (
+    /\b\d{1,2}\s*(?:h|heure|heures)\b/.test(normalized) ||
+    /\b\d{1,2}:\d{2}\b/.test(normalized) ||
+    /\b(midi|minuit|noon|midnight)\b/.test(normalized)
+  )
+}
+
+function hasConcreteCalendarSchedule(input: string) {
+  return hasExplicitCalendarDate(input) && hasExplicitCalendarTime(input)
+}
+
+function getCalendarAttendeesFromInput(input: string, contact?: KnownContact | null) {
+  const explicitEmails = extractEmailAddresses(input)
+  if (explicitEmails.length > 0) {
+    return explicitEmails
+  }
+
+  if (contact?.email) {
+    return [contact.email]
+  }
+
+  return []
+}
+
+function getCalendarContactLabel(input: string, contact?: KnownContact | null) {
+  if (contact?.name) {
+    return contact.name
+  }
+
+  const explicitEmails = extractEmailAddresses(input)
+  if (explicitEmails.length === 1) {
+    return deriveNameFromEmail(explicitEmails[0]) || explicitEmails[0]
+  }
+
+  return null
 }
 
 function isActionRequest(input: string) {
@@ -387,28 +439,32 @@ function buildCalendarProposal(input: string, profile?: AssistantProfile, contac
   const start = new Date(now + 1000 * 60 * 60 * 24)
   const durationMinutes = profile?.meetingDefaultDurationMinutes || 30
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000)
+  const calendarContactLabel = getCalendarContactLabel(input, contact)
+  const attendeeEmails = getCalendarAttendeesFromInput(input, contact)
   const inferredTitle = (() => {
     const n = normalizeInput(input)
-    if (/déjeuner|dejeuner|lunch/.test(n)) return contact ? `Déjeuner avec ${contact.name}` : 'Déjeuner'
-    if (/café|cafe|coffee/.test(n)) return contact ? `Café avec ${contact.name}` : 'Café'
-    if (/call|appel/.test(n)) return contact ? `Call avec ${contact.name}` : 'Call'
-    if (/point|sync|weekly|hebdo/.test(n)) return contact ? `Point avec ${contact.name}` : 'Point hebdo'
-    if (/debrief|debriefing/.test(n)) return contact ? `Debrief avec ${contact.name}` : 'Debrief'
-    if (/présentation|presentation/.test(n)) return contact ? `Présentation avec ${contact.name}` : 'Présentation'
-    if (contact) return profile?.defaultLanguage === 'en' ? `Meeting with ${contact.name}` : `Rendez-vous avec ${contact.name}`
+    if (/déjeuner|dejeuner|lunch/.test(n)) return calendarContactLabel ? `Déjeuner avec ${calendarContactLabel}` : 'Déjeuner'
+    if (/café|cafe|coffee/.test(n)) return calendarContactLabel ? `Café avec ${calendarContactLabel}` : 'Café'
+    if (/call|appel/.test(n)) return calendarContactLabel ? `Call avec ${calendarContactLabel}` : 'Call'
+    if (/point|sync|weekly|hebdo/.test(n)) return calendarContactLabel ? `Point avec ${calendarContactLabel}` : 'Point hebdo'
+    if (/debrief|debriefing/.test(n)) return calendarContactLabel ? `Debrief avec ${calendarContactLabel}` : 'Debrief'
+    if (/présentation|presentation/.test(n)) return calendarContactLabel ? `Présentation avec ${calendarContactLabel}` : 'Présentation'
+    if (calendarContactLabel) {
+      return profile?.defaultLanguage === 'en' ? `Meeting with ${calendarContactLabel}` : `Réunion avec ${calendarContactLabel}`
+    }
     return profile?.defaultLanguage === 'en' ? 'Meeting' : 'Rendez-vous'
   })()
   const meetingTitle = inferredTitle
 
   return {
     type: 'create_calendar_event',
-    title: contact ? `Create meeting invite for ${contact.name}` : 'Create calendar event',
+    title: calendarContactLabel ? `Create meeting invite for ${calendarContactLabel}` : 'Create calendar event',
     description: 'Create a Google Calendar invite with attendee-ready scheduling details.',
     parameters: {
       title: meetingTitle,
       startTime: start.toISOString(),
       endTime: end.toISOString(),
-      attendees: contact ? [contact.email] : [],
+      attendees: attendeeEmails,
       createMeetLink: requestNeedsMeetLink(input),
       description:
         profile?.defaultLanguage === 'en'
@@ -1042,6 +1098,17 @@ function buildFallbackResponseWithContactsAndProfile(
     /(gmail|email|e-mail|mail|send|envoie|envoyer|courriel|lien|link)/.test(intentText) &&
     explicitlyWantsSeparateEmail
   ) {
+    if (!hasConcreteCalendarSchedule(input)) {
+      const attendeeEmails = getCalendarAttendeesFromInput(input, knownContact)
+      return {
+        response:
+          language === 'en'
+            ? `Yes. I can prepare it. I still need the date and exact time${attendeeEmails.length > 0 ? `, and I'll keep ${attendeeEmails.join(', ')} as attendee${attendeeEmails.length > 1 ? 's' : ''}` : ''}.`
+            : `Oui. Je peux le préparer. Il me manque juste la date et l’heure exacte${attendeeEmails.length > 0 ? `, et je garde ${attendeeEmails.join(', ')} en invité${attendeeEmails.length > 1 ? 's' : ''}` : ''}.`,
+        proposals: [],
+      }
+    }
+
     const calProp = buildCalendarProposal(input, assistantProfile, knownContact)
     return {
       response:
@@ -1056,13 +1123,29 @@ function buildFallbackResponseWithContactsAndProfile(
   }
 
   if ((isMeetingRequest || (wantsMeetingConfirmation && knownContact)) && !explicitEmailIntent) {
+    if (!hasConcreteCalendarSchedule(input)) {
+      const attendeeEmails = getCalendarAttendeesFromInput(input, knownContact)
+      return {
+        response:
+          language === 'en'
+            ? `Yes. I can prepare it. I still need the date and exact time${attendeeEmails.length > 0 ? `, and I'll keep ${attendeeEmails.join(', ')} as attendee${attendeeEmails.length > 1 ? 's' : ''}` : ''}.`
+            : `Oui. Je peux le préparer. Il me manque juste la date et l’heure exacte${attendeeEmails.length > 0 ? `, et je garde ${attendeeEmails.join(', ')} en invité${attendeeEmails.length > 1 ? 's' : ''}` : ''}.`,
+        proposals: [],
+      }
+    }
+
     const calProp = buildCalendarProposal(input, assistantProfile, knownContact)
     const title = typeof calProp.parameters.title === 'string' ? calProp.parameters.title : ''
+    const mentionsMeet = Boolean(calProp.parameters.createMeetLink)
     return {
       response:
         language === 'en'
-          ? `Done. "${title}" is ready with a Google Meet link.`
-          : `C'est prêt. "${title}" avec lien Google Meet.`,
+          ? mentionsMeet
+            ? `Done. "${title}" is ready with a Google Meet link.`
+            : `Done. "${title}" is ready for review.`
+          : mentionsMeet
+            ? `C'est prêt. "${title}" avec lien Google Meet.`
+            : `C'est prêt. "${title}" est prêt à vérifier.`,
       proposals: [calProp],
     }
   }
@@ -1470,6 +1553,7 @@ export async function runAgentTurn(
           const attendees = Array.isArray(proposal.parameters.attendees)
             ? proposal.parameters.attendees.filter((value): value is string => typeof value === 'string' && value.includes('@'))
             : []
+          const explicitInputEmails = extractEmailAddresses(input)
           const maybeRecipient = extractRecipientName(input)
           const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
 
@@ -1484,6 +1568,8 @@ export async function runAgentTurn(
               attendees:
                 attendees.length > 0
                   ? attendees
+                  : explicitInputEmails.length > 0
+                    ? explicitInputEmails
                   : knownContact
                     ? [knownContact.email]
                     : attendees,
@@ -1540,6 +1626,13 @@ export async function runAgentTurn(
       })
 
       const safeProposals = enrichedProposals.map((proposal) => {
+        if (proposal.type === 'create_calendar_event' && !hasConcreteCalendarSchedule(input)) {
+          return {
+            ...proposal,
+            confidenceScore: Math.min(proposal.confidenceScore, 0.35),
+          }
+        }
+
         if (
           !(
             ((proposal.type === 'send_email' || proposal.type === 'create_gmail_draft' || proposal.type === 'forward_email') &&
@@ -1593,6 +1686,8 @@ export async function runAgentTurn(
               : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
             : fallbackForInvalidModelProposal.length > 0
             ? buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).response
+            : safeProposals.some((proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
+            ? buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).response
             : !allowProposals && safeProposals.length > 0
             ? buildConversationalResponse(input, assistantProfile)
             : aiResult.response,
@@ -1601,7 +1696,9 @@ export async function runAgentTurn(
             ? []
             : allowProposals
             ? safeProposals.length > 0
-              ? safeProposals
+              ? safeProposals.filter(
+                  (proposal) => !(proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
+                )
               : fallbackForInvalidModelProposal
             : [],
         disambiguations,
