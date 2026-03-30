@@ -80,3 +80,48 @@ test('idempotent requests reject key reuse with a different fingerprint', async 
     error: 'Idempotency-Key already used with a different request.',
   })
 })
+
+test('idempotency does not cache non-success responses', async () => {
+  clearIdempotencyStore()
+
+  let executions = 0
+  const request = new Request('https://kova.app/api/chat', {
+    method: 'POST',
+    headers: {
+      'Idempotency-Key': 'chat-rate-limit',
+    },
+  })
+
+  const first = await executeIdempotentJsonRequest({
+    request,
+    namespace: 'chat',
+    userId: 'user_1',
+    fingerprint: JSON.stringify({ content: 'hello again' }),
+    execute: async () => {
+      executions += 1
+      return {
+        body: { error: 'rate_limit_exceeded' },
+        status: 429,
+      }
+    },
+  })
+
+  const second = await executeIdempotentJsonRequest({
+    request,
+    namespace: 'chat',
+    userId: 'user_1',
+    fingerprint: JSON.stringify({ content: 'hello again' }),
+    execute: async () => {
+      executions += 1
+      return {
+        body: { ok: true },
+        status: 200,
+      }
+    },
+  })
+
+  assert.equal(first.status, 429)
+  assert.equal(second.status, 200)
+  assert.equal(executions, 2)
+  assert.equal(second.headers.get('X-Idempotent-Replay'), null)
+})

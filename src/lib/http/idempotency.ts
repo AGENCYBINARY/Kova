@@ -101,20 +101,27 @@ export async function executeIdempotentJsonRequest(params: {
 
   try {
     const result = await params.execute()
-    store.set(key, {
-      fingerprint: params.fingerprint,
-      state: 'completed',
-      expiresAt: now + ttlMs,
-      result: {
-        status: result.status ?? 200,
-        body: result.body,
-        headers: normalizeHeaders(result.headers),
-      },
-    })
+    const status = result.status ?? 200
+    const headers = normalizeHeaders(result.headers)
+
+    if (status >= 200 && status < 300) {
+      store.set(key, {
+        fingerprint: params.fingerprint,
+        state: 'completed',
+        expiresAt: now + ttlMs,
+        result: {
+          status,
+          body: result.body,
+          headers,
+        },
+      })
+    } else {
+      store.delete(key)
+    }
 
     return NextResponse.json(result.body, {
-      status: result.status ?? 200,
-      headers: result.headers,
+      status,
+      headers,
     })
   } catch (error) {
     store.delete(key)
