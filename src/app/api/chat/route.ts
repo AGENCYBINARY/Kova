@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAppContext } from '@/lib/app-context'
 import { getErrorStatus } from '@/lib/http/errors'
-import { checkRequestRateLimit } from '@/lib/http/request-rate-limit'
+import { executeIdempotentJsonRequest, buildIdempotencyFingerprint } from '@/lib/http/idempotency'
+import { buildRateLimitHeaders, checkRequestRateLimit } from '@/lib/http/request-rate-limit'
 import { getChatPageData, orchestrateChatTurn } from '@/lib/agent/orchestrator'
 import { consumeQuota, refundQuota } from '@/lib/subscription'
 
@@ -31,48 +32,60 @@ export async function POST(request: Request) {
     const body = requestSchema.parse(await request.json())
     const { dbUserId, workspaceId } = await getAppContext()
 
-    const rateLimit = checkRequestRateLimit({
+    return await executeIdempotentJsonRequest({
       request,
       namespace: 'chat',
       userId: dbUserId,
-      limit: 20,
-      windowMs: 60_000,
-    })
+      fingerprint: buildIdempotencyFingerprint(body),
+      execute: async () => {
+        const rateLimit = checkRequestRateLimit({
+          request,
+          namespace: 'chat',
+          userId: dbUserId,
+          limit: 20,
+          windowMs: 60_000,
+        })
 
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        {
-          error: 'rate_limit_exceeded',
-          message: 'Trop de requêtes en peu de temps. Réessaie dans une minute.',
-          rateLimit,
-        },
-        { status: 429 }
-      )
-    }
+        if (!rateLimit.allowed) {
+          return {
+            body: {
+              error: 'rate_limit_exceeded',
+              message: 'Trop de requêtes en peu de temps. Réessaie dans une minute.',
+              rateLimit,
+            },
+            status: 429,
+            headers: buildRateLimitHeaders(rateLimit),
+          }
+        }
 
-    const quota = await consumeQuota(dbUserId)
-    if (!quota.allowed) {
-      return NextResponse.json(
-        {
-          error: 'quota_exceeded',
-          message: `Limite mensuelle atteinte (${quota.used}/${quota.limit} requêtes).`,
-          quota,
-        },
-        { status: 429 }
-      )
-    }
-    consumedQuotaForUserId = dbUserId
+        const quota = await consumeQuota(dbUserId)
+        if (!quota.allowed) {
+          return {
+            body: {
+              error: 'quota_exceeded',
+              message: `Limite mensuelle atteinte (${quota.used}/${quota.limit} requêtes).`,
+              quota,
+            },
+            status: 429,
+          }
+        }
+        consumedQuotaForUserId = dbUserId
 
-    const result = await orchestrateChatTurn({
-      content: body.content,
-      executionMode: body.executionMode,
-      context: {
-        userId: dbUserId,
-        workspaceId,
+        const result = await orchestrateChatTurn({
+          content: body.content,
+          executionMode: body.executionMode,
+          context: {
+            userId: dbUserId,
+            workspaceId,
+          },
+        })
+
+        return {
+          body: result,
+          status: 200,
+        }
       },
     })
-
-    return NextResponse.json(result)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })

@@ -15,11 +15,17 @@ function getPeriodEnd(sub: StripeSubscriptionLike): Date | null {
 
 export async function POST(req: Request) {
   const body = await req.text()
-  const signature = headers().get("stripe-signature")!
+  const headersList = await headers()
+  const signature = headersList.get("stripe-signature")
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 
   let event: Stripe.Event
+  if (!signature || !webhookSecret) {
+    return NextResponse.json({ error: "Missing webhook signature" }, { status: 400 })
+  }
+
   try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!)
+    event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
   } catch {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 })
   }

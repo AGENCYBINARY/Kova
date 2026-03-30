@@ -16,6 +16,7 @@ Kova is being upgraded into an agent platform with:
 Architecture notes:
 
 - [docs/agent-platform.md](/Users/agencybinary/Documents/CODEX/docs/agent-platform.md)
+- [docs/kova-sop.md](/Users/agencybinary/Documents/CODEX/docs/kova-sop.md)
 
 Key agent endpoints:
 

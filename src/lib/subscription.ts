@@ -5,28 +5,46 @@ function resolvePlanKey(plan: string): PlanKey {
   return plan in PLANS ? (plan as PlanKey) : "free"
 }
 
-function needsMonthlyReset(date: Date) {
-  const now = new Date()
-  return now.getFullYear() > date.getFullYear() || now.getMonth() > date.getMonth()
+export function getMonthlyResetAnchor(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0))
+}
+
+export function needsMonthlyReset(date: Date, now = new Date()) {
+  return date.getTime() < getMonthlyResetAnchor(now).getTime()
 }
 
 async function getOrCreateSubscriptionTx(
   tx: Pick<typeof prisma, "subscription">,
   userId: string
 ) {
-  let sub = await tx.subscription.findUnique({ where: { userId } })
-  if (!sub) {
-    sub = await tx.subscription.create({
-      data: { userId, plan: "free", status: "active" },
-    })
-  }
+  let sub = await tx.subscription.upsert({
+    where: { userId },
+    update: {},
+    create: { userId, plan: "free", status: "active" },
+  })
 
-  const resetAt = new Date(sub.monthResetAt)
-  if (needsMonthlyReset(resetAt)) {
-    sub = await tx.subscription.update({
-      where: { userId },
-      data: { requestsUsedThisMonth: 0, monthResetAt: new Date() },
+  const monthAnchor = getMonthlyResetAnchor()
+  if (needsMonthlyReset(new Date(sub.monthResetAt), monthAnchor)) {
+    await tx.subscription.updateMany({
+      where: {
+        userId,
+        monthResetAt: {
+          lt: monthAnchor,
+        },
+      },
+      data: {
+        requestsUsedThisMonth: 0,
+        monthResetAt: monthAnchor,
+      },
     })
+
+    const next = await tx.subscription.findUnique({
+      where: { userId },
+    })
+
+    if (next) {
+      sub = next
+    }
   }
 
   return sub
@@ -80,10 +98,17 @@ export async function consumeQuota(userId: string): Promise<{
     })
 
     if (updated.count === 0) {
+      const current = await tx.subscription.findUnique({
+        where: { userId },
+        select: {
+          requestsUsedThisMonth: true,
+        },
+      })
+
       return {
         allowed: false,
         plan,
-        used: sub.requestsUsedThisMonth,
+        used: current?.requestsUsedThisMonth ?? sub.requestsUsedThisMonth,
         limit,
       }
     }
@@ -105,17 +130,21 @@ export async function consumeQuota(userId: string): Promise<{
 }
 
 export async function refundQuota(userId: string) {
-  await prisma.subscription.updateMany({
-    where: {
-      userId,
-      requestsUsedThisMonth: {
-        gt: 0,
+  await prisma.$transaction(async (tx) => {
+    await getOrCreateSubscriptionTx(tx, userId)
+
+    await tx.subscription.updateMany({
+      where: {
+        userId,
+        requestsUsedThisMonth: {
+          gt: 0,
+        },
       },
-    },
-    data: {
-      requestsUsedThisMonth: {
-        decrement: 1,
+      data: {
+        requestsUsedThisMonth: {
+          decrement: 1,
+        },
       },
-    },
+    })
   })
 }
