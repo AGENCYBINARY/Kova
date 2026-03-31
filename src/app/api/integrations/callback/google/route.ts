@@ -4,10 +4,8 @@ import { getAppContext } from '@/lib/app-context'
 import {
   exchangeGoogleCodeForTokens,
   fetchGoogleAccountEmail,
-} from '@/lib/integrations/google-auth'
-import {
   persistGoogleTokens,
-} from '@/lib/integrations/google'
+} from '@/lib/integrations/google-auth'
 
 export async function GET(request: Request) {
   const url = new URL(request.url)

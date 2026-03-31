@@ -6,7 +6,14 @@ import { useLang } from '@/lib/lang-context'
 import type { HistoryPageData } from '@/lib/dashboard/server'
 import styles from '@/app/(dashboard)/history/page.module.css'
 
-const statusColors = { completed: 'success', failed: 'danger', rejected: 'warning', expired: 'warning', pending: 'info' }
+const statusColors = {
+  completed: 'success',
+  compensated: 'info',
+  failed: 'danger',
+  rejected: 'warning',
+  expired: 'warning',
+  pending: 'info',
+} as const
 
 const actionIcons: Record<string, JSX.Element> = {
   send_email: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>,
@@ -91,7 +98,9 @@ export function HistoryPageClient({ data }: { data: HistoryPageData }) {
         </div>
         <div className={styles.stats}>
           <Card className={styles.statCard}>
-            <span className={styles.statValue}>{executionHistory.filter((entry) => entry.status === 'completed').length}</span>
+            <span className={styles.statValue}>
+              {executionHistory.filter((entry) => entry.status === 'completed' || entry.status === 'compensated').length}
+            </span>
             <span className={styles.statLabel}>{t.history.completed}</span>
           </Card>
           <Card className={styles.statCard}>
@@ -120,7 +129,7 @@ export function HistoryPageClient({ data }: { data: HistoryPageData }) {
                   </div>
                   {item.error ? <p className={styles.cardError}>{item.error}</p> : null}
                 </div>
-                <Badge variant={statusColors[item.status as keyof typeof statusColors] as 'success' | 'danger' | 'warning' | 'info'}>
+                <Badge variant={statusColors[item.status as keyof typeof statusColors] ?? 'warning'}>
                   {item.status}
                 </Badge>
               </div>

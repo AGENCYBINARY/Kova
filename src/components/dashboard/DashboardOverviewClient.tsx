@@ -150,7 +150,17 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
                   <p className={styles.rowTitle}>{item.title}</p>
                   <p className={styles.rowMeta}>{item.details}</p>
                 </div>
-                <Badge variant={item.status === 'completed' ? 'success' : item.status === 'failed' ? 'danger' : 'warning'}>
+                <Badge
+                  variant={
+                    item.status === 'completed'
+                      ? 'success'
+                      : item.status === 'compensated'
+                        ? 'info'
+                        : item.status === 'failed'
+                          ? 'danger'
+                          : 'warning'
+                  }
+                >
                   {item.status}
                 </Badge>
               </div>

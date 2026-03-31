@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { executeBatch, type BatchAction } from '@/lib/actions/batch-execution'
+import { compensateCompletedActions } from '@/lib/actions/compensation'
 import { asActionParameters, injectExecutionOutputsIntoParameters } from '@/lib/actions/parameter-resolution'
 import { createAuditLog } from '@/lib/audit/service'
 import { extractNameBeforeEmail, rememberContact } from '@/lib/contacts'
@@ -66,7 +67,7 @@ export async function executePersistedActionBatch(params: {
     parameters: asActionParameters(action.parameters),
   })) satisfies Array<BatchAction<Record<string, unknown>>>
 
-  return executeBatch({
+  const batchResult = await executeBatch({
     actions,
     resolveParameters: (parameters, priorOutputs) =>
       injectExecutionOutputsIntoParameters(parameters, priorOutputs) as Record<string, unknown>,
@@ -189,4 +190,62 @@ export async function executePersistedActionBatch(params: {
       })
     },
   })
+
+  let compensation: Awaited<ReturnType<typeof compensateCompletedActions>> | null = null
+
+  if (batchResult.failed && batchResult.completed.length > 0) {
+    const failedAction = persistedActionsById.get(batchResult.failed.action.id)
+    if (!failedAction) {
+      throw new Error('Failed action not found.')
+    }
+
+    compensation = await compensateCompletedActions({
+      completed: batchResult.completed,
+      workspaceId: failedAction.workspaceId,
+      userId: failedAction.userId,
+      trigger: params.trigger,
+      failedActionId: failedAction.id,
+    })
+
+    const compensationByActionId = new Map(compensation.attempts.map((attempt) => [attempt.sourceActionId, attempt]))
+    await Promise.all(
+      batchResult.completed.map(async (completedAction) => {
+        const persistedAction = persistedActionsById.get(completedAction.action.id)
+        if (!persistedAction) {
+          throw new Error('Completed action not found.')
+        }
+
+        const attempt = compensationByActionId.get(completedAction.action.id)
+        const existingResult = asActionParameters(
+          (await prisma.action.findUnique({
+            where: { id: persistedAction.id },
+            select: { result: true },
+          }))?.result ?? {}
+        )
+
+        const compensationPayload = {
+          status: attempt?.status || 'skipped',
+          compensationActionType: attempt?.compensationActionType || null,
+          reason: attempt?.reason || null,
+          compensatedAt: attempt?.status === 'compensated' ? new Date().toISOString() : null,
+        }
+
+        await prisma.action.update({
+          where: { id: persistedAction.id },
+          data: {
+            status: attempt?.status === 'compensated' ? 'compensated' : 'completed',
+            result: {
+              ...existingResult,
+              compensation: compensationPayload,
+            } as Prisma.JsonObject,
+          },
+        })
+      })
+    )
+  }
+
+  return {
+    ...batchResult,
+    compensation,
+  }
 }

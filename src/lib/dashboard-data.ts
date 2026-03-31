@@ -5,6 +5,7 @@ export type ActionStatus =
   | 'expired'
   | 'executing'
   | 'completed'
+  | 'compensated'
   | 'failed'
 
 export type IntegrationStatus = 'connected' | 'disconnected' | 'error'

@@ -22,6 +22,7 @@ function mapActionStatus(status: string): DashboardAction['status'] {
     status === 'expired' ||
     status === 'executing' ||
     status === 'completed' ||
+    status === 'compensated' ||
     status === 'failed'
   ) {
     return status
@@ -216,6 +217,8 @@ function mapAction(record: {
   const type = record.type as DashboardAction['type']
   const parameters = asRecord(record.parameters)
   const result = asRecord(record.result)
+  const compensation = asRecord(result.compensation)
+  const compensationReason = typeof compensation.reason === 'string' ? compensation.reason : null
 
   return {
     id: record.id,
@@ -234,7 +237,12 @@ function mapAction(record: {
         : typeof parameters.confidenceScore === 'number'
           ? parameters.confidenceScore
           : 0.84,
-    details: typeof result.details === 'string' ? result.details : undefined,
+    details:
+      typeof result.details === 'string'
+        ? result.details
+        : record.status === 'compensated'
+          ? compensationReason || 'Action executed, then automatically compensated after a later batch failure.'
+          : undefined,
     error: typeof result.error === 'string' ? result.error : undefined,
   }
 }
@@ -321,6 +329,8 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
       label:
         action.status === 'completed'
           ? 'Action completed'
+          : action.status === 'compensated'
+            ? 'Compensation applied'
           : action.status === 'failed'
             ? 'Action failed'
             : 'Action reviewed',
