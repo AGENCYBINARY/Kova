@@ -19,6 +19,7 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
   const { t, lang } = useLang()
   const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
   const healthyIntegrations = data.integrations.filter((integration) => integration.health === 'healthy').length
+  const attentionCount = data.integrations.filter((integration) => integration.health !== 'healthy').length
   const topPending = data.pendingActions.slice(0, 2)
   const latestHistory = data.executionHistory.slice(0, 4)
 
@@ -37,21 +38,33 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
           <div className={styles.heroPreview}>
             <div className={styles.previewColumn}>
               <span className={styles.previewLabel}>{t.dashboard.queuedNow}</span>
-              {topPending.map((action) => (
-                <div key={action.id} className={styles.previewItem}>
-                  <strong>{action.title}</strong>
-                  <span>{action.targetApp}</span>
+              {topPending.length > 0 ? (
+                topPending.map((action) => (
+                  <div key={action.id} className={styles.previewItem}>
+                    <strong>{action.title}</strong>
+                    <span>{action.targetApp}</span>
+                  </div>
+                ))
+              ) : (
+                <div className={styles.previewEmpty}>
+                  {lang === 'fr' ? 'Aucune action en attente immédiate.' : 'No immediate action waiting for review.'}
                 </div>
-              ))}
+              )}
             </div>
             <div className={styles.previewColumn}>
               <span className={styles.previewLabel}>{t.dashboard.latestResult}</span>
-              {latestHistory.slice(0, 2).map((action) => (
-                <div key={action.id} className={styles.previewItem}>
-                  <strong>{action.title}</strong>
-                  <span>{action.status}</span>
+              {latestHistory.slice(0, 2).length > 0 ? (
+                latestHistory.slice(0, 2).map((action) => (
+                  <div key={action.id} className={styles.previewItem}>
+                    <strong>{action.title}</strong>
+                    <span>{action.status}</span>
+                  </div>
+                ))
+              ) : (
+                <div className={styles.previewEmpty}>
+                  {lang === 'fr' ? 'Aucun résultat récent disponible.' : 'No recent execution yet.'}
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -74,7 +87,8 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
           <span className={styles.metricLabel}>{t.dashboard.connectedApps}</span>
           <strong className={styles.metricValue}>{data.metrics.connectedIntegrations}</strong>
           <span className={styles.metricHint}>
-            {healthyIntegrations} {lang === 'fr' ? 'saines' : 'healthy'}, 1 {lang === 'fr' ? 'nécessite attention' : 'needs attention'}
+            {healthyIntegrations} {lang === 'fr' ? 'saines' : 'healthy'}, {attentionCount}{' '}
+            {lang === 'fr' ? (attentionCount > 1 ? 'nécessitent attention' : 'nécessite attention') : attentionCount === 1 ? 'needs attention' : 'need attention'}
           </span>
         </Card>
         <Card variant="bordered" className={styles.metricCard}>
@@ -98,19 +112,25 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
             <Link href="/actions" className={styles.inlineLink}>{t.dashboard.viewQueue}</Link>
           </div>
           <div className={styles.stack}>
-            {data.pendingActions.map((action) => (
-              <div key={action.id} className={styles.row}>
-                <div>
-                  <p className={styles.rowTitle}>{action.title}</p>
-                  <p className={styles.rowMeta}>
-                    {action.targetApp} · {t.dashboard.confidence} {Math.round(action.confidenceScore * 100)}%
-                  </p>
+            {data.pendingActions.length > 0 ? (
+              data.pendingActions.map((action) => (
+                <div key={action.id} className={styles.row}>
+                  <div>
+                    <p className={styles.rowTitle}>{action.title}</p>
+                    <p className={styles.rowMeta}>
+                      {action.targetApp} · {t.dashboard.confidence} {Math.round(action.confidenceScore * 100)}%
+                    </p>
+                  </div>
+                  <Badge variant={action.riskLevel === 'high' ? 'danger' : action.riskLevel === 'medium' ? 'warning' : 'success'}>
+                    {action.riskLevel} {t.dashboard.risk}
+                  </Badge>
                 </div>
-                <Badge variant={action.riskLevel === 'high' ? 'danger' : action.riskLevel === 'medium' ? 'warning' : 'success'}>
-                  {action.riskLevel} {t.dashboard.risk}
-                </Badge>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className={styles.emptyNote}>
+                {lang === 'fr' ? 'Aucune action en attente. La file est propre.' : 'No action is waiting for review. The queue is clear.'}
+              </p>
+            )}
           </div>
         </Card>
         <Card variant="bordered" className={styles.panel}>
@@ -144,27 +164,33 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
             <Link href="/history" className={styles.inlineLink}>{t.dashboard.openHistory}</Link>
           </div>
           <div className={styles.stack}>
-            {latestHistory.map((item) => (
-              <div key={item.id} className={styles.row}>
-                <div>
-                  <p className={styles.rowTitle}>{item.title}</p>
-                  <p className={styles.rowMeta}>{item.details}</p>
+            {latestHistory.length > 0 ? (
+              latestHistory.map((item) => (
+                <div key={item.id} className={styles.row}>
+                  <div>
+                    <p className={styles.rowTitle}>{item.title}</p>
+                    <p className={styles.rowMeta}>{item.details}</p>
+                  </div>
+                  <Badge
+                    variant={
+                      item.status === 'completed'
+                        ? 'success'
+                        : item.status === 'compensated'
+                          ? 'info'
+                          : item.status === 'failed'
+                            ? 'danger'
+                            : 'warning'
+                    }
+                  >
+                    {item.status}
+                  </Badge>
                 </div>
-                <Badge
-                  variant={
-                    item.status === 'completed'
-                      ? 'success'
-                      : item.status === 'compensated'
-                        ? 'info'
-                        : item.status === 'failed'
-                          ? 'danger'
-                          : 'warning'
-                  }
-                >
-                  {item.status}
-                </Badge>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className={styles.emptyNote}>
+                {lang === 'fr' ? 'Aucune exécution récente à afficher.' : 'No recent execution to display.'}
+              </p>
+            )}
           </div>
         </Card>
         <Card variant="bordered" className={styles.panel}>

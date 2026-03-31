@@ -1,28 +1,28 @@
 .container {
   min-height: 100vh;
+  width: min(1180px, 100%);
+  margin: 0 auto;
 }
 
 .toast {
   position: sticky;
-  top: 16px;
+  top: 12px;
   z-index: 5;
-  margin: 16px 16px 0;
+  margin: 0 0 12px;
   padding: 12px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: rgba(15, 23, 42, 0.92);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(10, 14, 20, 0.88);
   color: var(--text-primary);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
 }
 
 .header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-secondary);
+  gap: 18px;
+  padding: 24px 0 18px;
 }
 
 .headerCopy {
@@ -30,23 +30,26 @@
 }
 
 .eyebrow {
-  font-size: 12px;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--accent-amber);
-  margin-bottom: var(--space-xs);
+  margin-bottom: 8px;
 }
 
 .title {
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 600;
+  letter-spacing: -0.05em;
   color: var(--text-primary);
-  margin-bottom: var(--space-xs);
+  margin-bottom: 8px;
 }
 
 .subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 56ch;
 }
 
 .headerStats {
@@ -55,21 +58,21 @@
 }
 
 .content {
-  padding: var(--space-lg);
+  padding: 0;
 }
 
 .bulkActions {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
-  margin-bottom: var(--space-md);
+  margin-bottom: 12px;
 }
 
 .summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .summaryCard {
@@ -79,19 +82,21 @@
 }
 
 .summaryLabel {
-  font-size: 12px;
+  font-size: 10px;
   color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.16em;
 }
 
 .summaryValue {
-  font-size: 34px;
+  font-size: 30px;
+  letter-spacing: -0.05em;
 }
 
 .summaryHint {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 .empty {
@@ -123,24 +128,24 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: 10px;
 }
 
 .card {
-  padding: var(--space-md);
+  padding: 18px 20px;
 }
 
 .cardHeader {
   display: flex;
   align-items: flex-start;
   gap: var(--space-md);
-  margin-bottom: var(--space-md);
+  margin-bottom: 14px;
 }
 
 .iconWrapper {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
   background: rgba(245, 158, 11, 0.15);
   color: var(--accent-amber);
   display: flex;
@@ -155,22 +160,26 @@
 
 .badges {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-end;
-  gap: var(--space-xs);
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .cardTitle {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--space-xs);
+  letter-spacing: -0.02em;
 }
 
 .cardDescription {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: var(--space-xs);
+  line-height: 1.6;
 }
 
 .cardTime {
@@ -200,14 +209,16 @@
 }
 
 .details {
-  margin-bottom: var(--space-md);
+  margin-bottom: 12px;
+  line-height: 1.6;
 }
 
 .parameters {
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: var(--space-sm);
-  margin-bottom: var(--space-md);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
 }
 
 .parameters pre {
@@ -245,7 +256,6 @@
 
   .badges {
     align-items: flex-start;
-    flex-direction: row;
-    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }

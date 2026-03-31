@@ -8,6 +8,20 @@ type QuotaData = {
   allowed: boolean
 }
 
+function isQuotaData(value: unknown): value is QuotaData {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.plan === 'string' &&
+    typeof candidate.used === 'number' &&
+    typeof candidate.limit === 'number' &&
+    typeof candidate.allowed === 'boolean'
+  )
+}
+
 export function UsageBadge() {
   const [quota, setQuota] = useState<QuotaData | null>(null)
   const [upgrading, setUpgrading] = useState(false)
@@ -15,12 +29,19 @@ export function UsageBadge() {
 
   useEffect(() => {
     fetch("/api/subscription")
-      .then((r) => r.json())
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Subscription endpoint failed.')
+        }
+
+        const payload = await response.json()
+        return isQuotaData(payload) ? payload : null
+      })
       .then(setQuota)
       .catch(() => null)
   }, [])
 
-  if (!quota) return null
+  if (!quota || quota.limit <= 0) return null
 
   const pct = Math.round((quota.used / quota.limit) * 100)
   const isNearLimit = pct >= 80
@@ -58,7 +79,8 @@ export function UsageBadge() {
     if (data.url) window.location.href = data.url
   }
 
-  const planLabel = quota.plan.charAt(0).toUpperCase() + quota.plan.slice(1)
+  const normalizedPlan = quota.plan.trim()
+  const planLabel = normalizedPlan ? normalizedPlan.charAt(0).toUpperCase() + normalizedPlan.slice(1) : 'Plan'
 
   return (
     <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
