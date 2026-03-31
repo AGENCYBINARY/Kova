@@ -18,7 +18,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "vercel-build": "next build"
+    "vercel-build": "prisma generate && next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
