@@ -86,6 +86,27 @@ const defaultIntegrations = [
   { name: 'Slack', status: 'disconnected', color: '#4A154B' },
 ]
 
+function isIntegrationItemsPayload(
+  value: unknown
+): value is { items: Array<{ id: string; status: string }> } {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const payload = value as Record<string, unknown>
+  return (
+    Array.isArray(payload.items) &&
+    payload.items.every((item) => {
+      if (!item || typeof item !== 'object') {
+        return false
+      }
+
+      const candidate = item as Record<string, unknown>
+      return typeof candidate.id === 'string' && typeof candidate.status === 'string'
+    })
+  )
+}
+
 function IntegrationLogo({ name }: { name: string }) {
   if (name === 'Gmail') {
     return (
@@ -140,8 +161,15 @@ export function Sidebar() {
   const { user } = useUser()
   const { t } = useLang()
   const [integrations, setIntegrations] = useState(defaultIntegrations)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const userName = typeof user?.fullName === 'string' && user.fullName.trim() ? user.fullName : 'User'
+  const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
   const navigation = getNavigation(t)
+
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     let active = true
@@ -150,15 +178,15 @@ export function Sidebar() {
         const response = await fetch('/api/dashboard/integrations', { cache: 'no-store' })
         if (!response.ok) return
         const data = await response.json()
-        if (!active || !Array.isArray(data.items)) return
+        if (!active || !isIntegrationItemsPayload(data)) return
         setIntegrations([
-          { name: 'Gmail', status: data.items.find((item: { id: string; status: string }) => item.id === 'gmail')?.status || 'disconnected', color: '#EA4335' },
-          { name: 'Calendar', status: data.items.find((item: { id: string; status: string }) => item.id === 'calendar')?.status || 'disconnected', color: '#4285F4' },
-          { name: 'Notion', status: data.items.find((item: { id: string; status: string }) => item.id === 'notion')?.status || 'disconnected', color: '#000000' },
-          { name: 'Docs', status: data.items.find((item: { id: string; status: string }) => item.id === 'google_docs')?.status || 'disconnected', color: '#34A853' },
-          { name: 'Drive', status: data.items.find((item: { id: string; status: string }) => item.id === 'google_drive')?.status || 'disconnected', color: '#0F9D58' },
-          { name: 'Photos', status: data.items.find((item: { id: string; status: string }) => item.id === 'google_photos')?.status || 'disconnected', color: '#FABB05' },
-          { name: 'Slack', status: data.items.find((item: { id: string; status: string }) => item.id === 'slack')?.status || 'disconnected', color: '#4A154B' },
+          { name: 'Gmail', status: data.items.find((item) => item.id === 'gmail')?.status || 'disconnected', color: '#EA4335' },
+          { name: 'Calendar', status: data.items.find((item) => item.id === 'calendar')?.status || 'disconnected', color: '#4285F4' },
+          { name: 'Notion', status: data.items.find((item) => item.id === 'notion')?.status || 'disconnected', color: '#000000' },
+          { name: 'Docs', status: data.items.find((item) => item.id === 'google_docs')?.status || 'disconnected', color: '#34A853' },
+          { name: 'Drive', status: data.items.find((item) => item.id === 'google_drive')?.status || 'disconnected', color: '#0F9D58' },
+          { name: 'Photos', status: data.items.find((item) => item.id === 'google_photos')?.status || 'disconnected', color: '#FABB05' },
+          { name: 'Slack', status: data.items.find((item) => item.id === 'slack')?.status || 'disconnected', color: '#4A154B' },
         ])
       } catch {
         // Keep disconnected state
@@ -169,8 +197,20 @@ export function Sidebar() {
   }, [])
 
   return (
-    <aside className={styles.sidebar}>
+    <>
+      <button
+        type="button"
+        className={styles.mobileTrigger}
+        aria-label="Open navigation"
+        onClick={() => setMobileOpen(true)}
+      >
+        <span />
+        <span />
+      </button>
+      {mobileOpen ? <button type="button" className={styles.mobileBackdrop} aria-label="Close navigation" onClick={() => setMobileOpen(false)} /> : null}
+      <aside className={`${styles.sidebar} ${mobileOpen ? styles.open : ''}`}>
       <div className={styles.header}>
+        <div className={styles.headerRow}>
         <Link href="/dashboard" className={styles.logo}>
           <div className={styles.logoIcon}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -181,6 +221,11 @@ export function Sidebar() {
           </div>
           <span className={styles.logoText}>Kova</span>
         </Link>
+        <button type="button" className={styles.mobileClose} aria-label="Close navigation" onClick={() => setMobileOpen(false)}>
+          <span />
+          <span />
+        </button>
+        </div>
       </div>
       <nav className={styles.nav}>
         <ul className={styles.navList}>
@@ -233,13 +278,12 @@ export function Sidebar() {
             }}
           />
           <div className={styles.userInfo}>
-            <span className={styles.userName}>{user?.fullName || 'User'}</span>
-            <span className={styles.userEmail}>
-              {user?.primaryEmailAddress?.emailAddress}
-            </span>
+            <span className={styles.userName}>{userName}</span>
+            <span className={styles.userEmail}>{userEmail}</span>
           </div>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

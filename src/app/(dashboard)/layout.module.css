@@ -2,14 +2,29 @@
   display: flex;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top right, rgba(122, 162, 255, 0.06), transparent 20%),
-    radial-gradient(circle at bottom, rgba(143, 124, 255, 0.06), transparent 18%),
-    var(--bg-primary);
+    radial-gradient(circle at top left, rgba(106, 140, 255, 0.08), transparent 22%),
+    radial-gradient(circle at top right, rgba(79, 169, 205, 0.08), transparent 20%),
+    radial-gradient(circle at bottom, rgba(240, 191, 109, 0.06), transparent 18%),
+    linear-gradient(180deg, rgba(7, 9, 13, 0.98), rgba(5, 7, 11, 1));
 }
 
 .main {
   flex: 1;
-  margin-left: var(--sidebar-width);
+  min-width: 0;
+  margin-left: calc(var(--sidebar-width) + 32px);
   min-height: 100vh;
   background: transparent;
+  padding: 18px 22px 18px 0;
+}
+
+@media (max-width: 1080px) {
+  .container {
+    display: block;
+  }
+
+  .main {
+    margin-left: 0;
+    min-height: auto;
+    padding: 78px 0 16px;
+  }
 }

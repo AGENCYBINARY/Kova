@@ -19,6 +19,55 @@ export interface AppContextResult {
   workspaceRole: string
 }
 
+interface ResolvedDbUser {
+  id: string
+  clerkId: string
+  email: string
+  name: string | null
+  activeWorkspaceId: string | null
+}
+
+function isMissingActiveWorkspaceColumn(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2022' &&
+    typeof error.meta?.column === 'string' &&
+    error.meta.column.includes('User.activeWorkspaceId')
+  )
+}
+
+async function findDbUserByClerkId(clerkId: string): Promise<{ user: ResolvedDbUser | null; supportsActiveWorkspaceColumn: boolean }> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { clerkId },
+    })
+
+    return {
+      user,
+      supportsActiveWorkspaceColumn: true,
+    }
+  } catch (error) {
+    if (!isMissingActiveWorkspaceColumn(error)) {
+      throw error
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { clerkId },
+      select: {
+        id: true,
+        clerkId: true,
+        email: true,
+        name: true,
+      },
+    })
+
+    return {
+      user: user ? { ...user, activeWorkspaceId: null } : null,
+      supportsActiveWorkspaceColumn: false,
+    }
+  }
+}
+
 export async function getAppContext(): Promise<AppContextResult> {
   const { userId } = auth()
 
@@ -26,9 +75,7 @@ export async function getAppContext(): Promise<AppContextResult> {
     throw new Error('Unauthorized')
   }
 
-  let dbUser = await prisma.user.findUnique({
-    where: { clerkId: userId },
-  })
+  let { user: dbUser, supportsActiveWorkspaceColumn } = await findDbUserByClerkId(userId)
 
   if (!dbUser) {
     const clerkUser = await currentUser()
@@ -39,17 +86,26 @@ export async function getAppContext(): Promise<AppContextResult> {
       'Kova Operator'
 
     try {
-      dbUser = await prisma.user.create({
+      const createdUser = await prisma.user.create({
         data: {
           clerkId: userId,
           email,
           name,
         },
       })
-    } catch {
-      dbUser = await prisma.user.findUnique({
-        where: { clerkId: userId },
-      })
+      dbUser = createdUser
+      supportsActiveWorkspaceColumn = true
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code !== 'P2002'
+      ) {
+        throw error
+      }
+
+      const resolved = await findDbUserByClerkId(userId)
+      dbUser = resolved.user
+      supportsActiveWorkspaceColumn = resolved.supportsActiveWorkspaceColumn
     }
   }
 
@@ -86,12 +142,14 @@ export async function getAppContext(): Promise<AppContextResult> {
       },
     })
 
-    dbUser = await prisma.user.update({
-      where: { id: dbUser.id },
-      data: {
-        activeWorkspaceId: workspace.id,
-      },
-    })
+    if (supportsActiveWorkspaceColumn) {
+      dbUser = await prisma.user.update({
+        where: { id: dbUser.id },
+        data: {
+          activeWorkspaceId: workspace.id,
+        },
+      })
+    }
 
     return {
       userId,
@@ -157,7 +215,7 @@ export async function getAppContext(): Promise<AppContextResult> {
     throw new Error('Unable to resolve active workspace.')
   }
 
-  if (dbUser.activeWorkspaceId !== activeWorkspaceId) {
+  if (supportsActiveWorkspaceColumn && dbUser.activeWorkspaceId !== activeWorkspaceId) {
     dbUser = await prisma.user.update({
       where: { id: dbUser.id },
       data: {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { getErrorStatus } from '@/lib/http/errors'
@@ -34,12 +35,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 })
     }
 
-    await prisma.user.update({
-      where: { id: dbUserId },
-      data: {
-        activeWorkspaceId: membership.workspaceId,
-      },
-    })
+    try {
+      await prisma.user.update({
+        where: { id: dbUserId },
+        data: {
+          activeWorkspaceId: membership.workspaceId,
+        },
+      })
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2022')) {
+        throw error
+      }
+    }
 
     const response = NextResponse.json({
       ok: true,
