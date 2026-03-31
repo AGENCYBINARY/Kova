@@ -8,35 +8,44 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  clerkId       String         @unique
-  email         String
-  name          String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  actions       Action[]
-  contacts      Contact[]
-  executionLogs ExecutionLog[]
-  integrations  Integration[]
-  messages      Message[]
-  workspaces    Workspace[]
-  subscription  Subscription?
+  id                String              @id @default(cuid())
+  clerkId           String              @unique
+  email             String
+  name              String?
+  activeWorkspaceId String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  actions           Action[]
+  activeWorkspace   Workspace?          @relation("ActiveWorkspace", fields: [activeWorkspaceId], references: [id], onDelete: SetNull)
+  contacts          Contact[]
+  executionLogs     ExecutionLog[]
+  idempotencyKeys   IdempotencyKey[]
+  integrations      Integration[]
+  messages          Message[]
+  ownedWorkspaces   Workspace[]         @relation("WorkspaceOwner")
+  rateLimitBuckets  RateLimitBucket[]
+  subscription      Subscription?
+  memberships       WorkspaceMembership[]
 }
 
 model Workspace {
-  id            String         @id @default(cuid())
-  name          String
-  slug          String         @unique
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  ownerId       String
-  preferences   Json?
-  actions       Action[]
-  contacts      Contact[]
-  executionLogs ExecutionLog[]
-  integrations  Integration[]
-  messages      Message[]
-  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id              String              @id @default(cuid())
+  name            String
+  slug            String              @unique
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  ownerId         String
+  preferences     Json?
+  actions         Action[]
+  activeUsers     User[]              @relation("ActiveWorkspace")
+  contacts        Contact[]
+  executionLogs   ExecutionLog[]
+  idempotencyKeys IdempotencyKey[]
+  integrations    Integration[]
+  messages        Message[]
+  owner           User                @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  rateLimitBuckets RateLimitBucket[]
+  memberships     WorkspaceMembership[]
 }
 
 model Message {
@@ -70,6 +79,9 @@ model Action {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   executionLogs ExecutionLog[]
+
+  @@index([workspaceId, userId, status, createdAt])
+  @@index([workspaceId, userId, updatedAt])
 }
 
 model Integration {
@@ -88,6 +100,9 @@ model Integration {
   executionLogs ExecutionLog[]
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, type])
+  @@index([workspaceId, userId, status])
 }
 
 model ExecutionLog {
@@ -105,6 +120,10 @@ model ExecutionLog {
   integration   Integration? @relation(fields: [integrationId], references: [id])
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId, createdAt])
+  @@index([workspaceId, userId, actionType])
+  @@index([actionId])
 }
 
 model Contact {
@@ -120,6 +139,60 @@ model Contact {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId, email])
+}
+
+model WorkspaceMembership {
+  id          String    @id @default(cuid())
+  role        String    @default("viewer")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspaceId String
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId, role])
+}
+
+model IdempotencyKey {
+  id             String    @id @default(cuid())
+  namespace      String
+  key            String
+  fingerprint    String
+  status         String    @default("pending")
+  responseStatus Int?
+  responseBody   Json?
+  responseHeaders Json?
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workspaceId    String
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([namespace, workspaceId, userId, key])
+  @@index([expiresAt])
+}
+
+model RateLimitBucket {
+  id          String    @id @default(cuid())
+  namespace   String
+  clientKey   String
+  windowStart DateTime
+  limit       Int
+  count       Int       @default(0)
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspaceId String
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([namespace, workspaceId, userId, clientKey, windowStart])
+  @@index([expiresAt])
 }
 
 model Subscription {
@@ -138,4 +211,3 @@ model Subscription {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-

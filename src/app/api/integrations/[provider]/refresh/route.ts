@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
-import { getGoogleIntegrationCapabilityState, getValidGoogleAccessToken } from '@/lib/integrations/google'
+import { getGoogleIntegrationCapabilityState, getValidGoogleAccessToken } from '@/lib/integrations/google-auth'
 import { getValidNotionAccessToken } from '@/lib/integrations/notion'
+
+const GOOGLE_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos'] as const
 
 export async function POST(
   _request: Request,
@@ -10,13 +12,14 @@ export async function POST(
 ) {
   const { dbUserId, workspaceId } = await getAppContext()
   const type = params.provider === 'google' ? 'gmail' : params.provider
-  const integration = await prisma.integration.findFirst({
+  const integration = await prisma.integration.findUnique({
     where: {
-      type,
-      userId: dbUserId,
-      workspaceId,
+      workspaceId_userId_type: {
+        workspaceId,
+        userId: dbUserId,
+        type,
+      },
     },
-    orderBy: [{ updatedAt: 'desc' }],
   })
 
   if (!integration) {
@@ -31,7 +34,7 @@ export async function POST(
         userId: dbUserId,
         workspaceId,
         type: {
-          in: ['gmail', 'calendar', 'google_docs', 'google_drive'],
+          in: [...GOOGLE_TYPES],
         },
       },
       select: {
@@ -45,7 +48,7 @@ export async function POST(
     const groupedStatuses = googleIntegrations.reduce(
       (groups, record) => {
         const capabilityState = getGoogleIntegrationCapabilityState(
-          record.type as 'gmail' | 'calendar' | 'google_docs' | 'google_drive',
+          record.type as typeof GOOGLE_TYPES[number],
           record.metadata
         )
 

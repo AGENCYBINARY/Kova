@@ -1,23 +1,33 @@
 import { prisma } from '@/lib/db/prisma'
 import {
   computeCalendarAvailability,
-  getGoogleIntegrationCapabilityState,
-  getValidGoogleAccessToken,
   listGoogleCalendarEvents,
-  listRecentGooglePhotos,
-  listRecentGoogleDocs,
-  listTodayGmailMessages,
-  searchGmailMessages,
-  searchGoogleDriveFiles,
-  searchGooglePhotosMedia,
-  summarizeGmailThreads,
-  type GmailMessageSummary,
   type GoogleCalendarAvailabilityWindow,
   type GoogleCalendarEventSummary,
-  type GoogleDocSummary,
-  type GoogleDriveFileSummary,
+} from '@/lib/integrations/google-calendar'
+import {
+  listRecentGooglePhotos,
+  searchGooglePhotosMedia,
   type GooglePhotoSummary,
-} from '@/lib/integrations/google'
+} from '@/lib/integrations/google-photos'
+import {
+  listRecentGoogleDocs,
+  type GoogleDocSummary,
+} from '@/lib/integrations/google-docs'
+import {
+  listTodayGmailMessages,
+  searchGmailMessages,
+  summarizeGmailThreads,
+  type GmailMessageSummary,
+} from '@/lib/integrations/google-gmail'
+import {
+  searchGoogleDriveFiles,
+  type GoogleDriveFileSummary,
+} from '@/lib/integrations/google-drive'
+import {
+  getGoogleIntegrationCapabilityState,
+  getValidGoogleAccessToken,
+} from '@/lib/integrations/google-auth'
 import {
   getValidNotionAccessToken,
   readNotionPagePreview,
@@ -453,16 +463,17 @@ async function resolveSourceContext(params: {
         : params.source === 'google_photos'
           ? 'google_photos'
           : params.source
-  const integration = await prisma.integration.findFirst({
+  const integration = await prisma.integration.findUnique({
     where: {
-      type: integrationType,
-      userId: params.userId,
-      workspaceId: params.workspaceId,
-      status: 'connected',
+      workspaceId_userId_type: {
+        workspaceId: params.workspaceId,
+        userId: params.userId,
+        type: integrationType,
+      },
     },
   })
 
-  if (!integration) {
+  if (!integration || integration.status !== 'connected') {
     return {
       source: params.source,
       lines: [`${params.source}: not connected`],

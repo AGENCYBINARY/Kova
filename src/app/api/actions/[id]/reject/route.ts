@@ -22,6 +22,7 @@ export async function POST(
     return await executeIdempotentJsonRequest({
       request,
       namespace: 'action-reject',
+      workspaceId,
       userId: dbUserId,
       fingerprint: buildIdempotencyFingerprint({ actionId: params.id }),
       execute: async () => {

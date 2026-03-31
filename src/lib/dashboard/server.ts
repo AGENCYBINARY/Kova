@@ -3,7 +3,7 @@ import { getAppContext } from '@/lib/app-context'
 import { inferRiskLevel } from '@/lib/agent/execution-governance'
 import { dashboardIntegrations, type DashboardAction, type DashboardIntegration } from '@/lib/dashboard-data'
 import { buildDashboardScopeWhere } from '@/lib/dashboard/query'
-import { getGoogleIntegrationCapabilityState } from '@/lib/integrations/google'
+import { getGoogleIntegrationCapabilityState } from '@/lib/integrations/google-auth'
 import { expirePendingActions } from '@/lib/actions/pending-expiration'
 
 function asRecord(value: unknown): Record<string, unknown> {

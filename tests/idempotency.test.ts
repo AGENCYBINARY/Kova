@@ -3,7 +3,7 @@ import test from 'node:test'
 import { executeIdempotentJsonRequest, clearIdempotencyStore } from '../src/lib/http/idempotency'
 
 test('idempotent requests replay the cached response for the same key and fingerprint', async () => {
-  clearIdempotencyStore()
+  await clearIdempotencyStore()
 
   let executions = 0
   const request = new Request('https://kova.app/api/chat', {
@@ -16,6 +16,7 @@ test('idempotent requests replay the cached response for the same key and finger
   const first = await executeIdempotentJsonRequest({
     request,
     namespace: 'chat',
+    workspaceId: 'workspace_1',
     userId: 'user_1',
     fingerprint: JSON.stringify({ content: 'hello' }),
     execute: async () => {
@@ -29,6 +30,7 @@ test('idempotent requests replay the cached response for the same key and finger
   const second = await executeIdempotentJsonRequest({
     request,
     namespace: 'chat',
+    workspaceId: 'workspace_1',
     userId: 'user_1',
     fingerprint: JSON.stringify({ content: 'hello' }),
     execute: async () => {
@@ -46,7 +48,7 @@ test('idempotent requests replay the cached response for the same key and finger
 })
 
 test('idempotent requests reject key reuse with a different fingerprint', async () => {
-  clearIdempotencyStore()
+  await clearIdempotencyStore()
 
   const request = new Request('https://kova.app/api/agent/execute', {
     method: 'POST',
@@ -58,6 +60,7 @@ test('idempotent requests reject key reuse with a different fingerprint', async 
   await executeIdempotentJsonRequest({
     request,
     namespace: 'agent-execute',
+    workspaceId: 'workspace_1',
     userId: 'user_1',
     fingerprint: JSON.stringify({ actionType: 'send_email' }),
     execute: async () => ({
@@ -68,6 +71,7 @@ test('idempotent requests reject key reuse with a different fingerprint', async 
   const conflict = await executeIdempotentJsonRequest({
     request,
     namespace: 'agent-execute',
+    workspaceId: 'workspace_1',
     userId: 'user_1',
     fingerprint: JSON.stringify({ actionType: 'create_calendar_event' }),
     execute: async () => ({
@@ -82,7 +86,7 @@ test('idempotent requests reject key reuse with a different fingerprint', async 
 })
 
 test('idempotency does not cache non-success responses', async () => {
-  clearIdempotencyStore()
+  await clearIdempotencyStore()
 
   let executions = 0
   const request = new Request('https://kova.app/api/chat', {
@@ -95,6 +99,7 @@ test('idempotency does not cache non-success responses', async () => {
   const first = await executeIdempotentJsonRequest({
     request,
     namespace: 'chat',
+    workspaceId: 'workspace_1',
     userId: 'user_1',
     fingerprint: JSON.stringify({ content: 'hello again' }),
     execute: async () => {
@@ -109,6 +114,7 @@ test('idempotency does not cache non-success responses', async () => {
   const second = await executeIdempotentJsonRequest({
     request,
     namespace: 'chat',
+    workspaceId: 'workspace_1',
     userId: 'user_1',
     fingerprint: JSON.stringify({ content: 'hello again' }),
     execute: async () => {

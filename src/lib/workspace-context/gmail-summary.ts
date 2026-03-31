@@ -1,4 +1,4 @@
-import type { GmailMessageSummary } from '@/lib/integrations/google'
+import type { GmailMessageSummary } from '@/lib/integrations/google-gmail'
 
 function formatSender(sender: string) {
   return sender.replace(/\s+/g, ' ').trim()

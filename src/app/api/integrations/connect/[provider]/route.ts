@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { getAppContext } from '@/lib/app-context'
-import { buildGoogleOAuthUrl } from '@/lib/integrations/google'
+import { buildGoogleOAuthUrl } from '@/lib/integrations/google-auth'
 import { buildNotionOAuthUrl } from '@/lib/integrations/notion'
 
 export async function GET(

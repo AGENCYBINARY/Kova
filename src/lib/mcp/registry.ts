@@ -2,42 +2,50 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import type { DashboardAction } from '@/lib/dashboard-data'
 import { prepareActionParameters } from '@/lib/agent/data-prep'
+import { getValidGoogleAccessToken } from '@/lib/integrations/google-auth'
+import {
+  createGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+  updateGoogleCalendarEvent,
+} from '@/lib/integrations/google-calendar'
+import {
+  createGoogleDoc,
+  updateGoogleDoc,
+} from '@/lib/integrations/google-docs'
 import {
   archiveGmailThread,
-  copyGoogleDriveFile,
   createGmailDraft,
-  createGoogleCalendarEvent,
-  createGoogleDoc,
-  createGoogleDriveAppDataFile,
-  createGoogleDriveFile,
-  createGoogleDriveFolder,
   deleteGmailThreadPermanently,
-  deleteGoogleCalendarEvent,
-  deleteGoogleDriveAppDataFile,
-  deleteGoogleDriveFile,
   forwardGmailMessage,
-  getValidGoogleAccessToken,
   labelGmailThread,
-  listGooglePhotosMedia,
-  moveGoogleDriveFile,
-  renameGoogleDriveFile,
   readGmailMessageBody,
   removeGmailThreadLabels,
   replyToGmailMessage,
-  sendGmailMessage,
   sendGmailDraft,
-  searchGooglePhotosMedia,
+  sendGmailMessage,
   setGmailThreadStarredState,
   setGmailThreadReadState,
-  shareGoogleDriveFile,
   trashGmailThread,
   unarchiveGmailThread,
-  unshareGoogleDriveFile,
   updateGmailDraft,
+} from '@/lib/integrations/google-gmail'
+import {
+  copyGoogleDriveFile,
+  createGoogleDriveAppDataFile,
+  createGoogleDriveFile,
+  createGoogleDriveFolder,
+  deleteGoogleDriveAppDataFile,
+  deleteGoogleDriveFile,
+  moveGoogleDriveFile,
+  renameGoogleDriveFile,
+  shareGoogleDriveFile,
+  unshareGoogleDriveFile,
   updateGoogleDriveAppDataFile,
-  updateGoogleCalendarEvent,
-  updateGoogleDoc,
-} from '@/lib/integrations/google'
+} from '@/lib/integrations/google-drive'
+import {
+  listGooglePhotosMedia,
+  searchGooglePhotosMedia,
+} from '@/lib/integrations/google-photos'
 import {
   archiveNotionPage,
   createNotionPage,
@@ -238,17 +246,17 @@ const updateNotionPagePropertiesSchema = z.object({
 })
 
 async function getConnectedIntegration(context: McpExecutionContext, provider: string) {
-  const integration = await prisma.integration.findFirst({
+  const integration = await prisma.integration.findUnique({
     where: {
-      type: provider,
-      workspaceId: context.workspaceId,
-      userId: context.userId,
-      status: 'connected',
+      workspaceId_userId_type: {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        type: provider,
+      },
     },
-    orderBy: [{ updatedAt: 'desc' }],
   })
 
-  if (!integration) {
+  if (!integration || integration.status !== 'connected') {
     throw new Error(`Integration "${provider}" is not connected.`)
   }
 

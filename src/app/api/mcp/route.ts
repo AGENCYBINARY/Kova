@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 import { getAppContext } from '@/lib/app-context'
 import { getErrorStatus } from '@/lib/http/errors'
-import { checkRequestRateLimit } from '@/lib/http/request-rate-limit'
+import { buildRateLimitHeaders, checkRequestRateLimit } from '@/lib/http/request-rate-limit'
 import { handleMcpRequest } from '@/lib/mcp/service'
 
 export async function POST(request: Request) {
   try {
     const payload = await request.json()
     const { dbUserId, workspaceId } = await getAppContext()
-    const rateLimit = checkRequestRateLimit({
+    const rateLimit = await checkRequestRateLimit({
       request,
       namespace: 'mcp',
+      workspaceId,
       userId: dbUserId,
       limit: 60,
       windowMs: 60_000,
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
           code: -32001,
           message: 'Rate limit exceeded.',
         },
-      }, { status: 429 })
+      }, { status: 429, headers: buildRateLimitHeaders(rateLimit) })
     }
 
     const response = await handleMcpRequest({

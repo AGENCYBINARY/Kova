@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     return await executeIdempotentJsonRequest({
       request,
       namespace: `actions-batch-${body.decision}`,
+      workspaceId,
       userId: dbUserId,
       fingerprint: buildIdempotencyFingerprint(body),
       execute: async () => {

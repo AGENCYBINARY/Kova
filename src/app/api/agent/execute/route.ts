@@ -38,12 +38,14 @@ export async function POST(request: Request) {
     return await executeIdempotentJsonRequest({
       request,
       namespace: 'agent-execute',
+      workspaceId,
       userId: dbUserId,
       fingerprint: buildIdempotencyFingerprint(body),
       execute: async () => {
-        const rateLimit = checkRequestRateLimit({
+        const rateLimit = await checkRequestRateLimit({
           request,
           namespace: 'agent-execute',
+          workspaceId,
           userId: dbUserId,
           limit: 30,
           windowMs: 60_000,

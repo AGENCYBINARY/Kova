@@ -8,7 +8,8 @@ import {
   looksLikeContactCorrection,
   rememberContact,
 } from '@/lib/contacts'
-import { findGoogleContactEmail, getValidGoogleAccessToken } from '@/lib/integrations/google'
+import { getValidGoogleAccessToken } from '@/lib/integrations/google-auth'
+import { findGoogleContactEmail } from '@/lib/integrations/google-gmail'
 import type { PendingActionRecord, PersistedMessageRecord } from '@/lib/agent/chat-state'
 import { asRecord } from '@/lib/agent/chat-state'
 
@@ -184,16 +185,17 @@ export async function resolveEmailContactFromGoogle(params: {
     return knownContact
   }
 
-  const gmailIntegration = await prisma.integration.findFirst({
+  const gmailIntegration = await prisma.integration.findUnique({
     where: {
-      type: 'gmail',
-      userId: params.userId,
-      workspaceId: params.workspaceId,
-      status: 'connected',
+      workspaceId_userId_type: {
+        workspaceId: params.workspaceId,
+        userId: params.userId,
+        type: 'gmail',
+      },
     },
   })
 
-  if (!gmailIntegration) {
+  if (!gmailIntegration || gmailIntegration.status !== 'connected') {
     return null
   }
 

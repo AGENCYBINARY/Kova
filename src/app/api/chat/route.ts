@@ -35,12 +35,14 @@ export async function POST(request: Request) {
     return await executeIdempotentJsonRequest({
       request,
       namespace: 'chat',
+      workspaceId,
       userId: dbUserId,
       fingerprint: buildIdempotencyFingerprint(body),
       execute: async () => {
-        const rateLimit = checkRequestRateLimit({
+        const rateLimit = await checkRequestRateLimit({
           request,
           namespace: 'chat',
+          workspaceId,
           userId: dbUserId,
           limit: 20,
           windowMs: 60_000,
