@@ -118,7 +118,7 @@ export async function executePersistedActionBatch(params: {
         details: execution.output,
         provider:
           typeof execution.output.provider === 'string'
-            ? (execution.output.provider as 'gmail' | 'calendar' | 'google_docs' | 'google_drive' | 'notion')
+            ? (execution.output.provider as 'gmail' | 'calendar' | 'google_docs' | 'google_drive' | 'google_photos' | 'notion')
             : undefined,
         toolName: typeof execution.output.toolName === 'string' ? execution.output.toolName : undefined,
         toolVersion: typeof execution.output.toolVersion === 'string' ? execution.output.toolVersion : undefined,

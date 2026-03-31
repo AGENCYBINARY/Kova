@@ -48,7 +48,7 @@ export function buildWelcomeMessage() {
     id: 'welcome',
     role: 'assistant' as const,
     content:
-      "I'm your Kova operator. Ask me to draft emails, schedule meetings, work in Notion, create Google Docs, or save files to Google Drive. I will prepare the action for approval before execution.",
+      "I'm Kova. Give me the task and I’ll prepare the right action across Gmail, Calendar, Drive, Docs, Notion, and Google Photos, with approval when needed.",
   }
 }
 
@@ -65,6 +65,7 @@ export function extractConnectedContextSeed(messages: PersistedMessageRecord[]):
         ? metadata.connectedContextSources.filter(
             (value): value is ConnectedContextSource =>
               value === 'gmail' || value === 'calendar' || value === 'google_drive' || value === 'google_docs' || value === 'notion'
+              || value === 'google_photos'
           )
         : []
       const timeframe = metadata.connectedContextTimeframe
@@ -101,6 +102,15 @@ export function extractConnectedContextSeed(messages: PersistedMessageRecord[]):
     if (/drive:/i.test(content) || /fichiers drive|drive files/i.test(content)) {
       return {
         sources: ['google_drive'],
+        timeframe: 'recent',
+        asksForAvailability: false,
+        asksForPriorities: false,
+      }
+    }
+
+    if (/photos:/i.test(content) || /google photos|photos recentes|recent photos/i.test(content)) {
+      return {
+        sources: ['google_photos'],
         timeframe: 'recent',
         asksForAvailability: false,
         asksForPriorities: false,

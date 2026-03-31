@@ -1,4 +1,4 @@
-export type ConnectedContextSource = 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'notion'
+export type ConnectedContextSource = 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'google_photos' | 'notion'
 
 export interface ConnectedContextRequest {
   mode: 'read' | 'action' | 'mixed'
@@ -32,6 +32,8 @@ const drivePattern =
   /\b(google drive|drive|fichier|fichiers|file|files|folder|folders|dossier|dossiers)\b/
 const docsPattern =
   /\b(google doc|google docs|gdoc|gdocs|doc partagé|doc partage|document partagé|document partage)\b/
+const photosPattern =
+  /\b(google photos|photos|photo|album|albums|image|images|media)\b/
 const notionPattern =
   /\b(notion|wiki|knowledge base|base de connaissances|database|base de donnees|base de donnees|page notion)\b/
 const readVerbPattern =
@@ -39,7 +41,7 @@ const readVerbPattern =
 const explicitActionPattern =
   /\b(send|draft|reply|write|compose|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|rename|mark|star|unstar|trash|copy|duplicate|revoke|unshare|folder|envoie|envoyer|redige|ecris|cree|creer|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|deconnecte|actualise|rafraichis|range|ranger|move|moved|deplace|deplacer|archiver|restaure|restaurer|labelliser|transfere|transferer|renomme|renommer|marque|corbeille|brouillon|duplique|dupliquer|retire|retirer|dossier)\b/
 const emailActionPattern =
-  /\b(send|draft|reply|write|compose|envoie|envoyer|redige|ecris|reponds|repondre|transmets|forward)\b/
+  /\b(send|draft|reply|write|compose|update|edit|rewrite|refresh|envoie|envoyer|redige|ecris|reponds|repondre|transmets|forward|modifie|modifier|mets|mettre|complete|complete)\b/
 const todayPattern =
   /\b(aujourd'hui|aujourdhui|today|ce matin|this morning|cet apres-midi|cet apres midi|this afternoon|ce jour)\b/
 const weekPattern =
@@ -190,6 +192,7 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   const mentionsCalendar = calendarPattern.test(normalized)
   const mentionsDrive = drivePattern.test(normalized)
   const mentionsDocs = docsPattern.test(normalized)
+  const mentionsPhotos = photosPattern.test(normalized)
   const mentionsNotion = notionPattern.test(normalized)
   const asksForAvailability = availabilityPattern.test(normalized)
   const asksForPriorities = priorityPattern.test(normalized)
@@ -206,10 +209,11 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   if (mentionsCalendar) sources.push('calendar')
   if (mentionsDrive) sources.push('google_drive')
   if (mentionsDocs) sources.push('google_docs')
+  if (mentionsPhotos) sources.push('google_photos')
   if (mentionsNotion) sources.push('notion')
 
   if (referencesAllApps) {
-    sources.push('gmail', 'calendar', 'google_drive', 'notion')
+    sources.push('gmail', 'calendar', 'google_drive', 'google_docs', 'google_photos', 'notion')
   }
 
   if (asksForAvailability) {
@@ -262,6 +266,10 @@ function inferFollowUpSources(normalized: string, seed: ConnectedContextSeed) {
 
   if ((drivePattern.test(normalized) || /\b(doc|document|fichier|file)\b/.test(normalized)) && seed.sources.includes('google_drive')) {
     return ['google_drive'] satisfies ConnectedContextSource[]
+  }
+
+  if ((photosPattern.test(normalized) || /\b(image|images|album|albums|media)\b/.test(normalized)) && seed.sources.includes('google_photos')) {
+    return ['google_photos'] satisfies ConnectedContextSource[]
   }
 
   if ((notionPattern.test(normalized) || /\b(page|wiki)\b/.test(normalized)) && seed.sources.includes('notion')) {

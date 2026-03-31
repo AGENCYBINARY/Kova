@@ -13,15 +13,19 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'send_email',
     'reply_to_email',
     'create_gmail_draft',
+    'update_gmail_draft',
+    'send_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
     'unarchive_gmail_thread',
     'label_gmail_thread',
+    'remove_gmail_thread_labels',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
     'star_gmail_thread',
     'unstar_gmail_thread',
     'trash_gmail_thread',
+    'delete_gmail_thread_permanently',
     'create_calendar_event',
     'update_calendar_event',
     'delete_calendar_event',
@@ -35,6 +39,11 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'share_google_drive_file',
     'copy_google_drive_file',
     'unshare_google_drive_file',
+    'create_google_drive_appdata_file',
+    'update_google_drive_appdata_file',
+    'delete_google_drive_appdata_file',
+    'list_google_photos_media',
+    'search_google_photos_media',
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
@@ -44,15 +53,19 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'send_email',
     'reply_to_email',
     'create_gmail_draft',
+    'update_gmail_draft',
+    'send_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
     'unarchive_gmail_thread',
     'label_gmail_thread',
+    'remove_gmail_thread_labels',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
     'star_gmail_thread',
     'unstar_gmail_thread',
     'trash_gmail_thread',
+    'delete_gmail_thread_permanently',
     'create_calendar_event',
     'update_calendar_event',
     'delete_calendar_event',
@@ -66,6 +79,11 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'share_google_drive_file',
     'copy_google_drive_file',
     'unshare_google_drive_file',
+    'create_google_drive_appdata_file',
+    'update_google_drive_appdata_file',
+    'delete_google_drive_appdata_file',
+    'list_google_photos_media',
+    'search_google_photos_media',
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
@@ -75,15 +93,19 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'send_email',
     'reply_to_email',
     'create_gmail_draft',
+    'update_gmail_draft',
+    'send_gmail_draft',
     'forward_email',
     'archive_gmail_thread',
     'unarchive_gmail_thread',
     'label_gmail_thread',
+    'remove_gmail_thread_labels',
     'mark_gmail_thread_read',
     'mark_gmail_thread_unread',
     'star_gmail_thread',
     'unstar_gmail_thread',
     'trash_gmail_thread',
+    'delete_gmail_thread_permanently',
     'create_calendar_event',
     'update_calendar_event',
     'create_google_doc',
@@ -95,6 +117,11 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'share_google_drive_file',
     'copy_google_drive_file',
     'unshare_google_drive_file',
+    'create_google_drive_appdata_file',
+    'update_google_drive_appdata_file',
+    'delete_google_drive_appdata_file',
+    'list_google_photos_media',
+    'search_google_photos_media',
     'create_notion_page',
     'update_notion_page',
     'update_notion_page_properties',
@@ -136,15 +163,19 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
           permission === 'send_email' ||
           permission === 'reply_to_email' ||
           permission === 'create_gmail_draft' ||
+          permission === 'update_gmail_draft' ||
+          permission === 'send_gmail_draft' ||
           permission === 'forward_email' ||
           permission === 'archive_gmail_thread' ||
           permission === 'unarchive_gmail_thread' ||
           permission === 'label_gmail_thread' ||
+          permission === 'remove_gmail_thread_labels' ||
           permission === 'mark_gmail_thread_read' ||
           permission === 'mark_gmail_thread_unread' ||
           permission === 'star_gmail_thread' ||
           permission === 'unstar_gmail_thread' ||
           permission === 'trash_gmail_thread' ||
+          permission === 'delete_gmail_thread_permanently' ||
           permission === 'create_calendar_event' ||
           permission === 'update_calendar_event' ||
           permission === 'delete_calendar_event' ||
@@ -158,6 +189,11 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
           permission === 'share_google_drive_file' ||
           permission === 'copy_google_drive_file' ||
           permission === 'unshare_google_drive_file' ||
+          permission === 'create_google_drive_appdata_file' ||
+          permission === 'update_google_drive_appdata_file' ||
+          permission === 'delete_google_drive_appdata_file' ||
+          permission === 'list_google_photos_media' ||
+          permission === 'search_google_photos_media' ||
           permission === 'create_notion_page' ||
           permission === 'update_notion_page' ||
           permission === 'update_notion_page_properties' ||

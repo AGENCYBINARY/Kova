@@ -82,6 +82,7 @@ const defaultIntegrations = [
   { name: 'Notion', status: 'disconnected', color: '#000000' },
   { name: 'Docs', status: 'disconnected', color: '#34A853' },
   { name: 'Drive', status: 'disconnected', color: '#0F9D58' },
+  { name: 'Photos', status: 'disconnected', color: '#FABB05' },
   { name: 'Slack', status: 'disconnected', color: '#4A154B' },
 ]
 
@@ -156,6 +157,7 @@ export function Sidebar() {
           { name: 'Notion', status: data.items.find((item: { id: string; status: string }) => item.id === 'notion')?.status || 'disconnected', color: '#000000' },
           { name: 'Docs', status: data.items.find((item: { id: string; status: string }) => item.id === 'google_docs')?.status || 'disconnected', color: '#34A853' },
           { name: 'Drive', status: data.items.find((item: { id: string; status: string }) => item.id === 'google_drive')?.status || 'disconnected', color: '#0F9D58' },
+          { name: 'Photos', status: data.items.find((item: { id: string; status: string }) => item.id === 'google_photos')?.status || 'disconnected', color: '#FABB05' },
           { name: 'Slack', status: data.items.find((item: { id: string; status: string }) => item.id === 'slack')?.status || 'disconnected', color: '#4A154B' },
         ])
       } catch {

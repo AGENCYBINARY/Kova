@@ -33,8 +33,8 @@ interface ChatPageClientProps {
   initialProposals: ActionProposal[]
 }
 
-const WELCOME_FR = "Je suis votre opérateur Kova. Demandez-moi de rédiger des emails, planifier des réunions, travailler dans Notion, créer des Google Docs ou enregistrer des fichiers sur Google Drive. Je préparerai l'action pour approbation avant exécution."
-const WELCOME_EN = "I'm your Kova operator. Ask me to draft emails, schedule meetings, work in Notion, create Google Docs, or save files to Google Drive. I will prepare the action for approval before execution."
+const WELCOME_FR = "Je suis Kova. Donne-moi le sujet et je prépare l’action utile dans Gmail, Agenda, Drive, Docs, Notion ou Google Photos, avec validation quand elle est nécessaire."
+const WELCOME_EN = "I'm Kova. Give me the task and I’ll prepare the right action across Gmail, Calendar, Drive, Docs, Notion, or Google Photos, with approval when needed."
 
 function buildDisambiguationReply(
   item: ChatDisambiguation,
@@ -160,7 +160,7 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
                     : "J'ai préparé l'action pour révision car une vérification manuelle est encore requise."
                   : lang === 'en'
                     ? 'Action ready. Review it and approve when you want me to send it.'
-                    : "Action prête. Revois-la et approuve quand tu veux que je l'envoie."
+                    : "C’est prêt. Vérifie les détails et approuve quand tu veux que je l’exécute."
                 : lang === 'en'
                   ? 'Done. The action was executed automatically.'
                   : "Fait. L'action a été exécutée automatiquement.",

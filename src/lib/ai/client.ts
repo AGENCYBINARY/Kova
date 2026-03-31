@@ -433,23 +433,23 @@ type ResponsesApiResponse = {
 
 function buildNonEmptyResponse(userMessage: string, proposals: ActionProposal[]) {
   if (proposals.length > 0) {
-    return 'J’ai préparé une réponse exploitable.'
+    return 'C’est prêt à relire.'
   }
 
   const normalized = userMessage.trim()
   if (!normalized) {
-    return 'Je suis prêt.'
+    return 'Je suis là.'
   }
 
   if (/^(bonjour|salut|hello|hey|hi|bonsoir|coucou)\b/i.test(normalized)) {
-    return 'Bonjour.'
+    return 'Bonjour. Je suis là.'
   }
 
   if (/[?]$/.test(normalized)) {
-    return 'Je n’ai pas assez de matière pour répondre proprement.'
+    return 'Il me manque un détail pour te répondre proprement.'
   }
 
-  return 'Je suis prêt.'
+  return 'Donne-moi le sujet et je m’en occupe.'
 }
 
 export function isLowValueAssistantResponse(value: string) {

@@ -18,9 +18,11 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/documents',
   'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.appdata',
+  'https://www.googleapis.com/auth/photoslibrary.readonly',
 ]
 
-export const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive'] as const
+export const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos'] as const
 
 const GOOGLE_REQUIRED_SCOPES = {
   gmail: [
@@ -38,6 +40,10 @@ const GOOGLE_REQUIRED_SCOPES = {
   ],
   google_drive: [
     'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/drive.appdata',
+  ],
+  google_photos: [
+    'https://www.googleapis.com/auth/photoslibrary.readonly',
   ],
 } as const
 

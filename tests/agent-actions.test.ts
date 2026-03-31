@@ -16,6 +16,21 @@ test('fallback routes Gmail unarchive to the right action', async () => {
   }
 })
 
+test('fallback routes Gmail label removal to the right action', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Retire le label "À revoir" du thread Gmail de Claire', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['remove_gmail_thread_labels'])
+    assert.deepEqual(result.proposals[0]?.parameters.labelNames, ['À revoir'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
 test('fallback routes Drive folder creation to the right action', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   delete process.env.OPENAI_API_KEY
@@ -30,6 +45,34 @@ test('fallback routes Drive folder creation to the right action', async () => {
   }
 })
 
+test('fallback routes Drive app data updates to the right action', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Mets à jour le fichier de config appData Drive "kova-config.json" avec ces réglages', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['update_google_drive_appdata_file'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('fallback routes Google Photos search to the right action', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Cherche dans Google Photos "raclette"', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['search_google_photos_media'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
 test('fallback routes Notion archive to the right action', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   delete process.env.OPENAI_API_KEY
@@ -37,6 +80,20 @@ test('fallback routes Notion archive to the right action', async () => {
   try {
     const result = await runAgentTurn('Archive la page Notion "Sprint plan"', [], [])
     assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['archive_notion_page'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('email requests that update a draft use the draft update action', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Mets à jour le brouillon Gmail pour Maxime avec une version plus courte', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['update_gmail_draft'])
   } finally {
     if (previousKey) {
       process.env.OPENAI_API_KEY = previousKey

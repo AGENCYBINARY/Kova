@@ -1,4 +1,4 @@
-export type IntegrationProvider = 'gmail' | 'calendar' | 'google_docs' | 'google_drive' | 'notion'
+export type IntegrationProvider = 'gmail' | 'calendar' | 'google_docs' | 'google_drive' | 'google_photos' | 'notion'
 
 export type IntegrationExecutionResult = {
   details: string

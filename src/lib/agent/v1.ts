@@ -15,15 +15,19 @@ export const agentActionTypeSchema = z.enum([
   'send_email',
   'reply_to_email',
   'create_gmail_draft',
+  'update_gmail_draft',
+  'send_gmail_draft',
   'forward_email',
   'archive_gmail_thread',
   'unarchive_gmail_thread',
   'label_gmail_thread',
+  'remove_gmail_thread_labels',
   'mark_gmail_thread_read',
   'mark_gmail_thread_unread',
   'star_gmail_thread',
   'unstar_gmail_thread',
   'trash_gmail_thread',
+  'delete_gmail_thread_permanently',
   'create_calendar_event',
   'update_calendar_event',
   'delete_calendar_event',
@@ -41,6 +45,11 @@ export const agentActionTypeSchema = z.enum([
   'share_google_drive_file',
   'copy_google_drive_file',
   'unshare_google_drive_file',
+  'create_google_drive_appdata_file',
+  'update_google_drive_appdata_file',
+  'delete_google_drive_appdata_file',
+  'list_google_photos_media',
+  'search_google_photos_media',
 ])
 
 export type AgentActionType = z.infer<typeof agentActionTypeSchema>
@@ -65,7 +74,7 @@ const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,})/
 const actionIntentPattern =
   /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|envoie|envoyer|rédige|redige|écris|ecris|crée|cree|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|déconnecte|deconnecte|actualise|rafraichis|archiver|restaure|restaurer|transférer|transferer|deplacer|deplace|renommer|renomme|labellise|labelise|duplique|dupliquer|corbeille|brouillon|brouillons|retire l acces|retirer l acces|dossier)/i
 const appIntentPattern =
-  /(gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\b)/i
+  /(gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|google photos|photos|photo|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\b|appdata|app data)/i
 const greetingOnlyPattern =
   /^(bonjour|salut|hello|hey|yo|coucou|bonsoir|good morning|good evening|hi|ça va|ca va)\b[ !?.]*$/i
 const conversationalPattern =
@@ -222,7 +231,10 @@ function proposalNeedsClarification(proposal: AgentProposal, input: string) {
       return hasGenericCalendarParameters(proposal, input)
     case 'send_email':
     case 'create_gmail_draft':
+    case 'update_gmail_draft':
       return hasPlaceholderRecipient(proposal.parameters) && !hasTemporalOrTargetingDetails(input)
+    case 'send_gmail_draft':
+      return isPlaceholderIdentifier(proposal.parameters.draftId)
     case 'forward_email':
       return (
         isPlaceholderIdentifier(proposal.parameters.messageId) &&
@@ -231,11 +243,13 @@ function proposalNeedsClarification(proposal: AgentProposal, input: string) {
     case 'archive_gmail_thread':
     case 'unarchive_gmail_thread':
     case 'label_gmail_thread':
+    case 'remove_gmail_thread_labels':
     case 'mark_gmail_thread_read':
     case 'mark_gmail_thread_unread':
     case 'star_gmail_thread':
     case 'unstar_gmail_thread':
     case 'trash_gmail_thread':
+    case 'delete_gmail_thread_permanently':
       return isPlaceholderIdentifier(proposal.parameters.threadId)
     case 'update_calendar_event':
     case 'delete_calendar_event':
@@ -252,7 +266,11 @@ function proposalNeedsClarification(proposal: AgentProposal, input: string) {
     case 'share_google_drive_file':
     case 'copy_google_drive_file':
     case 'unshare_google_drive_file':
+    case 'update_google_drive_appdata_file':
+    case 'delete_google_drive_appdata_file':
       return isPlaceholderIdentifier(proposal.parameters.fileId)
+    case 'create_google_drive_appdata_file':
+      return false
     case 'update_notion_page':
     case 'update_notion_page_properties':
     case 'archive_notion_page':
@@ -308,6 +326,8 @@ function buildCapabilityResponse(input: string, proposals: AgentProposal[], prof
         : 'Oui. Je peux le préparer, mais il me faut d’abord le titre, la date, l’heure et les invités.'
     case 'send_email':
     case 'create_gmail_draft':
+    case 'update_gmail_draft':
+    case 'send_gmail_draft':
     case 'forward_email':
       return language === 'en'
         ? 'Yes. I can handle the email, but I need the recipient and what you want to send.'
@@ -315,11 +335,13 @@ function buildCapabilityResponse(input: string, proposals: AgentProposal[], prof
     case 'archive_gmail_thread':
     case 'unarchive_gmail_thread':
     case 'label_gmail_thread':
+    case 'remove_gmail_thread_labels':
     case 'mark_gmail_thread_read':
     case 'mark_gmail_thread_unread':
     case 'star_gmail_thread':
     case 'unstar_gmail_thread':
     case 'trash_gmail_thread':
+    case 'delete_gmail_thread_permanently':
       return language === 'en'
         ? 'Yes. I can do that, but I need to know which Gmail thread you mean.'
         : 'Oui. Je peux le faire, mais il faut que tu me dises quel thread Gmail tu vises.'
@@ -331,9 +353,17 @@ function buildCapabilityResponse(input: string, proposals: AgentProposal[], prof
     case 'share_google_drive_file':
     case 'copy_google_drive_file':
     case 'unshare_google_drive_file':
+    case 'create_google_drive_appdata_file':
+    case 'update_google_drive_appdata_file':
+    case 'delete_google_drive_appdata_file':
       return language === 'en'
         ? 'Yes. I can handle Drive, but I need the exact file or folder to act on.'
         : 'Oui. Je peux gérer Drive, mais il me faut le fichier ou le dossier exact à utiliser.'
+    case 'list_google_photos_media':
+    case 'search_google_photos_media':
+      return language === 'en'
+        ? 'Yes. I can search Google Photos. Tell me what photo or media you want me to look up.'
+        : 'Oui. Je peux chercher dans Google Photos. Dis-moi ce que tu veux retrouver.'
     case 'update_notion_page':
     case 'update_notion_page_properties':
     case 'archive_notion_page':
@@ -354,14 +384,21 @@ function shouldPreferDeterministicAction(input: string, proposals: AgentProposal
 
   if (
     /(gmail|email|e-mail|mail|message|thread|inbox)/.test(normalized) &&
-    /(archive|archiver|unarchive|restore|restaure|restaurer|label|labels|etiquette|etiquettes|marque|mark|star|etoile|étoile|trash|corbeille|forward|transfere|transferer|draft|brouillon|reply|repond)/.test(normalized)
+    /(archive|archiver|unarchive|restore|restaure|restaurer|label|labels|etiquette|etiquettes|marque|mark|star|etoile|étoile|trash|corbeille|forward|transfere|transferer|draft|brouillon|reply|repond|supprime definitivement|delete permanently|send draft|envoie le brouillon)/.test(normalized)
   ) {
     return true
   }
 
   if (
     /(google drive|drive\b|folder|dossier|fichier|file)/.test(normalized) &&
-    /(move|deplace|deplacer|rename|renomme|renommer|share|partage|partager|copy|copie|duplique|duplicate|unshare|revoke|retire l acces|delete|supprime|create folder|cree un dossier|creer un dossier|nouveau dossier)/.test(normalized)
+    /(move|deplace|deplacer|rename|renomme|renommer|share|partage|partager|copy|copie|duplique|duplicate|unshare|revoke|retire l acces|delete|supprime|create folder|cree un dossier|creer un dossier|nouveau dossier|appdata|app data|config file|fichier de config)/.test(normalized)
+  ) {
+    return true
+  }
+
+  if (
+    /(google photos|photos|photo|album|image)/.test(normalized) &&
+    /(search|cherche|chercher|find|retrouve|show|montre|list|liste)/.test(normalized)
   ) {
     return true
   }
@@ -381,24 +418,24 @@ function buildConversationalResponse(input: string, profile?: AssistantProfile) 
   const normalized = normalizeInput(input)
 
   if (isGreetingOnly(input)) {
-    return language === 'en' ? 'Hello.' : 'Bonjour.'
+    return language === 'en' ? 'Hello. I’m ready. What do you want me to handle?' : 'Bonjour. Je suis prêt. Dis-moi ce que tu veux que je prenne en charge.'
   }
 
   if (/parle moi|parle-moi/.test(normalized)) {
     return language === 'en'
-      ? 'Of course. What do you want to work through?'
-      : 'Bien sûr. Tu veux qu’on travaille sur quoi ?'
+      ? 'Sure. What do you want me to handle first?'
+      : 'Oui. Qu’est-ce que tu veux que je prenne en premier ?'
   }
 
   if (/comment ca va|comment ça va|ca va|ça va/.test(normalized)) {
     return language === 'en'
-      ? 'I am here and ready. What do you want to handle?'
-      : 'Oui. Je suis prêt. Tu veux traiter quoi ?'
+      ? 'All good on my side. What do you want me to take care of?'
+      : 'Ça va bien. Qu’est-ce que tu veux que je gère pour toi ?'
   }
 
   return language === 'en'
-    ? 'Tell me what you need.'
-    : 'Dis-moi ce qu’il te faut.'
+    ? 'Give me the task and I’ll take it from there.'
+    : 'Donne-moi le sujet et je prends le relais.'
 }
 
 function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
@@ -581,6 +618,21 @@ function buildGmailDraftProposal(input: string, profile?: AssistantProfile): Age
   }
 }
 
+function buildSendGmailDraftProposal(profile?: AssistantProfile): AgentProposal {
+  return {
+    type: 'send_gmail_draft',
+    title: profile?.defaultLanguage === 'en' ? 'Send Gmail draft' : 'Envoyer le brouillon Gmail',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Send the matching Gmail draft.'
+        : 'Envoyer le brouillon Gmail correspondant.',
+    parameters: {
+      draftId: '',
+    },
+    confidenceScore: 0.8,
+  }
+}
+
 function buildForwardEmailProposal(input: string, profile?: AssistantProfile, contact?: KnownContact | null): AgentProposal {
   return {
     type: 'forward_email',
@@ -644,6 +696,24 @@ function buildLabelEmailProposal(input: string, profile?: AssistantProfile): Age
   }
 }
 
+function buildRemoveLabelEmailProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const labelMatch = input.match(/(?:label|labels|etiquette|etiquettes|tag)\s+["“]?([^"”]+?)["”]?(?=\s+(?:au|a|à|sur|for|to|du|de la|de l'|de)\b|$|[,.!?])/i)
+  const label = labelMatch?.[1]?.trim() || (profile?.defaultLanguage === 'en' ? 'To review' : 'À revoir')
+  return {
+    type: 'remove_gmail_thread_labels',
+    title: profile?.defaultLanguage === 'en' ? 'Remove Gmail labels' : 'Retirer des labels Gmail',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Remove labels from the matching Gmail thread.'
+        : 'Retirer des labels du thread Gmail correspondant.',
+    parameters: {
+      threadId: '',
+      labelNames: [label],
+    },
+    confidenceScore: 0.78,
+  }
+}
+
 function buildStarGmailProposal(starred: boolean, profile?: AssistantProfile): AgentProposal {
   return {
     type: starred ? 'star_gmail_thread' : 'unstar_gmail_thread',
@@ -674,6 +744,21 @@ function buildTrashGmailProposal(profile?: AssistantProfile): AgentProposal {
       threadId: '',
     },
     confidenceScore: 0.77,
+  }
+}
+
+function buildDeleteGmailProposal(profile?: AssistantProfile): AgentProposal {
+  return {
+    type: 'delete_gmail_thread_permanently',
+    title: profile?.defaultLanguage === 'en' ? 'Delete Gmail thread permanently' : 'Supprimer définitivement le thread Gmail',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Permanently delete the matching Gmail thread.'
+        : 'Supprimer définitivement le thread Gmail correspondant.',
+    parameters: {
+      threadId: '',
+    },
+    confidenceScore: 0.72,
   }
 }
 
@@ -832,6 +917,74 @@ function buildCopyGoogleDriveProposal(input: string, profile?: AssistantProfile)
     },
     confidenceScore: 0.79,
   }
+}
+
+function buildDriveAppDataProposal(input: string, updateExisting: boolean, profile?: AssistantProfile): AgentProposal {
+  const quoted = input.match(/["“]([^"”]+)["”]/)
+  return {
+    type: updateExisting ? 'update_google_drive_appdata_file' : 'create_google_drive_appdata_file',
+    title:
+      profile?.defaultLanguage === 'en'
+        ? updateExisting ? 'Update Drive app data' : 'Create Drive app data'
+        : updateExisting ? 'Mettre à jour les données app Drive' : 'Créer des données app Drive',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Store structured app data inside Drive appDataFolder.'
+        : 'Stocker des données structurées dans appDataFolder de Drive.',
+    parameters: {
+      name: quoted?.[1]?.trim() || 'kova-config.json',
+      content: input,
+    },
+    confidenceScore: 0.74,
+  }
+}
+
+function buildDeleteDriveAppDataProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const quoted = input.match(/["“]([^"”]+)["”]/)
+  return {
+    type: 'delete_google_drive_appdata_file',
+    title: profile?.defaultLanguage === 'en' ? 'Delete Drive app data' : 'Supprimer les données app Drive',
+    description:
+      profile?.defaultLanguage === 'en'
+        ? 'Delete a file stored in Drive appDataFolder.'
+        : 'Supprimer un fichier stocké dans appDataFolder de Drive.',
+    parameters: {
+      fileId: '',
+      name: quoted?.[1]?.trim() || 'kova-config.json',
+    },
+    confidenceScore: 0.72,
+  }
+}
+
+function buildGooglePhotosProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const searchMatch = input.match(/["“]([^"”]+)["”]/)
+  const hasSearchTerm = Boolean(searchMatch?.[1]?.trim())
+  return hasSearchTerm
+    ? {
+        type: 'search_google_photos_media',
+        title: profile?.defaultLanguage === 'en' ? 'Search Google Photos' : 'Chercher dans Google Photos',
+        description:
+          profile?.defaultLanguage === 'en'
+            ? 'Search recent Google Photos media by filename or media type.'
+            : 'Chercher dans les médias récents Google Photos par nom de fichier ou type de média.',
+        parameters: {
+          query: searchMatch?.[1]?.trim() || input.trim(),
+          maxResults: 12,
+        },
+        confidenceScore: 0.78,
+      }
+    : {
+        type: 'list_google_photos_media',
+        title: profile?.defaultLanguage === 'en' ? 'List recent Google Photos media' : 'Lister les médias Google Photos récents',
+        description:
+          profile?.defaultLanguage === 'en'
+            ? 'List recent media from Google Photos.'
+            : 'Lister les médias récents de Google Photos.',
+        parameters: {
+          maxResults: 12,
+        },
+        confidenceScore: 0.72,
+      }
 }
 
 function buildUnshareGoogleDriveProposal(input: string, contact: KnownContact | null, profile?: AssistantProfile): AgentProposal {
@@ -1055,17 +1208,20 @@ function buildFallbackResponseWithContactsAndProfile(
     )
   const explicitForwardIntent = /(forward|transfere|transferer|transmets|faire suivre)/.test(intentText)
   const draftIntent = /(draft|brouillon|prepare sans envoyer|prépare sans envoyer)/.test(intentText)
+  const sendDraftIntent = /(send draft|envoie le brouillon|envoyer le brouillon|send the draft|send this draft)/.test(intentText)
   const archiveIntent = /(archive|archiver|range|ranger)/.test(intentText)
   const unarchiveIntent =
     /(unarchive|restore|restaure|restaurer|remets?.*(boite de reception|inbox)|retablis?.*(boite de reception|inbox))/.test(
       intentText
     )
   const labelIntent = /(label|labels|etiquette|etiquettes|tag|tags)/.test(intentText)
+  const removeLabelIntent = /(remove label|remove labels|retire le label|retire les labels|supprime le label|supprime les labels)/.test(intentText)
   const markUnreadIntent = /(non lu|unread|marque.*non lu|mark.*unread)/.test(intentText)
   const markReadIntent = /(marque.*lu|mark.*read|\blu\b)/.test(intentText) && !markUnreadIntent
   const starIntent = /(star|etoile|étoile|epingle|épingl)/.test(intentText)
   const unstarIntent = /(unstar|retire.*etoile|retire.*étoile|enleve.*etoile|enleve.*étoile)/.test(intentText)
   const trashIntent = /(trash|corbeille|supprime.*gmail|jette)/.test(intentText)
+  const permanentDeleteIntent = /(supprime definitivement|supprimer definitivement|hard delete|delete permanently|efface definitivement)/.test(intentText)
   const deleteIntent = /(delete|remove|supprime|supprimer|efface|annule|cancel)/.test(intentText)
   const updateIntent = /(update|edit|revise|rewrite|modifie|modifier|mets a jour|mettre a jour|complete|compl[eè]te)/.test(
     intentText
@@ -1076,6 +1232,7 @@ function buildFallbackResponseWithContactsAndProfile(
   const copyIntent = /(copy|copie|duplique|dupliquer|duplicate)/.test(intentText)
   const unshareIntent = /(unshare|remove access|revoke|retire(?:r)? l[' ]acces|supprime l[' ]acces)/.test(intentText)
   const createFolderIntent = /(create|cree|creer|nouveau|new).*(folder|dossier)|\b(folder|dossier)\b.*(create|cree|creer)/.test(intentText)
+  const appDataIntent = /(appdata|app data|configuration interne|config interne|fichier de config|config file)/.test(intentText)
   const notionPropertiesIntent = /(status|statut|priority|priorite|priorité|property|properties|propriete|proprietes)/.test(intentText)
   const notionArchiveIntent = /(archive|archiver|supprime|supprimer|retire|retirer)/.test(intentText)
 
@@ -1170,7 +1327,17 @@ function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
-  if ((archiveIntent || unarchiveIntent || labelIntent || markReadIntent || markUnreadIntent || starIntent || unstarIntent || trashIntent) && /(gmail|email|e-mail|mail|message|messages|thread|inbox)/.test(intentText)) {
+  if ((archiveIntent || unarchiveIntent || labelIntent || removeLabelIntent || markReadIntent || markUnreadIntent || starIntent || unstarIntent || trashIntent || permanentDeleteIntent || sendDraftIntent) && /(gmail|email|e-mail|mail|message|messages|thread|inbox|draft|brouillon)/.test(intentText)) {
+    if (sendDraftIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Draft send is ready for review.'
+            : 'Envoi du brouillon prêt à valider.',
+        proposals: [buildSendGmailDraftProposal(assistantProfile)],
+      }
+    }
+
     if (unarchiveIntent) {
       return {
         response:
@@ -1188,6 +1355,16 @@ function buildFallbackResponseWithContactsAndProfile(
             ? 'Trash action ready.'
             : 'Mise en corbeille prête.',
         proposals: [buildTrashGmailProposal(assistantProfile)],
+      }
+    }
+
+    if (permanentDeleteIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Permanent delete ready for review.'
+            : 'Suppression définitive prête à valider.',
+        proposals: [buildDeleteGmailProposal(assistantProfile)],
       }
     }
 
@@ -1218,6 +1395,16 @@ function buildFallbackResponseWithContactsAndProfile(
             ? 'Archive action ready.'
             : 'Archivage prêt.',
         proposals: [buildArchiveEmailProposal(assistantProfile)],
+      }
+    }
+
+    if (removeLabelIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Label removal is ready.'
+            : 'Retrait du label prêt.',
+        proposals: [buildRemoveLabelEmailProposal(input, assistantProfile)],
       }
     }
 
@@ -1261,6 +1448,26 @@ function buildFallbackResponseWithContactsAndProfile(
   }
 
   if (/(google drive|drive\b|dossier|folder|upload|save to drive|save in drive|enregistrer dans drive|mettre dans drive|stocke.*drive)/.test(intentText)) {
+    if (appDataIntent) {
+      if (deleteIntent) {
+        return {
+          response:
+            language === 'en'
+              ? 'Drive app data deletion is ready for review.'
+              : 'Suppression des données app Drive prête à valider.',
+          proposals: [buildDeleteDriveAppDataProposal(input, assistantProfile)],
+        }
+      }
+
+      return {
+        response:
+          language === 'en'
+            ? updateIntent ? 'Drive app data update is ready.' : 'Drive app data is ready.'
+            : updateIntent ? 'Mise à jour des données app Drive prête.' : 'Données app Drive prêtes.',
+        proposals: [buildDriveAppDataProposal(input, updateIntent, assistantProfile)],
+      }
+    }
+
     if (createFolderIntent) {
       return {
         response:
@@ -1340,6 +1547,16 @@ function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
+  if (/(google photos|photos|photo|album|image)/.test(intentText) && /(search|cherche|chercher|find|find me|retrouve|list|liste|show|montre)/.test(intentText)) {
+    return {
+      response:
+        language === 'en'
+          ? 'Google Photos lookup is ready.'
+          : 'Recherche Google Photos prête.',
+      proposals: [buildGooglePhotosProposal(input, assistantProfile)],
+    }
+  }
+
   if (/(notion|wiki|database|base de donnees|base de données|workspace|page)/.test(intentText)) {
     if (notionArchiveIntent && !notionPropertiesIntent && !updateIntent) {
       return {
@@ -1371,6 +1588,29 @@ function buildFallbackResponseWithContactsAndProfile(
   }
 
   if (isEmailSendIntent(intentText)) {
+    if (updateIntent && draftIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Draft update is ready. Review and confirm.'
+            : 'Mise à jour du brouillon prête. Vérifie et confirme.',
+        proposals: [{
+          type: 'update_gmail_draft',
+          title: language === 'en' ? 'Update Gmail draft' : 'Mettre à jour le brouillon Gmail',
+          description:
+            language === 'en'
+              ? 'Update the matching Gmail draft before sending it.'
+              : 'Mettre à jour le brouillon Gmail correspondant avant envoi.',
+          parameters: {
+            draftId: '',
+            subject: buildEmailSubject(input, assistantProfile),
+            body: buildExecutiveEmailBody(input, assistantProfile),
+          },
+          confidenceScore: 0.76,
+        }],
+      }
+    }
+
     if (draftIntent) {
       return {
         response:
@@ -1404,8 +1644,8 @@ function buildFallbackResponseWithContactsAndProfile(
   return {
     response:
       language === 'en'
-        ? 'Tell me what you need — Gmail, Calendar, Drive, Notion, or Docs.'
-        : 'Dis-moi ce qu’il te faut — Gmail, Agenda, Drive, Notion ou Docs.',
+        ? 'Tell me what needs to move — Gmail, Calendar, Drive, Docs, Notion, or Photos.'
+        : 'Dis-moi ce qu’il faut faire — Gmail, Agenda, Drive, Docs, Notion ou Photos.',
     proposals: [],
   }
 }

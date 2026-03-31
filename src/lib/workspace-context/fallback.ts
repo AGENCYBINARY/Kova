@@ -41,6 +41,14 @@ interface SourceMetadataSummary {
     owners?: string[]
     webViewLink?: string | null
   }>
+  photoCount?: number
+  photos?: Array<{
+    photoId?: string
+    filename?: string
+    mimeType?: string | null
+    creationTime?: string | null
+    productUrl?: string | null
+  }>
   docCount?: number
   docs?: Array<{
     documentId?: string
@@ -126,6 +134,12 @@ export function buildConnectedContextFallbackResponse(
         : [`drive: ${summary.fileCount || 0} fichiers correspondants`]
     }
 
+    if (summary.source === 'google_photos') {
+      return language === 'en'
+        ? [`photos: ${summary.photoCount || 0} matching media item(s)`]
+        : [`photos: ${summary.photoCount || 0} media correspondants`]
+    }
+
     return language === 'en'
       ? [`notion: ${summary.pageCount || 0} matching pages, ${summary.databaseCount || 0} matching databases`]
       : [`notion: ${summary.pageCount || 0} pages correspondantes, ${summary.databaseCount || 0} bases correspondantes`]
@@ -206,6 +220,19 @@ function formatDriveFileLine(
   return `${index + 1}. ${name} | ${mimeType} | ${modified}${owners.length > 0 ? ` | ${owners.join(', ')}` : ''}${link ? ` | ${link}` : ''}`
 }
 
+function formatGooglePhotoLine(
+  photo: NonNullable<SourceMetadataSummary['photos']>[number],
+  index: number,
+  language: 'fr' | 'en'
+) {
+  const filename = photo.filename || (language === 'en' ? 'Untitled media' : 'Média sans nom')
+  const mimeType = photo.mimeType || 'application/octet-stream'
+  const created = photo.creationTime || (language === 'en' ? 'unknown date' : 'date inconnue')
+  const link = photo.productUrl?.trim() || ''
+
+  return `${index + 1}. ${filename} | ${mimeType} | ${created}${link ? ` | ${link}` : ''}`
+}
+
 function formatNotionPageLine(
   page: NonNullable<SourceMetadataSummary['pages']>[number],
   index: number,
@@ -231,6 +258,7 @@ export function buildDeterministicConnectedResponse(
   const gmailSummary = summaries.find((summary) => summary.source === 'gmail')
   const calendarSummary = summaries.find((summary) => summary.source === 'calendar')
   const driveSummary = summaries.find((summary) => summary.source === 'google_drive')
+  const photosSummary = summaries.find((summary) => summary.source === 'google_photos')
   const notionSummary = summaries.find((summary) => summary.source === 'notion')
 
   const asksCount = /\b(combien|how many)\b/.test(normalized)
@@ -252,6 +280,9 @@ export function buildDeterministicConnectedResponse(
   const shouldUseDriveContext =
     Boolean(driveSummary) &&
     (result.request.sources.includes('google_drive') && (requestHasSingleSource || asksFiles))
+  const shouldUsePhotosContext =
+    Boolean(photosSummary) &&
+    (result.request.sources.includes('google_photos') && (requestHasSingleSource || /\b(photo|photos|album|albums|image|images|media)\b/.test(normalized)))
   const shouldUseNotionContext =
     Boolean(notionSummary) &&
     (result.request.sources.includes('notion') && (requestHasSingleSource || asksPages))
@@ -431,6 +462,20 @@ export function buildDeterministicConnectedResponse(
         ? `${driveSummary.fileCount || 0} Drive file(s) match this context.`
         : `${driveSummary.fileCount || 0} fichier(s) Drive correspondent a ce contexte.`
     }
+  }
+
+  if (shouldUsePhotosContext && photosSummary) {
+    const photos = Array.isArray(photosSummary.photos) ? photosSummary.photos : []
+
+    if (photos.length === 0) {
+      return language === 'en'
+        ? 'I do not see any matching Google Photos media right now.'
+        : 'Je ne vois aucun média Google Photos correspondant pour le moment.'
+    }
+
+    return language === 'en'
+      ? `Here are the matching Google Photos items:\n${photos.map((photo, index) => formatGooglePhotoLine(photo, index, language)).join('\n')}`
+      : `Voici les médias Google Photos correspondants :\n${photos.map((photo, index) => formatGooglePhotoLine(photo, index, language)).join('\n')}`
   }
 
   if (shouldUseNotionContext && notionSummary) {

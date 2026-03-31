@@ -96,7 +96,7 @@ export function IntegrationsPageClient({ data }: { data: IntegrationsPageData })
               <div className={styles.cardActions}>
                 <IntegrationActions
                   provider={
-                    integration.id === 'gmail' || integration.id === 'calendar' || integration.id === 'google_docs' || integration.id === 'google_drive'
+                    integration.id === 'gmail' || integration.id === 'calendar' || integration.id === 'google_docs' || integration.id === 'google_drive' || integration.id === 'google_photos'
                       ? 'google'
                       : integration.id === 'notion'
                         ? 'notion'

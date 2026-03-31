@@ -15,15 +15,19 @@ export interface DashboardAction {
     | 'send_email'
     | 'reply_to_email'
     | 'create_gmail_draft'
+    | 'update_gmail_draft'
+    | 'send_gmail_draft'
     | 'forward_email'
     | 'archive_gmail_thread'
     | 'unarchive_gmail_thread'
     | 'label_gmail_thread'
+    | 'remove_gmail_thread_labels'
     | 'mark_gmail_thread_read'
     | 'mark_gmail_thread_unread'
     | 'star_gmail_thread'
     | 'unstar_gmail_thread'
     | 'trash_gmail_thread'
+    | 'delete_gmail_thread_permanently'
     | 'create_calendar_event'
     | 'update_calendar_event'
     | 'delete_calendar_event'
@@ -41,12 +45,17 @@ export interface DashboardAction {
     | 'share_google_drive_file'
     | 'copy_google_drive_file'
     | 'unshare_google_drive_file'
+    | 'create_google_drive_appdata_file'
+    | 'update_google_drive_appdata_file'
+    | 'delete_google_drive_appdata_file'
+    | 'list_google_photos_media'
+    | 'search_google_photos_media'
   title: string
   description: string
   parameters: Record<string, unknown>
   status: ActionStatus
   riskLevel: 'low' | 'medium' | 'high'
-  targetApp: 'Gmail' | 'Google Calendar' | 'Notion' | 'Google Docs' | 'Google Drive'
+  targetApp: 'Gmail' | 'Google Calendar' | 'Notion' | 'Google Docs' | 'Google Drive' | 'Google Photos'
   createdAt: string
   executedAt?: string
   confidenceScore: number
@@ -55,7 +64,7 @@ export interface DashboardAction {
 }
 
 export interface DashboardIntegration {
-  id: 'gmail' | 'calendar' | 'notion' | 'google_docs' | 'google_drive' | 'slack'
+  id: 'gmail' | 'calendar' | 'notion' | 'google_docs' | 'google_drive' | 'google_photos' | 'slack'
   name: string
   description: string
   shortDescription: string
@@ -236,6 +245,18 @@ export const dashboardIntegrations: DashboardIntegration[] = [
     shortDescription: 'Drive storage and file delivery.',
     color: '#0F9D58',
     icon: 'D',
+    status: 'disconnected',
+    connectedAccount: null,
+    lastSync: null,
+    health: 'attention',
+  },
+  {
+    id: 'google_photos',
+    name: 'Google Photos',
+    description: 'Surface recent photos and albums for reference workflows and media lookups.',
+    shortDescription: 'Photo library visibility and retrieval.',
+    color: '#FABB05',
+    icon: '◉',
     status: 'disconnected',
     connectedAccount: null,
     lastSync: null,

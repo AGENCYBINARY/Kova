@@ -4,16 +4,19 @@ import {
   getGoogleIntegrationCapabilityState,
   getValidGoogleAccessToken,
   listGoogleCalendarEvents,
+  listRecentGooglePhotos,
   listRecentGoogleDocs,
   listTodayGmailMessages,
   searchGmailMessages,
   searchGoogleDriveFiles,
+  searchGooglePhotosMedia,
   summarizeGmailThreads,
   type GmailMessageSummary,
   type GoogleCalendarAvailabilityWindow,
   type GoogleCalendarEventSummary,
   type GoogleDocSummary,
   type GoogleDriveFileSummary,
+  type GooglePhotoSummary,
 } from '@/lib/integrations/google'
 import {
   getValidNotionAccessToken,
@@ -79,6 +82,14 @@ interface GoogleDocMetadata {
   webViewLink: string | null
 }
 
+interface GooglePhotoMetadata {
+  photoId: string
+  filename: string
+  mimeType: string | null
+  creationTime: string | null
+  productUrl: string | null
+}
+
 interface NotionPageMetadata {
   pageId: string
   title: string
@@ -140,6 +151,10 @@ function formatDriveFileLine(file: GoogleDriveFileSummary) {
 
 function formatGoogleDocLine(doc: GoogleDocSummary) {
   return `${doc.title} | modified ${doc.modifiedTime || 'unknown'}${doc.preview ? ` | ${doc.preview}` : ''}${doc.webViewLink ? ` | ${doc.webViewLink}` : ''} | documentId: ${doc.id}`
+}
+
+function formatGooglePhotoLine(photo: GooglePhotoSummary) {
+  return `${photo.filename} | ${photo.mimeType || 'unknown type'} | ${photo.creationTime || 'unknown date'}${photo.productUrl ? ` | ${photo.productUrl}` : ''} | photoId: ${photo.id}`
 }
 
 function formatNotionPageLine(page: NotionPageSummary) {
@@ -333,6 +348,43 @@ async function buildDocsContext(params: {
   } satisfies SourceContextBlock
 }
 
+async function buildPhotosContext(params: {
+  request: ConnectedContextRequest
+  accessToken: string
+  connectedAccount: string | null
+}) {
+  const photos =
+    params.request.searchQuery
+      ? await searchGooglePhotosMedia(params.accessToken, {
+          query: params.request.searchQuery,
+          maxResults: 10,
+        })
+      : await listRecentGooglePhotos(params.accessToken, {
+          maxResults: 10,
+        })
+
+  return {
+    source: 'google_photos' as const,
+    lines: [
+      `Google Photos${params.connectedAccount ? ` (${params.connectedAccount})` : ''}`,
+      `- media loaded: ${photos.length}`,
+      ...(photos.length > 0 ? photos.map((photo) => `- ${formatGooglePhotoLine(photo)}`) : ['- no matching media']),
+    ],
+    metadata: {
+      source: 'google_photos',
+      connectedAccount: params.connectedAccount,
+      photoCount: photos.length,
+      photos: photos.slice(0, 10).map((photo) => ({
+        photoId: photo.id,
+        filename: photo.filename,
+        mimeType: photo.mimeType,
+        creationTime: photo.creationTime,
+        productUrl: photo.productUrl,
+      } satisfies GooglePhotoMetadata)),
+    },
+  } satisfies SourceContextBlock
+}
+
 async function buildNotionContext(params: {
   request: ConnectedContextRequest
   accessToken: string
@@ -393,7 +445,14 @@ async function resolveSourceContext(params: {
   userId: string
   workspaceId: string
 }) {
-  const integrationType = params.source === 'google_docs' ? 'google_docs' : params.source === 'calendar' ? 'calendar' : params.source
+  const integrationType =
+    params.source === 'google_docs'
+      ? 'google_docs'
+      : params.source === 'calendar'
+        ? 'calendar'
+        : params.source === 'google_photos'
+          ? 'google_photos'
+          : params.source
   const integration = await prisma.integration.findFirst({
     where: {
       type: integrationType,
@@ -428,9 +487,13 @@ async function resolveSourceContext(params: {
     integrationType === 'gmail' ||
     integrationType === 'calendar' ||
     integrationType === 'google_drive' ||
-    integrationType === 'google_docs'
+    integrationType === 'google_docs' ||
+    integrationType === 'google_photos'
   ) {
-    const capabilityState = getGoogleIntegrationCapabilityState(integrationType as 'gmail' | 'calendar' | 'google_drive' | 'google_docs', integration.metadata)
+    const capabilityState = getGoogleIntegrationCapabilityState(
+      integrationType as 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'google_photos',
+      integration.metadata
+    )
     if (capabilityState.needsReconnect) {
       return {
         source: params.source,
@@ -465,6 +528,14 @@ async function resolveSourceContext(params: {
 
   if (params.source === 'google_docs') {
     return buildDocsContext({
+      request: params.request,
+      accessToken,
+      connectedAccount,
+    })
+  }
+
+  if (params.source === 'google_photos') {
+    return buildPhotosContext({
       request: params.request,
       accessToken,
       connectedAccount,

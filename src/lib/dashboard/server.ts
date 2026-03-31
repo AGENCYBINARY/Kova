@@ -35,15 +35,19 @@ function targetAppForType(type: DashboardAction['type']): DashboardAction['targe
     type === 'send_email' ||
     type === 'reply_to_email' ||
     type === 'create_gmail_draft' ||
+    type === 'update_gmail_draft' ||
+    type === 'send_gmail_draft' ||
     type === 'forward_email' ||
     type === 'archive_gmail_thread' ||
     type === 'unarchive_gmail_thread' ||
     type === 'label_gmail_thread' ||
+    type === 'remove_gmail_thread_labels' ||
     type === 'mark_gmail_thread_read' ||
     type === 'mark_gmail_thread_unread' ||
     type === 'star_gmail_thread' ||
     type === 'unstar_gmail_thread' ||
-    type === 'trash_gmail_thread'
+    type === 'trash_gmail_thread' ||
+    type === 'delete_gmail_thread_permanently'
   ) {
     return 'Gmail'
   }
@@ -59,9 +63,15 @@ function targetAppForType(type: DashboardAction['type']): DashboardAction['targe
     type === 'rename_google_drive_file' ||
     type === 'share_google_drive_file' ||
     type === 'copy_google_drive_file' ||
-    type === 'unshare_google_drive_file'
+    type === 'unshare_google_drive_file' ||
+    type === 'create_google_drive_appdata_file' ||
+    type === 'update_google_drive_appdata_file' ||
+    type === 'delete_google_drive_appdata_file'
   ) {
     return 'Google Drive'
+  }
+  if (type === 'list_google_photos_media' || type === 'search_google_photos_media') {
+    return 'Google Photos'
   }
   return 'Notion'
 }
@@ -82,18 +92,16 @@ function mapIntegration(record: {
   lastSyncAt: Date | null
 }): DashboardIntegration {
   const metadata = asRecord(record.metadata)
-  const appName =
-    record.type === 'gmail'
-      ? 'Gmail'
-      : record.type === 'calendar'
-        ? 'Google Calendar'
-        : record.type === 'notion'
-          ? 'Notion'
-          : record.type === 'google_docs'
-            ? 'Google Docs'
-            : record.type === 'google_drive'
-              ? 'Google Drive'
-            : 'Slack'
+  const appNameMap: Record<string, string> = {
+    gmail: 'Gmail',
+    calendar: 'Google Calendar',
+    notion: 'Notion',
+    google_docs: 'Google Docs',
+    google_drive: 'Google Drive',
+    google_photos: 'Google Photos',
+    slack: 'Slack',
+  }
+  const appName = appNameMap[record.type] || record.type
 
   const descriptionMap: Record<string, string> = {
     gmail: 'Send emails, draft follow-ups, and label inbox conversations.',
@@ -101,6 +109,7 @@ function mapIntegration(record: {
     notion: 'Update pages, maintain databases, and publish workspace summaries.',
     google_docs: 'Create briefs, execution summaries, and structured documents from agent output.',
     google_drive: 'Create folders and save generated files to Drive for later sharing and reuse.',
+    google_photos: 'Browse recent photos and albums for media-heavy workflows.',
     slack: 'Route notifications and post approvals back to operating channels.',
   }
 
@@ -110,6 +119,7 @@ function mapIntegration(record: {
     notion: 'Knowledge base and docs automation.',
     google_docs: 'Docs generation and updates.',
     google_drive: 'Drive storage and file delivery.',
+    google_photos: 'Photo search and context.',
     slack: 'Team notifications and approvals.',
   }
 
@@ -119,6 +129,7 @@ function mapIntegration(record: {
     notion: '#FFFFFF',
     google_docs: '#34A853',
     google_drive: '#0F9D58',
+    google_photos: '#FABB05',
     slack: '#4A154B',
   }
 
@@ -128,6 +139,7 @@ function mapIntegration(record: {
     notion: 'N',
     google_docs: 'G',
     google_drive: 'D',
+    google_photos: '◉',
     slack: 'S',
   }
 
@@ -135,7 +147,8 @@ function mapIntegration(record: {
     record.type === 'gmail' ||
     record.type === 'calendar' ||
     record.type === 'google_docs' ||
-    record.type === 'google_drive'
+    record.type === 'google_drive' ||
+    record.type === 'google_photos'
       ? getGoogleIntegrationCapabilityState(record.type, record.metadata)
       : null
 

@@ -8,24 +8,33 @@ import {
   createGmailDraft,
   createGoogleCalendarEvent,
   createGoogleDoc,
+  createGoogleDriveAppDataFile,
   createGoogleDriveFile,
   createGoogleDriveFolder,
+  deleteGmailThreadPermanently,
   deleteGoogleCalendarEvent,
+  deleteGoogleDriveAppDataFile,
   deleteGoogleDriveFile,
   forwardGmailMessage,
   getValidGoogleAccessToken,
   labelGmailThread,
+  listGooglePhotosMedia,
   moveGoogleDriveFile,
   renameGoogleDriveFile,
   readGmailMessageBody,
+  removeGmailThreadLabels,
   replyToGmailMessage,
   sendGmailMessage,
+  sendGmailDraft,
+  searchGooglePhotosMedia,
   setGmailThreadStarredState,
   setGmailThreadReadState,
   shareGoogleDriveFile,
   trashGmailThread,
   unarchiveGmailThread,
   unshareGoogleDriveFile,
+  updateGmailDraft,
+  updateGoogleDriveAppDataFile,
   updateGoogleCalendarEvent,
   updateGoogleDoc,
 } from '@/lib/integrations/google'
@@ -41,6 +50,8 @@ import type { McpExecutionContext, McpToolDefinition } from '@/lib/mcp/types'
 
 const sendEmailSchema = z.object({
   to: z.array(z.string().email()).min(1),
+  cc: z.array(z.string().email()).optional(),
+  bcc: z.array(z.string().email()).optional(),
   subject: z.string().min(1),
   body: z.string().min(1),
 }).passthrough()
@@ -71,6 +82,7 @@ const createGoogleDriveFileSchema = z.object({
   name: z.string().min(1),
   content: z.string().optional(),
   folderName: z.string().optional(),
+  folderPath: z.string().optional(),
   parentFolderId: z.string().optional(),
   mimeType: z.string().optional(),
 }).passthrough()
@@ -78,6 +90,7 @@ const createGoogleDriveFileSchema = z.object({
 const createGoogleDriveFolderSchema = z.object({
   name: z.string().min(1),
   folderName: z.string().optional(),
+  folderPath: z.string().optional(),
   parentFolderId: z.string().optional(),
 }).passthrough()
 
@@ -102,14 +115,33 @@ const replyToEmailSchema = z.object({
   threadId: z.string().min(1),
   messageId: z.string().min(1),
   to: z.array(z.string().email()).min(1),
+  cc: z.array(z.string().email()).optional(),
+  bcc: z.array(z.string().email()).optional(),
   subject: z.string().min(1),
   body: z.string().min(1),
 }).passthrough()
 
 const createGmailDraftSchema = z.object({
   to: z.array(z.string().email()).min(1),
+  cc: z.array(z.string().email()).optional(),
+  bcc: z.array(z.string().email()).optional(),
   subject: z.string().min(1),
   body: z.string().min(1),
+}).passthrough()
+
+const updateGmailDraftSchema = z.object({
+  draftId: z.string().min(1),
+  to: z.array(z.string().email()).optional(),
+  cc: z.array(z.string().email()).optional(),
+  bcc: z.array(z.string().email()).optional(),
+  subject: z.string().optional(),
+  body: z.string().optional(),
+}).passthrough().refine((value) => Boolean(value.to || value.cc || value.bcc || value.subject || value.body), {
+  message: 'At least one draft field must be provided',
+})
+
+const sendGmailDraftSchema = z.object({
+  draftId: z.string().min(1),
 }).passthrough()
 
 const forwardEmailSchema = z.object({
@@ -151,8 +183,9 @@ const moveGoogleDriveFileSchema = z.object({
   fileId: z.string().min(1),
   destinationFolderId: z.string().min(1).optional(),
   destinationFolderName: z.string().min(1).optional(),
-}).passthrough().refine((value) => Boolean(value.destinationFolderId || value.destinationFolderName), {
-  message: 'destinationFolderId or destinationFolderName is required',
+  destinationFolderPath: z.string().min(1).optional(),
+}).passthrough().refine((value) => Boolean(value.destinationFolderId || value.destinationFolderName || value.destinationFolderPath), {
+  message: 'destinationFolderId, destinationFolderName, or destinationFolderPath is required',
 })
 
 const renameGoogleDriveFileSchema = z.object({
@@ -173,12 +206,28 @@ const copyGoogleDriveFileSchema = z.object({
   name: z.string().optional(),
   destinationFolderId: z.string().min(1).optional(),
   destinationFolderName: z.string().min(1).optional(),
+  destinationFolderPath: z.string().min(1).optional(),
 }).passthrough()
 
 const unshareGoogleDriveFileSchema = z.object({
   fileId: z.string().min(1),
   emails: z.array(z.string().email()).min(1),
 }).passthrough()
+
+const googleDriveAppDataSchema = z.object({
+  fileId: z.string().optional(),
+  name: z.string().optional(),
+  key: z.string().optional(),
+  content: z.string().optional(),
+  value: z.unknown().optional(),
+  mimeType: z.string().optional(),
+}).passthrough().refine((value) => Boolean(value.fileId || value.name || value.key), {
+  message: 'fileId, name, or key is required',
+})
+
+const googleDriveAppDataUpdateSchema = googleDriveAppDataSchema.refine((value) => Boolean(value.fileId), {
+  message: 'fileId is required',
+})
 
 const updateNotionPagePropertiesSchema = z.object({
   pageId: z.string().min(1),
@@ -293,6 +342,61 @@ const tools: Array<McpToolDefinition> = [
     },
   },
   {
+    name: 'gmail.update_draft',
+    actionType: 'update_gmail_draft',
+    provider: 'gmail',
+    title: 'Update Gmail draft',
+    description: 'Update an existing Gmail draft before sending it.',
+    version: '2026-03-30',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        draftId: { type: 'string' },
+        to: { type: 'array', items: { type: 'string', format: 'email' } },
+        cc: { type: 'array', items: { type: 'string', format: 'email' } },
+        bcc: { type: 'array', items: { type: 'string', format: 'email' } },
+        subject: { type: 'string' },
+        body: { type: 'string' },
+      },
+      required: ['draftId'],
+      additionalProperties: true,
+    },
+    inputSchema: updateGmailDraftSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return updateGmailDraft(accessToken, input)
+    },
+  },
+  {
+    name: 'gmail.send_draft',
+    actionType: 'send_gmail_draft',
+    provider: 'gmail',
+    title: 'Send Gmail draft',
+    description: 'Send an existing Gmail draft by draft id.',
+    version: '2026-03-30',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        draftId: { type: 'string' },
+      },
+      required: ['draftId'],
+      additionalProperties: true,
+    },
+    inputSchema: sendGmailDraftSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return sendGmailDraft(accessToken, input)
+    },
+  },
+  {
     name: 'gmail.forward_email',
     actionType: 'forward_email',
     provider: 'gmail',
@@ -394,6 +498,32 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'gmail')
       const accessToken = await getValidGoogleAccessToken(integration)
       return labelGmailThread(accessToken, input)
+    },
+  },
+  {
+    name: 'gmail.remove_thread_labels',
+    actionType: 'remove_gmail_thread_labels',
+    provider: 'gmail',
+    title: 'Remove Gmail thread labels',
+    description: 'Remove one or more Gmail labels from an existing thread.',
+    version: '2026-03-30',
+    riskLevel: 'medium',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+        labelNames: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['threadId', 'labelNames'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailLabelSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return removeGmailThreadLabels(accessToken, input)
     },
   },
   {
@@ -522,6 +652,31 @@ const tools: Array<McpToolDefinition> = [
     },
   },
   {
+    name: 'gmail.delete_thread_permanently',
+    actionType: 'delete_gmail_thread_permanently',
+    provider: 'gmail',
+    title: 'Delete Gmail thread permanently',
+    description: 'Permanently delete a Gmail thread.',
+    version: '2026-03-30',
+    riskLevel: 'high',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string' },
+      },
+      required: ['threadId'],
+      additionalProperties: true,
+    },
+    inputSchema: gmailThreadSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'gmail')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return deleteGmailThreadPermanently(accessToken, input)
+    },
+  },
+  {
     name: 'docs.create_document',
     actionType: 'create_google_doc',
     provider: 'google_docs',
@@ -591,6 +746,7 @@ const tools: Array<McpToolDefinition> = [
         name: { type: 'string' },
         content: { type: 'string' },
         folderName: { type: 'string' },
+        folderPath: { type: 'string' },
         parentFolderId: { type: 'string' },
         mimeType: { type: 'string' },
       },
@@ -619,6 +775,7 @@ const tools: Array<McpToolDefinition> = [
       properties: {
         name: { type: 'string' },
         folderName: { type: 'string' },
+        folderPath: { type: 'string' },
         parentFolderId: { type: 'string' },
       },
       required: ['name'],
@@ -647,6 +804,7 @@ const tools: Array<McpToolDefinition> = [
         fileId: { type: 'string' },
         destinationFolderId: { type: 'string' },
         destinationFolderName: { type: 'string' },
+        destinationFolderPath: { type: 'string' },
       },
       required: ['fileId'],
       additionalProperties: true,
@@ -730,6 +888,7 @@ const tools: Array<McpToolDefinition> = [
         name: { type: 'string' },
         destinationFolderId: { type: 'string' },
         destinationFolderName: { type: 'string' },
+        destinationFolderPath: { type: 'string' },
       },
       required: ['fileId'],
       additionalProperties: true,
@@ -739,6 +898,125 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'google_drive')
       const accessToken = await getValidGoogleAccessToken(integration)
       return copyGoogleDriveFile(accessToken, input)
+    },
+  },
+  {
+    name: 'drive.save_appdata',
+    actionType: 'create_google_drive_appdata_file',
+    provider: 'google_drive',
+    title: 'Save Drive app data',
+    description: 'Create or update a file inside Google Drive appDataFolder.',
+    version: '2026-03-30',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+        name: { type: 'string' },
+        key: { type: 'string' },
+        content: { type: 'string' },
+        mimeType: { type: 'string' },
+      },
+      additionalProperties: true,
+    },
+    inputSchema: googleDriveAppDataSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return createGoogleDriveAppDataFile(accessToken, {
+        name:
+          typeof input.name === 'string' && input.name.trim()
+            ? input.name
+            : `${String(input.key || 'kova-state')}.json`,
+        content:
+          typeof input.content === 'string'
+            ? input.content
+            : input.value !== undefined
+              ? JSON.stringify(input.value, null, 2)
+              : '{}',
+        mimeType: typeof input.mimeType === 'string' ? input.mimeType : 'application/json',
+      })
+    },
+  },
+  {
+    name: 'drive.update_appdata',
+    actionType: 'update_google_drive_appdata_file',
+    provider: 'google_drive',
+    title: 'Update Drive app data',
+    description: 'Update a file inside Google Drive appDataFolder.',
+    version: '2026-03-30',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+        name: { type: 'string' },
+        key: { type: 'string' },
+        content: { type: 'string' },
+        mimeType: { type: 'string' },
+      },
+      additionalProperties: true,
+    },
+    inputSchema: googleDriveAppDataUpdateSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      const content =
+        typeof input.content === 'string'
+          ? input.content
+          : input.value !== undefined
+            ? JSON.stringify(input.value, null, 2)
+            : '{}'
+
+      if (!input.fileId && (input.name || input.key)) {
+        return createGoogleDriveAppDataFile(accessToken, {
+          name:
+            typeof input.name === 'string' && input.name.trim()
+              ? input.name
+              : `${String(input.key || 'kova-state')}.json`,
+          content,
+          mimeType: typeof input.mimeType === 'string' ? input.mimeType : 'application/json',
+        })
+      }
+
+      return updateGoogleDriveAppDataFile(accessToken, {
+        fileId: input.fileId,
+        name: input.name,
+        content,
+        mimeType: typeof input.mimeType === 'string' ? input.mimeType : 'application/json',
+      })
+    },
+  },
+  {
+    name: 'drive.delete_appdata',
+    actionType: 'delete_google_drive_appdata_file',
+    provider: 'google_drive',
+    title: 'Delete Drive app data',
+    description: 'Delete a file stored inside Google Drive appDataFolder.',
+    version: '2026-03-30',
+    riskLevel: 'high',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string' },
+        name: { type: 'string' },
+      },
+      additionalProperties: true,
+    },
+    inputSchema: googleDriveAppDataSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_drive')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      return deleteGoogleDriveAppDataFile(accessToken, {
+        fileId: input.fileId,
+        name: input.name,
+      })
     },
   },
   {
@@ -765,6 +1043,75 @@ const tools: Array<McpToolDefinition> = [
       const integration = await getConnectedIntegration(context, 'google_drive')
       const accessToken = await getValidGoogleAccessToken(integration)
       return unshareGoogleDriveFile(accessToken, input)
+    },
+  },
+  {
+    name: 'photos.list_media',
+    actionType: 'list_google_photos_media',
+    provider: 'google_photos',
+    title: 'List Google Photos media',
+    description: 'List recent media items from Google Photos.',
+    version: '2026-03-30',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        maxResults: { type: 'number' },
+      },
+      additionalProperties: true,
+    },
+    inputSchema: z.object({
+      maxResults: z.number().int().positive().optional(),
+    }).passthrough(),
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_photos')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      const items = await listGooglePhotosMedia(accessToken, input)
+      return {
+        details: `Found ${items.length} Google Photos item${items.length === 1 ? '' : 's'}.`,
+        output: {
+          provider: 'google_photos',
+          items,
+        },
+      } satisfies IntegrationExecutionResult
+    },
+  },
+  {
+    name: 'photos.search_media',
+    actionType: 'search_google_photos_media',
+    provider: 'google_photos',
+    title: 'Search Google Photos media',
+    description: 'Search recent Google Photos media items by filename or mime type.',
+    version: '2026-03-30',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        maxResults: { type: 'number' },
+      },
+      required: ['query'],
+      additionalProperties: true,
+    },
+    inputSchema: z.object({
+      query: z.string().min(1),
+      maxResults: z.number().int().positive().optional(),
+    }).passthrough(),
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_photos')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      const items = await searchGooglePhotosMedia(accessToken, input as { query: string; maxResults?: number })
+      return {
+        details: `Found ${items.length} Google Photos match${items.length === 1 ? '' : 'es'}.`,
+        output: {
+          provider: 'google_photos',
+          items,
+        },
+      } satisfies IntegrationExecutionResult
     },
   },
   {

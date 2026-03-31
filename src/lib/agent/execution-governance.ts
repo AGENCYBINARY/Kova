@@ -48,7 +48,9 @@ export function inferRiskLevel(
     actionType === 'delete_google_drive_file' ||
     actionType === 'share_google_drive_file' ||
     actionType === 'trash_gmail_thread' ||
+    actionType === 'delete_gmail_thread_permanently' ||
     actionType === 'unshare_google_drive_file' ||
+    actionType === 'delete_google_drive_appdata_file' ||
     actionType === 'archive_notion_page'
   ) {
     if (actionType !== 'share_google_drive_file' || hasExternalShareRecipients(parameters)) {
@@ -58,9 +60,14 @@ export function inferRiskLevel(
 
   if (
     actionType === 'label_gmail_thread' ||
+    actionType === 'remove_gmail_thread_labels' ||
     actionType === 'move_google_drive_file' ||
     actionType === 'forward_email' ||
     actionType === 'copy_google_drive_file' ||
+    actionType === 'update_gmail_draft' ||
+    actionType === 'send_gmail_draft' ||
+    actionType === 'create_google_drive_appdata_file' ||
+    actionType === 'update_google_drive_appdata_file' ||
     actionType === 'update_notion_page_properties'
   ) {
     return 'medium'

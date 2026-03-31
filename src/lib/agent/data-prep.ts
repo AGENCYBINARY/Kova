@@ -48,7 +48,7 @@ export function prepareActionParameters(
     }
   }
 
-  if (actionType === 'send_email' || actionType === 'create_gmail_draft') {
+  if (actionType === 'send_email' || actionType === 'create_gmail_draft' || actionType === 'update_gmail_draft') {
     return {
       ...normalized,
       subject: typeof normalized.subject === 'string' ? collapseWhitespace(normalized.subject) : 'Kova message',
@@ -63,7 +63,7 @@ export function prepareActionParameters(
     }
   }
 
-  if (actionType === 'label_gmail_thread') {
+  if (actionType === 'label_gmail_thread' || actionType === 'remove_gmail_thread_labels') {
     return {
       ...normalized,
       labelNames: Array.isArray(normalized.labelNames)
@@ -84,10 +84,19 @@ export function prepareActionParameters(
       ...normalized,
       name: typeof normalized.name === 'string' ? collapseWhitespace(normalized.name) : 'New folder',
       folderName: typeof normalized.folderName === 'string' ? collapseWhitespace(normalized.folderName) : normalized.folderName,
+      folderPath: typeof normalized.folderPath === 'string' ? collapseWhitespace(normalized.folderPath) : normalized.folderPath,
       parentFolderId:
         typeof normalized.parentFolderId === 'string'
           ? collapseWhitespace(normalized.parentFolderId)
           : normalized.parentFolderId,
+    }
+  }
+
+  if (actionType === 'create_google_drive_appdata_file' || actionType === 'update_google_drive_appdata_file') {
+    return {
+      ...normalized,
+      name: typeof normalized.name === 'string' ? collapseWhitespace(normalized.name) : 'kova-config.json',
+      content: typeof normalized.content === 'string' ? normalizeMultiline(normalized.content) : '{}',
     }
   }
 
@@ -110,6 +119,28 @@ export function prepareActionParameters(
         typeof normalized.destinationFolderName === 'string'
           ? collapseWhitespace(normalized.destinationFolderName)
           : normalized.destinationFolderName,
+      destinationFolderPath:
+        typeof normalized.destinationFolderPath === 'string'
+          ? collapseWhitespace(normalized.destinationFolderPath)
+          : normalized.destinationFolderPath,
+    }
+  }
+
+  if (actionType === 'move_google_drive_file') {
+    return {
+      ...normalized,
+      destinationFolderId:
+        typeof normalized.destinationFolderId === 'string'
+          ? collapseWhitespace(normalized.destinationFolderId)
+          : normalized.destinationFolderId,
+      destinationFolderName:
+        typeof normalized.destinationFolderName === 'string'
+          ? collapseWhitespace(normalized.destinationFolderName)
+          : normalized.destinationFolderName,
+      destinationFolderPath:
+        typeof normalized.destinationFolderPath === 'string'
+          ? collapseWhitespace(normalized.destinationFolderPath)
+          : normalized.destinationFolderPath,
     }
   }
 

@@ -77,6 +77,7 @@ function encodeMimeHeader(value: string) {
 function buildPlainTextMimeMessage(params: {
   to?: string
   cc?: string
+  bcc?: string
   subject?: string
   body?: string
   headers?: string[]
@@ -84,6 +85,7 @@ function buildPlainTextMimeMessage(params: {
   return [
     ...(params.to ? [`To: ${params.to}`] : []),
     ...(params.cc ? [`Cc: ${params.cc}`] : []),
+    ...(params.bcc ? [`Bcc: ${params.bcc}`] : []),
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: 8bit',
     'MIME-Version: 1.0',
@@ -92,6 +94,16 @@ function buildPlainTextMimeMessage(params: {
     '',
     params.body || '',
   ].join('\r\n')
+}
+
+function getEmailList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.includes('@'))
+    : []
+}
+
+function getEmailHeader(value: unknown) {
+  return getEmailList(value).join(', ')
 }
 
 function extractEmailAddress(value: string) {
@@ -108,6 +120,12 @@ function decodeMimeWords(value: string) {
   return value.replace(/=\?UTF-8\?B\?([^?]+)\?=/gi, (_, encoded) =>
     Buffer.from(encoded, 'base64').toString('utf8')
   )
+}
+
+function decodeBase64Url(value: string) {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+  return Buffer.from(padded, 'base64').toString('utf8')
 }
 
 function getHeaderValue(headers: Array<{ name?: string; value?: string }>, name: string) {
@@ -142,6 +160,24 @@ export interface GoogleDriveFileSummary {
   owners: string[]
   webViewLink: string | null
   parentIds?: string[]
+}
+
+export interface GooglePhotoSummary {
+  id: string
+  filename: string
+  mimeType: string
+  creationTime: string | null
+  mediaUrl: string | null
+  productUrl: string | null
+  width: string | null
+  height: string | null
+}
+
+export interface GooglePhotoAlbumSummary {
+  id: string
+  title: string
+  itemCount: string | null
+  coverPhotoUrl: string | null
 }
 
 function getStartOfDay(date = new Date()) {
@@ -217,11 +253,15 @@ async function listGmailMessageMetadata(accessToken: string, query: string, maxR
 }
 
 export async function sendGmailMessage(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const recipients = Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')
+  const recipients = getEmailHeader(parameters.to) || String(parameters.to || '')
+  const cc = getEmailHeader(parameters.cc)
+  const bcc = getEmailHeader(parameters.bcc)
   const subject = String(parameters.subject || 'Kova message')
   const body = String(parameters.body || '')
   const mime = buildPlainTextMimeMessage({
     to: recipients,
+    cc,
+    bcc,
     subject,
     body,
   })
@@ -248,6 +288,8 @@ export async function sendGmailMessage(accessToken: string, parameters: Record<s
       provider: 'gmail',
       messageId: data.id,
       recipients,
+      cc: cc || null,
+      bcc: bcc || null,
       subject,
     },
   }
@@ -629,6 +671,37 @@ export async function trashGmailThread(accessToken: string, parameters: Record<s
   }
 }
 
+export async function deleteGmailThreadPermanently(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  if (!threadId) {
+    throw new Error('threadId is required to permanently delete a Gmail thread.')
+  }
+
+  const response = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS }
+  )
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Gmail thread permanent deletion failed: ${response.status}`)
+  }
+
+  return {
+    details: 'Gmail thread permanently deleted.',
+    output: {
+      provider: 'gmail',
+      threadId,
+      deleted: true,
+    },
+  }
+}
+
 export async function labelGmailThread(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
   const threadId = String(parameters.threadId || '')
   const labelNames = Array.isArray(parameters.labelNames)
@@ -654,6 +727,43 @@ export async function labelGmailThread(accessToken: string, parameters: Record<s
       provider: 'gmail',
       threadId,
       labels: labelNames,
+    },
+  }
+}
+
+export async function removeGmailThreadLabels(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const threadId = String(parameters.threadId || '')
+  const labelNames = Array.isArray(parameters.labelNames)
+    ? parameters.labelNames.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : []
+
+  if (!threadId) {
+    throw new Error('threadId is required to remove labels from a Gmail thread.')
+  }
+
+  if (labelNames.length === 0) {
+    throw new Error('labelNames is required to remove labels from a Gmail thread.')
+  }
+
+  const existingLabels = await listGmailLabels(accessToken)
+  const labelIds = labelNames
+    .map((labelName) => existingLabels.find((label) => label.name.toLowerCase() === labelName.toLowerCase())?.id || null)
+    .filter((value): value is string => Boolean(value))
+
+  if (labelIds.length === 0) {
+    throw new Error('No matching Gmail labels were found.')
+  }
+
+  await modifyGmailThreadLabels(accessToken, threadId, {
+    removeLabelIds: labelIds,
+  })
+
+  return {
+    details: 'Labels removed from Gmail thread.',
+    output: {
+      provider: 'gmail',
+      threadId,
+      removedLabels: labelNames,
     },
   }
 }
@@ -726,12 +836,16 @@ export async function forwardGmailMessage(accessToken: string, parameters: Recor
 }
 
 export async function createGmailDraft(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
-  const to = Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')
+  const to = getEmailHeader(parameters.to) || String(parameters.to || '')
+  const cc = getEmailHeader(parameters.cc)
+  const bcc = getEmailHeader(parameters.bcc)
   const subject = String(parameters.subject || 'Kova draft')
   const body = String(parameters.body || '')
 
   const mime = buildPlainTextMimeMessage({
     to,
+    cc,
+    bcc,
     subject,
     body,
   })
@@ -765,7 +879,169 @@ export async function createGmailDraft(accessToken: string, parameters: Record<s
       draftId: data.id || null,
       messageId: data.message?.id || null,
       recipients: to,
+      cc: cc || null,
+      bcc: bcc || null,
       subject,
+    },
+  }
+}
+
+export async function updateGmailDraft(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const draftId = String(parameters.draftId || '')
+
+  if (!draftId) {
+    throw new Error('draftId is required to update a Gmail draft.')
+  }
+
+  const existingResponse = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/drafts/${draftId}?format=full`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
+  )
+
+  if (!existingResponse.ok) {
+    throw new Error(`Gmail draft read failed: ${existingResponse.status}`)
+  }
+
+  const existingData = await existingResponse.json() as {
+    message?: {
+      payload?: {
+        headers?: Array<{ name?: string; value?: string }>
+        mimeType?: string
+        body?: { data?: string }
+        parts?: Array<{
+          mimeType?: string
+          body?: { data?: string }
+          parts?: Array<{ mimeType?: string; body?: { data?: string } }>
+        }>
+      }
+    }
+  }
+
+  type GmailPayload = {
+    headers?: Array<{ name?: string; value?: string }>
+    mimeType?: string
+    body?: { data?: string }
+    parts?: Array<{
+      mimeType?: string
+      body?: { data?: string }
+      parts?: Array<{ mimeType?: string; body?: { data?: string } }>
+    }>
+  }
+
+  const existingHeaders = existingData.message?.payload?.headers || []
+  const extractPayloadText = (payload?: GmailPayload): string => {
+    if (!payload) return ''
+    if (payload.mimeType === 'text/plain' && payload.body?.data) {
+      return decodeBase64Url(payload.body.data).trim()
+    }
+
+    for (const part of payload.parts || []) {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        return decodeBase64Url(part.body.data).trim()
+      }
+
+      for (const sub of part.parts || []) {
+        if (sub.mimeType === 'text/plain' && sub.body?.data) {
+          return decodeBase64Url(sub.body.data).trim()
+        }
+      }
+    }
+
+    return ''
+  }
+
+  const to =
+    (Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')).trim()
+    || getHeaderValue(existingHeaders, 'To')
+  const cc =
+    getEmailHeader(parameters.cc).trim()
+    || getHeaderValue(existingHeaders, 'Cc')
+  const bcc =
+    getEmailHeader(parameters.bcc).trim()
+    || getHeaderValue(existingHeaders, 'Bcc')
+  const subject = String(parameters.subject || '').trim() || getHeaderValue(existingHeaders, 'Subject') || 'Kova draft'
+  const body = String(parameters.body || '').trim() || extractPayloadText(existingData.message?.payload)
+
+  const mime = buildPlainTextMimeMessage({
+    to,
+    cc,
+    bcc,
+    subject,
+    body,
+  })
+
+  const response = await googleFetch(`https://gmail.googleapis.com/gmail/v1/users/me/drafts/${draftId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: draftId,
+      message: {
+        raw: toBase64Url(mime),
+      },
+    }),
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+  if (!response.ok) {
+    throw new Error(`Gmail draft update failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    id?: string
+    message?: { id?: string }
+  }
+
+  return {
+    details: 'Draft updated in Gmail.',
+    output: {
+      provider: 'gmail',
+      draftId: data.id || draftId,
+      messageId: data.message?.id || null,
+      recipients: to,
+      cc: cc || null,
+      bcc: bcc || null,
+      subject,
+    },
+  }
+}
+
+export async function sendGmailDraft(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const draftId = String(parameters.draftId || '')
+  if (!draftId) {
+    throw new Error('draftId is required to send a Gmail draft.')
+  }
+
+  const response = await googleFetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: draftId,
+    }),
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+  if (!response.ok) {
+    throw new Error(`Gmail draft send failed: ${response.status}`)
+  }
+
+  const data = await response.json() as { id?: string; threadId?: string; labelIds?: string[] }
+  return {
+    details: 'Draft sent via Gmail.',
+    output: {
+      provider: 'gmail',
+      draftId,
+      messageId: data.id || null,
+      threadId: data.threadId || null,
+      labelIds: Array.isArray(data.labelIds) ? data.labelIds : [],
     },
   }
 }
@@ -808,6 +1084,80 @@ export async function summarizeGmailThreads(messages: GmailMessageSummary[]) {
 
 function escapeDriveQueryValue(value: string) {
   return value.replace(/'/g, "\\'")
+}
+
+async function findDriveFileByName(accessToken: string, name: string, parentId?: string | null) {
+  const clauses = ["trashed=false", `name='${escapeDriveQueryValue(name)}'`]
+  if (parentId) {
+    clauses.push(`'${escapeDriveQueryValue(parentId)}' in parents`)
+  }
+
+  const url = new URL('https://www.googleapis.com/drive/v3/files')
+  url.searchParams.set('q', clauses.join(' and '))
+  url.searchParams.set('pageSize', '10')
+  url.searchParams.set('fields', 'files(id,name,mimeType,parents,webViewLink,modifiedTime)')
+
+  const response = await googleFetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive lookup failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    files?: Array<{
+      id: string
+      name?: string
+      mimeType?: string
+      parents?: string[]
+      webViewLink?: string
+      modifiedTime?: string
+    }>
+  }
+
+  return (data.files || [])[0] || null
+}
+
+async function ensureDriveFolderPath(accessToken: string, folderPath: string) {
+  const segments = folderPath
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  let parentId: string | null = null
+
+  for (const segment of segments) {
+    const existing = await findDriveFileByName(accessToken, segment, parentId)
+    if (existing?.mimeType === 'application/vnd.google-apps.folder') {
+      parentId = existing.id
+      continue
+    }
+
+    const createResponse = await googleFetch('https://www.googleapis.com/drive/v3/files?fields=id,name,parents,mimeType', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: segment,
+        mimeType: 'application/vnd.google-apps.folder',
+        ...(parentId ? { parents: [parentId] } : {}),
+      }),
+    }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+    if (!createResponse.ok) {
+      throw new Error(`Google Drive folder path creation failed: ${createResponse.status}`)
+    }
+
+    const created = await createResponse.json() as { id: string }
+    parentId = created.id
+  }
+
+  return parentId
 }
 
 export async function searchGoogleDriveFiles(
@@ -863,9 +1213,214 @@ export async function searchGoogleDriveFiles(
   } satisfies GoogleDriveFileSummary))
 }
 
+async function searchGoogleDriveAppDataFiles(
+  accessToken: string,
+  options: {
+    query?: string
+    maxResults?: number
+  } = {}
+) {
+  const url = new URL('https://www.googleapis.com/drive/v3/files')
+  const clauses = ["'appDataFolder' in parents", 'trashed=false']
+
+  if (options.query?.trim()) {
+    const escapedQuery = escapeDriveQueryValue(options.query.trim())
+    clauses.push(`(name contains '${escapedQuery}' or fullText contains '${escapedQuery}')`)
+  }
+
+  url.searchParams.set('spaces', 'appDataFolder')
+  url.searchParams.set('q', clauses.join(' and '))
+  url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 20, 50))))
+  url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime)')
+
+  const response = await googleFetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive appData read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    files?: Array<{ id: string; name?: string; mimeType?: string; modifiedTime?: string }>
+  }
+
+  return (data.files || []).map((file) => ({
+    id: file.id,
+    name: file.name || 'Untitled',
+    mimeType: file.mimeType || 'application/octet-stream',
+    modifiedTime: file.modifiedTime || null,
+  }))
+}
+
+export async function listGoogleDriveAppDataFiles(
+  accessToken: string,
+  options: {
+    query?: string
+    maxResults?: number
+  } = {}
+) {
+  const clauses = ["trashed=false", "'appDataFolder' in parents"]
+  if (options.query?.trim()) {
+    clauses.push(`name contains '${escapeDriveQueryValue(options.query.trim())}'`)
+  }
+
+  const url = new URL('https://www.googleapis.com/drive/v3/files')
+  url.searchParams.set('q', clauses.join(' and '))
+  url.searchParams.set('orderBy', 'modifiedTime desc')
+  url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 20, 50))))
+  url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime)')
+
+  const response = await googleFetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive appData read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    files?: Array<{ id: string; name?: string; mimeType?: string; modifiedTime?: string }>
+  }
+
+  return (data.files || []).map((file) => ({
+    id: file.id,
+    name: file.name || 'Untitled config',
+    mimeType: file.mimeType || 'application/octet-stream',
+    modifiedTime: file.modifiedTime || null,
+  }))
+}
+
+export async function upsertGoogleDriveAppDataFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const name = String(parameters.name || parameters.key || 'kova-config.json').trim()
+  const content = typeof parameters.content === 'string' ? parameters.content : JSON.stringify(parameters.value ?? {}, null, 2)
+  const mimeType = typeof parameters.mimeType === 'string' ? parameters.mimeType : 'application/json'
+
+  if (!name) {
+    throw new Error('name is required to save app data in Google Drive.')
+  }
+
+  const existing = await findDriveFileByName(accessToken, name, 'appDataFolder')
+  const endpoint = existing
+    ? `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=multipart&fields=id,name,modifiedTime`
+    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime'
+
+  const response = await googleFetch(endpoint, {
+    method: existing ? 'PATCH' : 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'multipart/related; boundary=kova_appdata_boundary',
+    },
+    body: [
+      '--kova_appdata_boundary',
+      'Content-Type: application/json; charset=UTF-8',
+      '',
+      JSON.stringify({
+        name,
+        mimeType,
+        parents: ['appDataFolder'],
+      }),
+      '--kova_appdata_boundary',
+      `Content-Type: ${mimeType}`,
+      '',
+      content,
+      '--kova_appdata_boundary--',
+    ].join('\r\n'),
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive appData upsert failed: ${response.status}`)
+  }
+
+  const data = await response.json() as { id: string; name?: string; modifiedTime?: string }
+  return {
+    details: existing ? 'Drive app data updated.' : 'Drive app data created.',
+    output: {
+      provider: 'google_drive',
+      fileId: data.id,
+      name: data.name || name,
+      appData: true,
+      modifiedTime: data.modifiedTime || null,
+    },
+  }
+}
+
+export async function deleteGoogleDriveAppDataFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const fileId = String(parameters.fileId || '').trim()
+  const fileName = String(parameters.name || '').trim()
+  let resolvedFileId = fileId
+
+  if (!resolvedFileId && fileName) {
+    const existing = await findDriveFileByName(accessToken, fileName, 'appDataFolder')
+    resolvedFileId = existing?.id || ''
+  }
+
+  if (!resolvedFileId) {
+    throw new Error('fileId or name is required to delete Drive app data.')
+  }
+
+  const response = await googleFetch(`https://www.googleapis.com/drive/v3/files/${resolvedFileId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive appData delete failed: ${response.status}`)
+  }
+
+  return {
+    details: 'Drive app data deleted.',
+    output: {
+      provider: 'google_drive',
+      fileId: resolvedFileId,
+      appData: true,
+      deleted: true,
+    },
+  }
+}
+
+export async function listGooglePhotosMedia(
+  accessToken: string,
+  options: {
+    maxResults?: number
+  } = {}
+) {
+  return listRecentGooglePhotos(accessToken, {
+    maxResults: options.maxResults,
+  })
+}
+
+export async function searchGooglePhotosMedia(
+  accessToken: string,
+  options: {
+    query: string
+    maxResults?: number
+  }
+) {
+  const query = options.query.trim().toLowerCase()
+  if (!query) {
+    return []
+  }
+
+  const recent = await listRecentGooglePhotos(accessToken, {
+    query,
+    maxResults: options.maxResults ? Math.max(options.maxResults, 25) : 40,
+  })
+
+  return recent.slice(0, Math.max(1, Math.min(options.maxResults || 12, 20)))
+}
+
 export async function replyToGmailMessage(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
   const threadId = String(parameters.threadId || '')
-  const to = Array.isArray(parameters.to) ? parameters.to.join(', ') : String(parameters.to || '')
+  const to = getEmailHeader(parameters.to) || String(parameters.to || '')
+  const cc = getEmailHeader(parameters.cc)
+  const bcc = getEmailHeader(parameters.bcc)
   const subject = String(parameters.subject || '')
   const body = String(parameters.body || '')
 
@@ -895,6 +1450,8 @@ export async function replyToGmailMessage(accessToken: string, parameters: Recor
 
   const mime = buildPlainTextMimeMessage({
     to,
+    cc,
+    bcc,
     subject,
     body,
     headers: [
@@ -927,6 +1484,8 @@ export async function replyToGmailMessage(accessToken: string, parameters: Recor
       messageId: data.id,
       threadId: data.threadId || threadId,
       to,
+      cc: cc || null,
+      bcc: bcc || null,
       subject,
     },
   }
@@ -1065,14 +1624,18 @@ export async function moveGoogleDriveFile(accessToken: string, parameters: Recor
   const fileId = String(parameters.fileId || '')
   const destinationFolderId = typeof parameters.destinationFolderId === 'string' ? parameters.destinationFolderId.trim() : ''
   const destinationFolderName = typeof parameters.destinationFolderName === 'string' ? parameters.destinationFolderName.trim() : ''
+  const destinationFolderPath = typeof parameters.destinationFolderPath === 'string' ? parameters.destinationFolderPath.trim() : ''
 
   if (!fileId) {
     throw new Error('fileId is required to move a Drive file.')
   }
 
-  const targetFolderId = destinationFolderId || (destinationFolderName ? await ensureDriveFolder(accessToken, destinationFolderName) : '')
+  const targetFolderId =
+    destinationFolderId ||
+    (destinationFolderPath ? await ensureDriveFolderPath(accessToken, destinationFolderPath) : '') ||
+    (destinationFolderName ? await ensureDriveFolder(accessToken, destinationFolderName) : '')
   if (!targetFolderId) {
-    throw new Error('destinationFolderId or destinationFolderName is required to move a Drive file.')
+    throw new Error('destinationFolderId, destinationFolderName, or destinationFolderPath is required to move a Drive file.')
   }
 
   const current = await getGoogleDriveFile(accessToken, fileId)
@@ -1106,7 +1669,7 @@ export async function moveGoogleDriveFile(accessToken: string, parameters: Recor
       mimeType: data.mimeType || current.mimeType || null,
       parentIds: Array.isArray(data.parents) ? data.parents : [targetFolderId],
       destinationFolderId: targetFolderId,
-      destinationFolderName: destinationFolderName || null,
+      destinationFolderName: destinationFolderPath || destinationFolderName || null,
       link: data.webViewLink || current.webViewLink || null,
     },
   }
@@ -1182,12 +1745,16 @@ export async function copyGoogleDriveFile(accessToken: string, parameters: Recor
   const name = typeof parameters.name === 'string' ? parameters.name.trim() : ''
   const destinationFolderId = typeof parameters.destinationFolderId === 'string' ? parameters.destinationFolderId.trim() : ''
   const destinationFolderName = typeof parameters.destinationFolderName === 'string' ? parameters.destinationFolderName.trim() : ''
+  const destinationFolderPath = typeof parameters.destinationFolderPath === 'string' ? parameters.destinationFolderPath.trim() : ''
 
   if (!fileId) {
     throw new Error('fileId is required to copy a Drive file.')
   }
 
-  const targetFolderId = destinationFolderId || (destinationFolderName ? await ensureDriveFolder(accessToken, destinationFolderName) : '')
+  const targetFolderId =
+    destinationFolderId ||
+    (destinationFolderPath ? await ensureDriveFolderPath(accessToken, destinationFolderPath) : '') ||
+    (destinationFolderName ? await ensureDriveFolder(accessToken, destinationFolderName) : '')
   const response = await googleFetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}/copy?fields=id,name,mimeType,parents,webViewLink`,
     {
@@ -1226,7 +1793,7 @@ export async function copyGoogleDriveFile(accessToken: string, parameters: Recor
       mimeType: data.mimeType || null,
       parentIds: Array.isArray(data.parents) ? data.parents : (targetFolderId ? [targetFolderId] : []),
       destinationFolderId: targetFolderId || null,
-      destinationFolderName: destinationFolderName || null,
+      destinationFolderName: destinationFolderPath || destinationFolderName || null,
       link: data.webViewLink || null,
     },
   }
@@ -1316,6 +1883,185 @@ export async function unshareGoogleDriveFile(accessToken: string, parameters: Re
   }
 }
 
+export async function createGoogleDriveAppDataFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const name = String(parameters.name || 'kova-config.json').trim()
+  const mimeType = String(parameters.mimeType || 'application/json').trim() || 'application/json'
+  const content = typeof parameters.content === 'string' ? parameters.content : '{}'
+
+  const response = await googleFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,modifiedTime', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'multipart/related; boundary=kova_appdata_boundary',
+    },
+    body: [
+      '--kova_appdata_boundary',
+      'Content-Type: application/json; charset=UTF-8',
+      '',
+      JSON.stringify({
+        name,
+        mimeType,
+        parents: ['appDataFolder'],
+      }),
+      '--kova_appdata_boundary',
+      `Content-Type: ${mimeType}`,
+      '',
+      content,
+      '--kova_appdata_boundary--',
+    ].join('\r\n'),
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive appData file creation failed: ${response.status}`)
+  }
+
+  const data = await response.json() as { id: string; name?: string; mimeType?: string; modifiedTime?: string }
+  return {
+    details: 'Drive app data file created.',
+    output: {
+      provider: 'google_drive',
+      fileId: data.id,
+      name: data.name || name,
+      mimeType: data.mimeType || mimeType,
+      modifiedTime: data.modifiedTime || null,
+      appData: true,
+    },
+  }
+}
+
+export async function updateGoogleDriveAppDataFile(accessToken: string, parameters: Record<string, unknown>): Promise<IntegrationExecutionResult> {
+  const fileId = String(parameters.fileId || '').trim()
+  const name = typeof parameters.name === 'string' ? parameters.name.trim() : ''
+  const mimeType = String(parameters.mimeType || 'application/json').trim() || 'application/json'
+  const content = typeof parameters.content === 'string' ? parameters.content : '{}'
+
+  if (!fileId) {
+    throw new Error('fileId is required to update a Drive app data file.')
+  }
+
+  const response = await googleFetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&fields=id,name,mimeType,modifiedTime`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'multipart/related; boundary=kova_appdata_boundary',
+    },
+    body: [
+      '--kova_appdata_boundary',
+      'Content-Type: application/json; charset=UTF-8',
+      '',
+      JSON.stringify({
+        ...(name ? { name } : {}),
+        mimeType,
+      }),
+      '--kova_appdata_boundary',
+      `Content-Type: ${mimeType}`,
+      '',
+      content,
+      '--kova_appdata_boundary--',
+    ].join('\r\n'),
+  }, { timeoutMs: GOOGLE_WRITE_TIMEOUT_MS })
+
+  if (!response.ok) {
+    throw new Error(`Google Drive appData file update failed: ${response.status}`)
+  }
+
+  const data = await response.json() as { id: string; name?: string; mimeType?: string; modifiedTime?: string }
+  return {
+    details: 'Drive app data file updated.',
+    output: {
+      provider: 'google_drive',
+      fileId: data.id,
+      name: data.name || name || null,
+      mimeType: data.mimeType || mimeType,
+      modifiedTime: data.modifiedTime || null,
+      appData: true,
+    },
+  }
+}
+
+export async function listRecentGooglePhotos(
+  accessToken: string,
+  options: {
+    query?: string
+    maxResults?: number
+  } = {}
+) {
+  const url = new URL('https://photoslibrary.googleapis.com/v1/mediaItems')
+  url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 12, 30))))
+
+  const response = await googleFetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
+
+  if (!response.ok) {
+    throw new Error(`Google Photos read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    mediaItems?: Array<{
+      id: string
+      filename?: string
+      mimeType?: string
+      productUrl?: string
+      baseUrl?: string
+      mediaMetadata?: {
+        creationTime?: string
+        width?: string
+        height?: string
+      }
+    }>
+  }
+
+  const query = options.query?.trim().toLowerCase()
+  const items = (data.mediaItems || []).map((item) => ({
+    id: item.id,
+    filename: item.filename || 'Untitled media',
+    mimeType: item.mimeType || 'application/octet-stream',
+    creationTime: item.mediaMetadata?.creationTime || null,
+    mediaUrl: item.baseUrl || null,
+    productUrl: item.productUrl || null,
+    width: item.mediaMetadata?.width || null,
+    height: item.mediaMetadata?.height || null,
+  } satisfies GooglePhotoSummary))
+
+  return query
+    ? items.filter((item) => item.filename.toLowerCase().includes(query))
+    : items
+}
+
+export async function listGooglePhotoAlbums(accessToken: string, options: { maxResults?: number } = {}) {
+  const url = new URL('https://photoslibrary.googleapis.com/v1/albums')
+  url.searchParams.set('pageSize', String(Math.max(1, Math.min(options.maxResults || 12, 30))))
+
+  const response = await googleFetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
+
+  if (!response.ok) {
+    throw new Error(`Google Photos albums read failed: ${response.status}`)
+  }
+
+  const data = await response.json() as {
+    albums?: Array<{
+      id: string
+      title?: string
+      mediaItemsCount?: string
+      coverPhotoBaseUrl?: string
+    }>
+  }
+
+  return (data.albums || []).map((album) => ({
+    id: album.id,
+    title: album.title || 'Album sans titre',
+    itemCount: album.mediaItemsCount || null,
+    coverPhotoUrl: album.coverPhotoBaseUrl || null,
+  } satisfies GooglePhotoAlbumSummary))
+}
+
 async function ensureDriveFolder(accessToken: string, folderName: string) {
   const query = `mimeType='application/vnd.google-apps.folder' and trashed=false and name='${folderName.replace(/'/g, "\\'")}'`
   const lookupResponse = await googleFetch(
@@ -1361,8 +2107,12 @@ export async function createGoogleDriveFile(accessToken: string, parameters: Rec
   const mimeType = String(parameters.mimeType || 'text/plain')
   const content = typeof parameters.content === 'string' ? parameters.content : ''
   const folderName = typeof parameters.folderName === 'string' ? parameters.folderName.trim() : ''
+  const folderPath = typeof parameters.folderPath === 'string' ? parameters.folderPath.trim() : ''
   const parentFolderIdParam = typeof parameters.parentFolderId === 'string' ? parameters.parentFolderId.trim() : ''
-  const parentFolderId = parentFolderIdParam || (folderName ? await ensureDriveFolder(accessToken, folderName) : null)
+  const parentFolderId =
+    parentFolderIdParam ||
+    (folderPath ? await ensureDriveFolderPath(accessToken, folderPath) : null) ||
+    (folderName ? await ensureDriveFolder(accessToken, folderName) : null)
 
   const metadata = {
     name,
@@ -1420,7 +2170,7 @@ export async function createGoogleDriveFile(accessToken: string, parameters: Rec
       name: data.name,
       mimeType: data.mimeType || mimeType,
       folderId: parentFolderId,
-      folderName: folderName || null,
+      folderName: folderPath || folderName || null,
       link: data.webViewLink || data.webContentLink || null,
     },
   }

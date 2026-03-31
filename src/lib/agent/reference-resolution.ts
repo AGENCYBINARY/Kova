@@ -875,11 +875,13 @@ export function resolveActionReferencesDetailed(params: {
       proposal.type === 'archive_gmail_thread' ||
       proposal.type === 'unarchive_gmail_thread' ||
       proposal.type === 'label_gmail_thread' ||
+      proposal.type === 'remove_gmail_thread_labels' ||
       proposal.type === 'mark_gmail_thread_read' ||
       proposal.type === 'mark_gmail_thread_unread' ||
       proposal.type === 'star_gmail_thread' ||
       proposal.type === 'unstar_gmail_thread' ||
-      proposal.type === 'trash_gmail_thread'
+      proposal.type === 'trash_gmail_thread' ||
+      proposal.type === 'delete_gmail_thread_permanently'
     ) {
       const result = resolveGmailMessageProposal(proposal, params.userInput, params.connectedContextMetadata, {
         field: 'threadId',
@@ -916,7 +918,8 @@ export function resolveActionReferencesDetailed(params: {
       proposal.type === 'rename_google_drive_file' ||
       proposal.type === 'share_google_drive_file' ||
       proposal.type === 'copy_google_drive_file' ||
-      proposal.type === 'unshare_google_drive_file'
+      proposal.type === 'unshare_google_drive_file' ||
+      proposal.type === 'delete_google_drive_appdata_file'
     ) {
       const result = resolveDriveProposal(proposal, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
@@ -925,6 +928,15 @@ export function resolveActionReferencesDetailed(params: {
 
     if (proposal.type === 'create_google_drive_folder' && includesPlaceholder(proposal.parameters.parentFolderId)) {
       const result = resolveDriveParentFolderProposal(proposal, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (
+      proposal.type === 'update_google_drive_appdata_file' &&
+      includesPlaceholder(proposal.parameters.fileId)
+    ) {
+      const result = resolveDriveProposal(proposal, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
       return result.proposal
     }
