@@ -370,3 +370,120 @@ Priority sequence after this SOP baseline:
 3. per-app capability matrix and richer operator trust surfaces
 4. structured governance schema instead of JSON-only storage
 5. execution log retention / archival policy
+
+## Continuity Log
+
+This section is the short operational memory for future sessions. Update it when a production issue is closed, a structural refactor ships, or runtime behavior changes materially.
+
+### Current Production Baseline
+
+As of `2026-04-01`:
+
+- GitHub branch: `main`
+- current delivery line:
+  - `caf019c` `fix: harden app error handling`
+  - `16793d3` `fix: polish dashboard workspace ui`
+  - `743a45f` `fix: add dashboard error boundary`
+- current production deployment:
+  - Vercel deployment id: `dpl_5uJzyVzpAWEhuBxNjjMs6kJbGRcU`
+  - production URL: [kova.agencybinary.fr](https://kova.agencybinary.fr)
+- database: Neon Postgres
+
+### Production Issues Already Closed
+
+#### Dashboard crash on open
+
+Observed symptom:
+
+- `Application error: a client-side exception has occurred`
+
+Root cause:
+
+- production Neon schema drift on `User.activeWorkspaceId`
+
+Resolution already applied:
+
+- production schema synced against Neon
+- reconciliation script rerun on production data
+- dashboard route error boundary added in [src/app/(dashboard)/error.tsx](/Users/agencybinary/Documents/CODEX/src/app/(dashboard)/error.tsx)
+- global app error fallback added in [src/app/error.tsx](/Users/agencybinary/Documents/CODEX/src/app/error.tsx)
+
+Verification result:
+
+- Vercel production error logs were clean after the fix
+
+#### Dashboard visual inconsistency
+
+Observed symptom:
+
+- workspace UI did not match the landing page quality level
+- density, glass effects, and spacing felt inconsistent across pages
+
+Resolution already applied:
+
+- shell/layout tightened
+- sidebar simplified
+- dashboard, actions, history, integrations, settings, and chat visually aligned
+- chat/action cards visually reduced and cleaned up
+
+Main files:
+
+- [src/app/(dashboard)/layout.module.css](/Users/agencybinary/Documents/CODEX/src/app/(dashboard)/layout.module.css)
+- [src/components/layout/Sidebar.module.css](/Users/agencybinary/Documents/CODEX/src/components/layout/Sidebar.module.css)
+- [src/app/(dashboard)/dashboard/page.module.css](/Users/agencybinary/Documents/CODEX/src/app/(dashboard)/dashboard/page.module.css)
+- [src/app/(dashboard)/chat/page.module.css](/Users/agencybinary/Documents/CODEX/src/app/(dashboard)/chat/page.module.css)
+- [src/components/ui/Card.module.css](/Users/agencybinary/Documents/CODEX/src/components/ui/Card.module.css)
+
+### Neon Notes
+
+Kova runs on Neon. Keep these rules explicit:
+
+- use direct Neon URLs for schema sync / reconciliation work when Prisma needs an unpooled connection
+- do not assume local `.env.local` matches production
+- if production behavior differs from local behavior, verify Vercel env values first
+
+Useful env shape:
+
+- `DATABASE_URL` can be pooled
+- `DATABASE_URL_UNPOOLED` is preferred for direct Prisma maintenance tasks
+
+When production schema drifts:
+
+```bash
+npx vercel env pull .env.vercel.production --environment=production
+set -a && source .env.vercel.production
+export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+npx prisma db push --accept-data-loss --skip-generate
+npm run db:reconcile
+```
+
+Delete the pulled env file afterward. Never commit it.
+
+### Vercel Notes
+
+Before saying production is updated, verify both:
+
+```bash
+npx vercel inspect kova.agencybinary.fr
+npx vercel logs --environment production --since 20m --level error --no-branch
+```
+
+If the new deployment is still queued or building, do not claim the alias has switched until `inspect` on the production domain shows the new deployment id.
+
+### Mandatory Closeout Checklist For Future Sessions
+
+Before ending a substantial session:
+
+1. update this `Continuity Log` when the production state materially changed
+2. keep the repo clean or state exactly what remains dirty
+3. record the shipped commit(s)
+4. record the Vercel production deployment id if a deploy happened
+5. mention whether Neon schema changes were applied or not
+
+### Current Immediate Priorities
+
+If work resumes after this point, the next high-value tracks are:
+
+1. continue agent/runtime quality improvements so Kova behaves more like a premium operator and less like a raw tool router
+2. keep reducing monoliths in `registry`, `v1`, and remaining integration surfaces
+3. strengthen live validation so app-connected behavior is checked more systematically, not only manually
