@@ -1,7 +1,7 @@
 .container {
   width: min(1180px, 100%);
   margin: 0 auto;
-  padding: 28px 28px 40px;
+  padding: 12px 0 30px;
 }
 
 .alert {
@@ -28,7 +28,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .eyebrow {
@@ -40,15 +40,15 @@
 }
 
 .title {
-  font-size: clamp(28px, 3.6vw, 42px);
-  line-height: 1;
+  font-size: clamp(26px, 3.2vw, 36px);
+  line-height: 1.02;
   letter-spacing: -0.05em;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .subtitle {
   max-width: 60ch;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.7;
   color: rgba(154, 164, 178, 0.9);
 }
@@ -72,7 +72,7 @@
 }
 
 .summaryCard {
-  min-height: 96px;
+  min-height: 90px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -80,7 +80,7 @@
 }
 
 .summaryCard strong {
-  font-size: 32px;
+  font-size: 30px;
   line-height: 1;
   letter-spacing: -0.05em;
 }
@@ -100,7 +100,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-height: 278px;
+  min-height: 264px;
 }
 
 .cardHeader {
@@ -111,9 +111,9 @@
 }
 
 .iconWrapper {
-  width: 46px;
-  height: 46px;
-  border-radius: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -129,13 +129,13 @@
 }
 
 .cardTitle {
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: -0.03em;
   margin-bottom: 6px;
 }
 
 .cardDescription {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.6;
   color: rgba(154, 164, 178, 0.84);
 }
@@ -182,7 +182,7 @@
 }
 
 .warningItem {
-  padding: 10px 12px;
+  padding: 9px 11px;
   border-radius: 14px;
   background: rgba(255, 189, 74, 0.08);
   border: 1px solid rgba(255, 189, 74, 0.12);
@@ -199,7 +199,7 @@
 
 @media (max-width: 1080px) {
   .container {
-    padding: 22px 20px 32px;
+    padding: 0 0 28px;
   }
 
   .header,
@@ -212,7 +212,7 @@
 
 @media (max-width: 720px) {
   .container {
-    padding: 18px 16px 28px;
+    padding: 0 0 24px;
   }
 
   .header {

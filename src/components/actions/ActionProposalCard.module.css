@@ -1,7 +1,9 @@
 .card {
   margin: var(--space-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at top right, rgba(240, 191, 109, 0.04), transparent 28%),
+    linear-gradient(180deg, rgba(11, 14, 20, 0.94), rgba(8, 10, 15, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .header {
@@ -12,9 +14,9 @@
 }
 
 .iconWrapper {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
   background: rgba(245, 158, 11, 0.15);
   color: var(--accent-amber);
   display: flex;
@@ -32,16 +34,16 @@
 }
 
 .title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .description {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: var(--space-md);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .parameters {
@@ -59,11 +61,11 @@
 }
 
 .previewBlock {
-  background: var(--bg-tertiary);
-  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 16px;
   padding: 14px;
   margin-bottom: var(--space-md);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.045);
 }
 
 .previewRow {

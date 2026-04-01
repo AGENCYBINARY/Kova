@@ -2,6 +2,7 @@
   min-height: 100vh;
   width: min(1180px, 100%);
   margin: 0 auto;
+  padding: 8px 0 28px;
 }
 
 .toast {
@@ -11,8 +12,8 @@
   margin: 0 0 12px;
   padding: 12px 14px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(10, 14, 20, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(10, 14, 20, 0.84);
   color: var(--text-primary);
   backdrop-filter: blur(16px);
 }
@@ -22,7 +23,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 24px 0 18px;
+  padding: 16px 4px 14px;
 }
 
 .headerCopy {
@@ -38,15 +39,15 @@
 }
 
 .title {
-  font-size: 30px;
+  font-size: clamp(26px, 3vw, 34px);
   font-weight: 600;
   letter-spacing: -0.05em;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .subtitle {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.7;
   max-width: 56ch;
@@ -71,7 +72,7 @@
 .summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 14px;
 }
 
@@ -89,7 +90,7 @@
 }
 
 .summaryValue {
-  font-size: 30px;
+  font-size: 28px;
   letter-spacing: -0.05em;
 }
 
@@ -128,11 +129,11 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .card {
-  padding: 18px 20px;
+  padding: 16px 17px;
 }
 
 .cardHeader {
@@ -143,9 +144,9 @@
 }
 
 .iconWrapper {
-  width: 38px;
-  height: 38px;
-  border-radius: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
   background: rgba(245, 158, 11, 0.15);
   color: var(--accent-amber);
   display: flex;
@@ -168,7 +169,7 @@
 }
 
 .cardTitle {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--space-xs);
@@ -176,7 +177,7 @@
 }
 
 .cardDescription {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
   margin-bottom: var(--space-xs);
   line-height: 1.6;
@@ -214,9 +215,9 @@
 }
 
 .parameters {
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: 16px;
   padding: 12px 14px;
   margin-bottom: 14px;
 }

@@ -25,7 +25,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-gold));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -74,25 +74,25 @@
 
 .bubble {
   padding: 12px 14px;
-  border-radius: 18px;
+  border-radius: 16px;
   position: relative;
 }
 
 .user .bubble {
-  background: rgba(255, 255, 255, 0.055);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.055);
   border-bottom-right-radius: 8px;
 }
 
 .assistant .bubble {
-  background: rgba(79, 169, 205, 0.07);
-  border: 1px solid rgba(79, 169, 205, 0.12);
+  background: rgba(79, 169, 205, 0.05);
+  border: 1px solid rgba(79, 169, 205, 0.1);
   border-bottom-left-radius: 8px;
 }
 
 .text {
   font-size: 13px;
-  line-height: 1.68;
+  line-height: 1.72;
   color: var(--text-primary);
   white-space: pre-wrap;
 }

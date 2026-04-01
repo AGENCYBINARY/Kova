@@ -1,8 +1,8 @@
 .container {
-  padding: 14px 16px 16px;
-  background: rgba(8, 11, 16, 0.8);
+  padding: 12px 14px 14px;
+  background: rgba(8, 11, 16, 0.76);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(16px);
 }
 
 .inputWrapper {
@@ -10,21 +10,21 @@
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 20px;
-  padding: 13px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 18px;
+  padding: 12px 13px;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .inputWrapper:focus-within {
-  border-color: var(--accent-gold);
-  box-shadow: 0 0 0 3px rgba(240, 191, 109, 0.08);
+  border-color: rgba(79, 169, 205, 0.36);
+  box-shadow: 0 0 0 3px rgba(79, 169, 205, 0.08);
 }
 
 .textarea {
   flex: 1;
-  min-height: 52px;
+  min-height: 48px;
   max-height: 160px;
   resize: none;
   background: transparent;
@@ -53,12 +53,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #eef2ff, #dfe6f3);
+  background: linear-gradient(135deg, rgba(235, 241, 250, 0.96), rgba(214, 223, 235, 0.94));
   color: #0c1017;
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
   align-self: flex-end;
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -81,15 +81,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .modeSwitch {
   display: inline-flex;
   padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.055);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
   gap: 4px;
 }
 
@@ -104,7 +104,7 @@
 }
 
 .modeButtonActive {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
   color: var(--text-primary);
 }
 

@@ -48,8 +48,8 @@ export function UsageBadge() {
   const isAtLimit = !quota.allowed
   const barWidth = Math.min(pct, 100) + "%"
 
-  const barColor = isAtLimit ? "#ef4444" : isNearLimit ? "#f59e0b" : "rgba(255,255,255,0.2)"
-  const textColor = isAtLimit ? "rgba(239,68,68,0.9)" : isNearLimit ? "rgba(245,158,11,0.9)" : "rgba(255,255,255,0.3)"
+  const barColor = isAtLimit ? '#ef4444' : isNearLimit ? '#f0bf6d' : 'rgba(255,255,255,0.22)'
+  const textColor = isAtLimit ? 'rgba(255,128,141,0.92)' : isNearLimit ? 'rgba(240,191,109,0.92)' : 'rgba(255,255,255,0.42)'
 
   const upgrade = async (plan: "plus" | "pro") => {
     setUpgrading(true)
@@ -83,48 +83,90 @@ export function UsageBadge() {
   const planLabel = normalizedPlan ? normalizedPlan.charAt(0).toUpperCase() + normalizedPlan.slice(1) : 'Plan'
 
   return (
-    <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
-      {/* One-line compact badge */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 8 }}>
-        <span style={{ fontSize: 10, color: textColor, fontWeight: 500, letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
+    <div style={{ padding: '0 0 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 10px',
+          borderRadius: 14,
+          border: '1px solid rgba(255,255,255,0.05)',
+          background: 'rgba(255,255,255,0.018)',
+        }}
+      >
+        <span style={{ fontSize: 10, color: textColor, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+          Usage
+        </span>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.66)', whiteSpace: 'nowrap' }}>
           {planLabel} · {quota.used}/{quota.limit}
         </span>
-        <div style={{ flex: 1, height: 2, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
-          <div style={{ width: barWidth, height: "100%", background: barColor, borderRadius: 99, transition: "width 0.4s" }} />
+        <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={{ width: barWidth, height: '100%', background: barColor, borderRadius: 99, transition: 'width 0.4s' }} />
         </div>
       </div>
 
-      {/* Upgrade buttons only if free */}
-      {quota.plan === "free" && (
+      {quota.plan === 'free' && (
         <>
-          <div style={{ display: "flex", gap: 5 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
             <button
-              onClick={() => upgrade("plus")}
+              onClick={() => upgrade('plus')}
               disabled={upgrading}
-              style={{ flex: 1, fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(99,102,241,0.2)", border: "none", color: upgrading ? "rgba(165,163,255,0.4)" : "rgba(165,163,255,0.9)", cursor: upgrading ? "default" : "pointer", fontWeight: 500 }}
+              style={{
+                flex: 1,
+                fontSize: 10,
+                padding: '7px 0',
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, rgba(106,140,255,0.22), rgba(79,169,205,0.16))',
+                border: '1px solid rgba(106,140,255,0.16)',
+                color: upgrading ? 'rgba(255,255,255,0.3)' : 'rgba(245,247,251,0.92)',
+                cursor: upgrading ? 'default' : 'pointer',
+                fontWeight: 600,
+              }}
             >
-              {upgrading ? "…" : "Plus 10€"}
+              {upgrading ? '…' : 'Plus 10€'}
             </button>
             <button
-              onClick={() => upgrade("pro")}
+              onClick={() => upgrade('pro')}
               disabled={upgrading}
-              style={{ flex: 1, fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "none", color: upgrading ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.4)", cursor: upgrading ? "default" : "pointer", fontWeight: 500 }}
+              style={{
+                flex: 1,
+                fontSize: 10,
+                padding: '7px 0',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.035)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                color: upgrading ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.62)',
+                cursor: upgrading ? 'default' : 'pointer',
+                fontWeight: 600,
+              }}
             >
-              {upgrading ? "…" : "Pro 25€"}
+              {upgrading ? '…' : 'Pro 25€'}
             </button>
           </div>
           {upgradeError && (
-            <p style={{ fontSize: 9, color: "rgba(239,68,68,0.8)", margin: 0, padding: "2px 8px", textAlign: "center" }}>
+            <p style={{ fontSize: 10, color: 'rgba(255,128,141,0.88)', margin: 0, padding: '2px 6px', textAlign: 'center' }}>
               {upgradeError}
             </p>
           )}
         </>
       )}
 
-      {(quota.plan === "plus" || quota.plan === "pro") && (
+      {(quota.plan === 'plus' || quota.plan === 'pro') && (
         <button
           onClick={openPortal}
-          style={{ width: "100%", fontSize: 10, padding: "4px 0", borderRadius: 7, background: "rgba(255,255,255,0.05)", border: "none", color: "rgba(255,255,255,0.35)", cursor: "pointer" }}
+          style={{
+            width: '100%',
+            fontSize: 10,
+            padding: '7px 0',
+            borderRadius: 10,
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.05)',
+            color: 'rgba(255,255,255,0.55)',
+            cursor: 'pointer',
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+          }}
         >
           Gérer l&apos;abonnement
         </button>

@@ -2,26 +2,26 @@
   min-height: 100vh;
   width: min(1180px, 100%);
   margin: 0 auto;
-  padding: 18px 18px 28px;
+  padding: 8px 0 28px;
 }
 
 .header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 18px;
-  padding: 26px 28px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 32px;
+  gap: 24px;
+  padding: 22px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 26px;
   background:
-    radial-gradient(circle at top right, rgba(106, 140, 255, 0.1), transparent 24%),
-    radial-gradient(circle at left, rgba(79, 169, 205, 0.08), transparent 18%),
-    linear-gradient(180deg, rgba(10, 12, 17, 0.9), rgba(7, 9, 13, 0.96));
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.24);
+    radial-gradient(circle at top right, rgba(106, 140, 255, 0.08), transparent 24%),
+    radial-gradient(circle at left, rgba(79, 169, 205, 0.06), transparent 18%),
+    linear-gradient(180deg, rgba(10, 12, 17, 0.84), rgba(7, 9, 13, 0.96));
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.2);
 }
 
 .heroBlock {
-  max-width: 760px;
+  max-width: 700px;
 }
 
 .heroMeta {
@@ -32,44 +32,45 @@
 }
 
 .eyebrow {
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent-blue);
 }
 
 .title {
-  font-size: clamp(30px, 3.6vw, 48px);
-  line-height: 0.98;
+  font-size: clamp(28px, 3.6vw, 42px);
+  line-height: 1;
   letter-spacing: -0.055em;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .subtitle {
-  max-width: 560px;
+  max-width: 54ch;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.72;
 }
 
 .headerActions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-sm);
+  padding-top: 2px;
 }
 
 .heroPreview {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
 .previewColumn {
-  padding: 12px 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  background: rgba(255, 255, 255, 0.018);
 }
 
 .previewLabel {
@@ -85,7 +86,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 0;
+  padding: 10px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -97,6 +98,7 @@
 .previewItem strong {
   font-size: 12px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .previewItem span {
@@ -108,7 +110,7 @@
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-secondary);
-  min-height: 42px;
+  min-height: 46px;
   display: flex;
   align-items: center;
 }
@@ -116,15 +118,15 @@
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  padding: 10px 0 0;
+  gap: 12px;
+  padding: 12px 0 0;
 }
 
 .metricCard {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 136px;
+  min-height: 132px;
 }
 
 .metricLabel {
@@ -135,26 +137,26 @@
 }
 
 .metricValue {
-  font-size: 34px;
-  line-height: 0.92;
+  font-size: 32px;
+  line-height: 0.94;
   letter-spacing: -0.05em;
 }
 
 .metricHint {
   color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  padding: 10px 0 0;
+  padding: 12px 0 0;
 }
 
 .panel {
-  min-height: 280px;
+  min-height: 264px;
 }
 
 .panelHeader {
@@ -166,7 +168,7 @@
 }
 
 .panelTitle {
-  font-size: 15px;
+  font-size: 14px;
   margin-bottom: 3px;
   letter-spacing: -0.03em;
 }
@@ -186,7 +188,7 @@
 .activityList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 4px;
 }
 
 .row,
@@ -195,7 +197,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: 11px 0;
+  padding: 12px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
@@ -222,8 +224,8 @@
 }
 
 .activityDot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   background: var(--accent-blue);
   margin-top: 6px;
@@ -255,7 +257,7 @@
 
 @media (max-width: 768px) {
   .container {
-    padding: 10px 0 22px;
+    padding: 0 0 22px;
   }
 
   .header {

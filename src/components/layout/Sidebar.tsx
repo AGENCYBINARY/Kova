@@ -214,9 +214,9 @@ export function Sidebar() {
         <Link href="/dashboard" className={styles.logo}>
           <div className={styles.logoIcon}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="var(--accent-purple)" />
-              <path d="M2 17L12 22L22 17" stroke="var(--accent-purple)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 12L12 17L22 12" stroke="var(--accent-purple)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="var(--accent-blue)" />
+              <path d="M2 17L12 22L22 17" stroke="var(--accent-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 12L12 17L22 12" stroke="var(--accent-gold)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.75" />
             </svg>
           </div>
           <span className={styles.logoText}>Kova</span>
@@ -243,6 +243,7 @@ export function Sidebar() {
         </ul>
       </nav>
       <div className={styles.integrations}>
+        <div className={styles.sectionEyebrow}>{t.integrations.title}</div>
         <ul className={styles.integrationMiniList}>
           {integrations.map((app) => (
             <li key={app.name} className={styles.integrationMiniItem}>
@@ -263,7 +264,7 @@ export function Sidebar() {
       </div>
       <div className={styles.usageBadgeWrapper}>
         <UsageBadge />
-        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 4 }}>
+        <div className={styles.languageRow}>
           <LanguageSwitcher />
         </div>
       </div>
