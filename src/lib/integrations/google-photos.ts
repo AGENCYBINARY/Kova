@@ -3,6 +3,48 @@ import {
   GOOGLE_READ_TIMEOUT_MS,
 } from '@/lib/integrations/google-http'
 
+async function readGooglePhotosError(response: Response) {
+  let bodyText = ''
+
+  try {
+    bodyText = await response.text()
+  } catch {
+    return `Google Photos request failed: ${response.status}`
+  }
+
+  if (!bodyText) {
+    return `Google Photos request failed: ${response.status}`
+  }
+
+  try {
+    const data = JSON.parse(bodyText) as {
+      error?: {
+        message?: string
+        status?: string
+        details?: Array<{
+          '@type'?: string
+          reason?: string
+          domain?: string
+          metadata?: Record<string, string>
+        }>
+      }
+    }
+
+    const details = Array.isArray(data.error?.details) ? data.error?.details : []
+    const serviceDisabled = details.find(
+      (detail) => detail.reason === 'SERVICE_DISABLED' && detail.metadata?.service === 'photoslibrary.googleapis.com'
+    )
+
+    if (serviceDisabled) {
+      return 'Google Photos est connecté en OAuth, mais l’API Photos Library est désactivée dans le projet Google Cloud.'
+    }
+
+    return data.error?.message || `Google Photos request failed: ${response.status}`
+  } catch {
+    return bodyText || `Google Photos request failed: ${response.status}`
+  }
+}
+
 export interface GooglePhotoSummary {
   id: string
   filename: string
@@ -69,7 +111,7 @@ export async function listRecentGooglePhotos(
   }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
 
   if (!response.ok) {
-    throw new Error(`Google Photos read failed: ${response.status}`)
+    throw new Error(await readGooglePhotosError(response))
   }
 
   const data = await response.json() as {
@@ -115,7 +157,7 @@ export async function listGooglePhotoAlbums(accessToken: string, options: { maxR
   }, { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 })
 
   if (!response.ok) {
-    throw new Error(`Google Photos albums read failed: ${response.status}`)
+    throw new Error(await readGooglePhotosError(response))
   }
 
   const data = await response.json() as {

@@ -3,6 +3,7 @@ import {
   getValidGoogleAccessToken,
   listGoogleCalendarEvents,
   listRecentGoogleDocs,
+  listGooglePhotosMedia,
   listTodayGmailMessages,
   searchGoogleDriveFiles,
 } from '../src/lib/integrations/google'
@@ -23,7 +24,7 @@ async function main() {
       userId,
       status: 'connected',
       type: {
-        in: ['gmail', 'calendar', 'google_docs', 'google_drive', 'notion'],
+        in: ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos', 'notion'],
       },
     },
     orderBy: [{ updatedAt: 'desc' }],
@@ -96,6 +97,17 @@ async function main() {
       results.push({ provider: 'notion', ok: true, detail: `${pages.length} page(s) loaded` })
     } catch (error) {
       results.push({ provider: 'notion', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
+    }
+  }
+
+  const photos = byType.get('google_photos')
+  if (photos) {
+    try {
+      const accessToken = await getValidGoogleAccessToken(photos)
+      const media = await listGooglePhotosMedia(accessToken, { maxResults: 5 })
+      results.push({ provider: 'google_photos', ok: true, detail: `${media.length} media item(s) loaded` })
+    } catch (error) {
+      results.push({ provider: 'google_photos', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
     }
   }
 

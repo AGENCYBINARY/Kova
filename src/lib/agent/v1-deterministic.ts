@@ -1195,7 +1195,9 @@ export function buildFallbackResponseWithContactsAndProfile(
   const language = assistantProfile?.defaultLanguage || 'fr'
   const maybeRecipient = extractRecipientName(input)
   const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
+  const isExplicitNotionRequest = /(notion|wiki|database|base de donnees|base de données|workspace|page)/.test(intentText)
   const isMeetingRequest =
+    !isExplicitNotionRequest &&
     /(calendar|calendrier|meeting|schedule|invite|appel|rdv|réunion|reunion|visio|visioconference|visioconférence|google meet|meet|zoom|event|evenement|événement)/.test(intentText)
   const wantsMeetingConfirmation =
     /(confirmation|confirm|confirmer|lien|link|visio|meet|invite)/.test(intentText)

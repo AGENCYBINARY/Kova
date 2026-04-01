@@ -153,10 +153,18 @@ function mapIntegration(record: {
       ? getGoogleIntegrationCapabilityState(record.type, record.metadata)
       : null
 
-  const warnings =
-    googleCapabilityState?.needsReconnect
+  const providerError = typeof metadata.providerError === 'string' && metadata.providerError.trim().length > 0
+    ? metadata.providerError
+    : null
+
+  const warnings = [
+    ...(googleCapabilityState?.needsReconnect
       ? ['Reconnect Google to grant the latest read and write permissions for this surface.']
-      : []
+      : []),
+    ...(providerError ? [providerError] : []),
+  ]
+
+  const status = providerError ? 'error' : mapIntegrationStatus(record.status)
 
   return {
     id: record.type as DashboardIntegration['id'],
@@ -165,11 +173,11 @@ function mapIntegration(record: {
     shortDescription: shortDescriptionMap[record.type] || `${appName} integration.`,
     color: colorMap[record.type] || '#71717A',
     icon: iconMap[record.type] || appName.slice(0, 1).toUpperCase(),
-    status: mapIntegrationStatus(record.status),
+    status,
     connectedAccount: typeof metadata.connectedAccount === 'string' ? metadata.connectedAccount : null,
     lastSync: record.lastSyncAt?.toISOString() || null,
     health:
-      record.status === 'error'
+      status === 'error'
         ? 'attention'
         : googleCapabilityState?.needsReconnect
           ? 'warning'

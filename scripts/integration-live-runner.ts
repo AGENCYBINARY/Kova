@@ -8,8 +8,10 @@ import { executeAgentToolRequest } from '../src/lib/agent/tool-execution'
 import { resolveConnectedWorkspaceContext } from '../src/lib/workspace-context/service'
 import {
   getValidGoogleAccessToken,
+  listGooglePhotosMedia,
   searchGmailMessages,
   searchGoogleDriveFiles,
+  searchGooglePhotosMedia,
 } from '../src/lib/integrations/google'
 import {
   getValidNotionAccessToken,
@@ -18,7 +20,7 @@ import {
 } from '../src/lib/integrations/notion'
 import { getOptionalEnv, persistLiveTarget, resolveLiveTarget } from './live-targets'
 
-const SUPPORTED_INTEGRATIONS = ['gmail', 'calendar', 'google_docs', 'google_drive', 'notion'] as const
+const SUPPORTED_INTEGRATIONS = ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos', 'notion'] as const
 const setupOnly = process.argv.includes('--setup-only')
 
 async function previewPrompt(params: {
@@ -89,6 +91,7 @@ async function resolveScenarioDefaults(params: {
   let driveQuery = getOptionalEnv('KOVA_LIVE_DRIVE_QUERY')
   let notionPageQuery = getOptionalEnv('KOVA_LIVE_NOTION_PAGE_QUERY')
   let notionDatabaseQuery = getOptionalEnv('KOVA_LIVE_NOTION_DATABASE_QUERY')
+  let photosQuery = getOptionalEnv('KOVA_LIVE_PHOTOS_QUERY')
   let gmailThreadId: string | null = null
   let gmailMessageId: string | null = null
   let driveFileId: string | null = null
@@ -131,6 +134,13 @@ async function resolveScenarioDefaults(params: {
     }
   }
 
+  const photos = byType.get('google_photos')
+  if (photos && !photosQuery) {
+    const accessToken = await getValidGoogleAccessToken(photos)
+    const media = await listGooglePhotosMedia(accessToken, { maxResults: 5 })
+    photosQuery = media[0]?.filename || null
+  }
+
   return {
     gmailQuery,
     gmailThreadId,
@@ -146,6 +156,7 @@ async function resolveScenarioDefaults(params: {
     notionPageId,
     notionDatabaseQuery,
     notionDatabaseId,
+    photosQuery,
   }
 }
 
@@ -246,6 +257,11 @@ async function main() {
     scenarios.push({ name: 'notion-database-preview', prompt: withReference(`Crée une page dans la base de données Notion sélectionnée avec le titre "Live Runner"`, { source: 'notion', field: 'parentDatabaseId', id: defaults.notionDatabaseId }) })
   }
 
+  if (defaults.photosQuery) {
+    scenarios.push({ name: 'photos-search-preview', prompt: `Cherche dans Google Photos "${defaults.photosQuery}"` })
+    scenarios.push({ name: 'photos-list-preview', prompt: 'Liste mes médias Google Photos récents' })
+  }
+
   if (scenarios.length === 0) {
     console.log('LIVE_RUNNER_NO_SCENARIOS')
     console.log(`No connected integrations were available for workspace=${target.workspaceId} user=${target.userId}.`)
@@ -259,9 +275,10 @@ async function main() {
         userId: target.userId,
         prompt: scenario.prompt,
       })
+      const hasActionOrClarification = preview.proposals.length > 0 || (preview.disambiguations || []).length > 0
       results.push({
         name: scenario.name,
-        ok: true,
+        ok: hasActionOrClarification,
         detail: `${preview.proposals.length} proposal(s) | types=${preview.proposals.map((proposal) => proposal.type).join(', ') || 'none'} | ${(preview.disambiguations || []).length} clarification(s) | ${preview.response}`,
       })
     } catch (error) {
@@ -373,6 +390,17 @@ async function main() {
         }
       } catch (error) {
         results.push({ name: 'notion-properties-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
+      }
+    }
+
+    const photos = byType.get('google_photos')
+    if (photos && defaults.photosQuery) {
+      try {
+        const accessToken = await getValidGoogleAccessToken(photos)
+        const media = await searchGooglePhotosMedia(accessToken, { query: defaults.photosQuery, maxResults: 2 })
+        results.push({ name: 'photos-search-execute', ok: true, detail: `${media.length} Google Photos item(s) matched` })
+      } catch (error) {
+        results.push({ name: 'photos-search-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
       }
     }
   }

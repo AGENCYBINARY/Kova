@@ -85,7 +85,7 @@ function hasConcreteCalendarSchedule(input: string) {
 }
 
 function responseClaimsActionReady(response: string) {
-  return /(c'?est pret|c'est pret|pret(?:e)?|ready|done|prepared|action prete|email pret|draft ready|brouillon pret|rdv pret|invite ready|partage drive pret|archivage pret)/i.test(
+  return /(c'?est pret|c'est pret|pret(?:e)?|ready|done|prepared|action prete|email pret|draft ready|brouillon pret|rdv pret|invite ready|partage drive pret|archivage pret|sera archive(?:e)?|will be archived|va etre archive(?:e)?)/i.test(
     response
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -351,8 +351,13 @@ export async function runAgentTurn(
 
       const normalizedInput = normalizeInput(input)
       const allowProposals = /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|google photos|photos|photo|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\\b|appdata|app data)/i.test(normalizedInput)
+      const modelClaimsActionReadyWithoutProposal =
+        allowProposals &&
+        aiResult.proposals.length === 0 &&
+        safeProposals.length === 0 &&
+        responseClaimsActionReady(aiResult.response)
       const hadModelProposalButNoneValidated = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
-      const fallbackResolutionForInvalidModel = hadModelProposalButNoneValidated
+      const fallbackResolutionForMissingOrInvalidModel = hadModelProposalButNoneValidated || modelClaimsActionReadyWithoutProposal
         ? resolveActionReferencesDetailed({
             proposals: buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).proposals.filter(
               (proposal) => allowedActionTypes.includes(proposal.type)
@@ -361,18 +366,18 @@ export async function runAgentTurn(
             connectedContextMetadata: options.connectedContextMetadata,
           })
         : { proposals: [], disambiguations: [] }
-      const fallbackForInvalidModelProposal = fallbackResolutionForInvalidModel.proposals
+      const fallbackForMissingOrInvalidModelProposal = fallbackResolutionForMissingOrInvalidModel.proposals
       const deniedByRole =
         hadModelProposalButNoneValidated &&
-        fallbackForInvalidModelProposal.length === 0 &&
+        fallbackForMissingOrInvalidModelProposal.length === 0 &&
         availableTools.length === 0
       const hasDisambiguation =
         resolvedReferenceResult.disambiguations.length > 0 ||
-        fallbackResolutionForInvalidModel.disambiguations.length > 0
+        fallbackResolutionForMissingOrInvalidModel.disambiguations.length > 0
       const disambiguations = hasDisambiguation
         ? [
             ...resolvedReferenceResult.disambiguations,
-            ...fallbackResolutionForInvalidModel.disambiguations,
+            ...fallbackResolutionForMissingOrInvalidModel.disambiguations,
           ]
         : []
       const deterministicFallbackResponse = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
@@ -380,7 +385,7 @@ export async function runAgentTurn(
         allowProposals &&
         !hasDisambiguation &&
         safeProposals.length === 0 &&
-        (fallbackForInvalidModelProposal.length > 0 || responseClaimsActionReady(aiResult.response))
+        (fallbackForMissingOrInvalidModelProposal.length > 0 || responseClaimsActionReady(aiResult.response))
 
       return {
         response:
@@ -405,7 +410,7 @@ export async function runAgentTurn(
                 ? safeProposals.filter(
                     (proposal) => !(proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
                   )
-                : fallbackForInvalidModelProposal
+                : fallbackForMissingOrInvalidModelProposal
               : [],
         disambiguations,
       }

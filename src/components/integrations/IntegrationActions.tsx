@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui'
 
 interface IntegrationActionsProps {
@@ -11,9 +11,19 @@ interface IntegrationActionsProps {
 
 export function IntegrationActions({ provider, status, needsReconnect }: IntegrationActionsProps) {
   const router = useRouter()
+  const pathname = usePathname()
 
   const handleRefresh = async () => {
-    await fetch(`/api/integrations/${provider}/refresh`, { method: 'POST' })
+    const response = await fetch(`/api/integrations/${provider}/refresh`, { method: 'POST' })
+    const payload = await response.json().catch(() => null) as { error?: string } | null
+
+    if (!response.ok) {
+      const message = payload?.error || 'refresh_failed'
+      router.push(`${pathname}?error=${encodeURIComponent(message)}`)
+      router.refresh()
+      return
+    }
+
     router.refresh()
   }
 

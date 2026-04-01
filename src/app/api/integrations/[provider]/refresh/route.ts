@@ -2,9 +2,18 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { getGoogleIntegrationCapabilityState, getValidGoogleAccessToken } from '@/lib/integrations/google-auth'
+import { listGooglePhotosMedia } from '@/lib/integrations/google'
 import { getValidNotionAccessToken } from '@/lib/integrations/notion'
 
 const GOOGLE_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos'] as const
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+
+  return {}
+}
 
 export async function POST(
   _request: Request,
@@ -41,6 +50,9 @@ export async function POST(
         id: true,
         type: true,
         metadata: true,
+        accessToken: true,
+        refreshToken: true,
+        expiresAt: true,
       },
     })
 
@@ -78,6 +90,49 @@ export async function POST(
           })
         : Promise.resolve(),
     ])
+
+    const googlePhotosIntegration = googleIntegrations.find((item) => item.type === 'google_photos')
+    const googlePhotosCapabilityState =
+      googlePhotosIntegration
+        ? getGoogleIntegrationCapabilityState('google_photos', googlePhotosIntegration.metadata)
+        : null
+
+    if (googlePhotosIntegration && !googlePhotosCapabilityState?.needsReconnect) {
+      try {
+        const accessToken = await getValidGoogleAccessToken(googlePhotosIntegration)
+        await listGooglePhotosMedia(accessToken, { maxResults: 1 })
+
+        await prisma.integration.update({
+          where: { id: googlePhotosIntegration.id },
+          data: {
+            lastSyncAt: now,
+            status: 'connected',
+            metadata: {
+              ...asRecord(googlePhotosIntegration.metadata),
+              providerError: null,
+              healthCheckAt: now.toISOString(),
+            },
+          },
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Google Photos refresh failed.'
+
+        await prisma.integration.update({
+          where: { id: googlePhotosIntegration.id },
+          data: {
+            lastSyncAt: now,
+            status: 'error',
+            metadata: {
+              ...asRecord(googlePhotosIntegration.metadata),
+              providerError: message,
+              healthCheckAt: now.toISOString(),
+            },
+          },
+        })
+
+        return NextResponse.json({ error: message }, { status: 424 })
+      }
+    }
   } else if (params.provider === 'notion') {
     getValidNotionAccessToken(integration)
     await prisma.integration.update({
