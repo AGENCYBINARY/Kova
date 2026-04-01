@@ -101,6 +101,21 @@ test('email requests that update a draft use the draft update action', async () 
   }
 })
 
+test('gmail draft requests create a real draft proposal instead of a conversational-only reply', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Prépare un brouillon Gmail pour maxime@example.com à propos de "Votre solde est bas"', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_gmail_draft'])
+    assert.deepEqual(result.proposals[0]?.parameters.to, ['maxime@example.com'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
 test('generic capability calendar questions do not create action proposals', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   delete process.env.OPENAI_API_KEY

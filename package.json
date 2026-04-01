@@ -9,7 +9,7 @@
     "lint": "next lint",
     "test": "NODE_ENV=test node --import tsx --test tests/*.test.ts",
     "mcp:test": "node scripts/test-mcp.mjs",
-    "integration:smoke": "tsx scripts/integration-smoke.ts",
+    "integration:smoke": "tsx --env-file-if-exists=.env.vercel.local scripts/integration-smoke.ts",
     "integration:live": "tsx --env-file-if-exists=.env.vercel.local scripts/run-integration-live.ts",
     "integration:live:setup": "KOVA_LIVE_WRITE_ENV=true tsx --env-file-if-exists=.env.vercel.local scripts/run-integration-live.ts --setup-only",
     "logs:prune": "tsx scripts/prune-execution-logs.ts",

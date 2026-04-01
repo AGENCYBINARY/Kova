@@ -59,12 +59,18 @@ export async function resolveLiveTarget() {
       orderBy: { updatedAt: 'desc' },
     })
 
-    return {
-      workspaceId,
-      userId,
-      providers: Array.from(new Set(integrations.map((item) => item.type))),
-      autodiscovered: false,
+    const providers = Array.from(new Set(integrations.map((item) => item.type)))
+
+    if (providers.length > 0) {
+      return {
+        workspaceId,
+        userId,
+        providers,
+        autodiscovered: false,
+      }
     }
+
+    console.warn(`Configured live target ${workspaceId}/${userId} has no connected providers. Falling back to autodiscovery.`)
   }
 
   const integrations = await prisma.integration.findMany({

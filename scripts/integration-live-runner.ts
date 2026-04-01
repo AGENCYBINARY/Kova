@@ -246,6 +246,12 @@ async function main() {
     scenarios.push({ name: 'notion-database-preview', prompt: withReference(`Crée une page dans la base de données Notion sélectionnée avec le titre "Live Runner"`, { source: 'notion', field: 'parentDatabaseId', id: defaults.notionDatabaseId }) })
   }
 
+  if (scenarios.length === 0) {
+    console.log('LIVE_RUNNER_NO_SCENARIOS')
+    console.log(`No connected integrations were available for workspace=${target.workspaceId} user=${target.userId}.`)
+    return
+  }
+
   for (const scenario of scenarios) {
     try {
       const preview = await previewPrompt({
@@ -266,6 +272,17 @@ async function main() {
       })
     }
   }
+
+  for (const result of results) {
+    console.log(`${result.ok ? 'OK' : 'FAIL'} ${result.name}: ${result.detail}`)
+  }
+
+  const failed = results.filter((result) => !result.ok)
+  if (failed.length > 0) {
+    throw new Error(`Live runner failed for ${failed.map((item) => item.name).join(', ')}`)
+  }
+
+  console.log(`LIVE_RUNNER_OK ${results.length}`)
 
   if (execute) {
     const gmail = byType.get('gmail')

@@ -45,6 +45,10 @@ test('explicit send requests still stay in the email action path', () => {
   assert.equal(isReadOnlyWorkspaceQuestion('envoie un mail a paul pour confirmer le rendez-vous'), false)
 })
 
+test('gmail draft requests stay in the email action path even when the address is stripped later', () => {
+  assert.equal(isEmailSendIntent('Prépare un brouillon Gmail pour maxime@example.com à propos de "Votre solde est bas"'), true)
+})
+
 test('calendar action phrasing with faire stays out of read-only mode', () => {
   assert.deepEqual(parseConnectedContextRequest('tu peux me faire un evenement dans calendar google le motif est un rdv avec Maxime'), {
     mode: 'action',

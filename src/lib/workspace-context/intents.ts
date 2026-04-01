@@ -42,6 +42,8 @@ const explicitActionPattern =
   /\b(send|draft|reply|write|compose|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|rename|mark|star|unstar|trash|copy|duplicate|revoke|unshare|folder|envoie|envoyer|redige|ecris|cree|creer|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|deconnecte|actualise|rafraichis|range|ranger|move|moved|deplace|deplacer|archiver|restaure|restaurer|labelliser|transfere|transferer|renomme|renommer|marque|corbeille|brouillon|duplique|dupliquer|retire|retirer|dossier)\b/
 const emailActionPattern =
   /\b(send|draft|reply|write|compose|update|edit|rewrite|refresh|envoie|envoyer|redige|ecris|reponds|repondre|transmets|forward|modifie|modifier|mets|mettre|complete|complete)\b/
+const emailDraftPattern =
+  /\b(draft|brouillon|drafting|preparer un brouillon|prepare un brouillon|prepare le brouillon|prépare le brouillon|preparer le brouillon)\b/
 const todayPattern =
   /\b(aujourd'hui|aujourdhui|today|ce matin|this morning|cet apres-midi|cet apres midi|this afternoon|ce jour)\b/
 const weekPattern =
@@ -177,11 +179,15 @@ export function isEmailSendIntent(input: string) {
     return true
   }
 
+  if (gmailPattern.test(normalized) && emailDraftPattern.test(normalized)) {
+    return true
+  }
+
   if (readVerbPattern.test(normalized) || todayPattern.test(normalized) || priorityPattern.test(normalized)) {
     return false
   }
 
-  return /\b(email|mail|courriel)\b.+\b(a|to|pour)\b/.test(normalized) || /@/.test(normalized)
+  return /\b(gmail|email|mail|courriel)\b.+\b(a|to|pour)\b/.test(normalized) || /@/.test(normalized)
 }
 
 export function parseConnectedContextRequest(input: string): ConnectedContextRequest | null {
