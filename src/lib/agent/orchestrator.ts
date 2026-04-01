@@ -264,9 +264,22 @@ export async function orchestrateChatTurn(params: {
     workspaceId,
   })
 
+  const finalAssistantMessage =
+    effectiveExecutionMode === 'auto' && !autoExecutionFailed && executionMessages.length > 0
+      ? await prisma.message.update({
+          where: { id: assistantMessage.id },
+          data: {
+            content:
+              assistantProfile.defaultLanguage === 'en'
+                ? 'I handled it automatically.'
+                : 'Je m’en suis chargé automatiquement.',
+          },
+        })
+      : assistantMessage
+
   return {
     userMessage,
-    assistantMessage,
+    assistantMessage: finalAssistantMessage,
     proposals:
       reviewableActions.length > 0 && (effectiveExecutionMode === 'ask' || autoExecutionFailed)
         ? reviewableActions.map((createdAction) => ({

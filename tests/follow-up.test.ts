@@ -61,3 +61,26 @@ test('calendar redo follow-up can explicitly remove Google Meet', () => {
   assert.ok(result)
   assert.equal(result?.proposals[0]?.parameters.createMeetLink, false)
 })
+
+test('calendar redo follow-up does not trigger on unrelated gmail draft prompts with quoted subjects', () => {
+  const result = buildCalendarRedoFollowUp({
+    input: 'Prépare un brouillon Gmail pour contact@agencybinary.fr à propos de "test auto mode kova"',
+    recentActions: [
+      {
+        type: 'create_calendar_event',
+        title: 'Create calendar event',
+        description: 'Create a calendar event',
+        parameters: {
+          title: 'Rendez-vous',
+          startTime: '2026-04-02T10:00:00.000Z',
+          endTime: '2026-04-02T10:30:00.000Z',
+          attendees: ['contact@agencybinary.fr'],
+          createMeetLink: true,
+        },
+      },
+    ],
+    language: 'fr',
+  })
+
+  assert.equal(result, null)
+})

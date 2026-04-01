@@ -70,10 +70,18 @@ function requestNeedsMeetLink(input: string) {
 
 function looksLikeCalendarRedoRequest(input: string) {
   const normalized = normalizeInput(input)
-  return (
+  const hasRedoMarker =
     /\b(refais|refaire|refait|recree|recreer|recr[eé]e|fais[- ]en un autre|fait en un autre|un autre|autre evenement|autre rendez vous|autre rdv)\b/.test(
       normalized
-    ) || Boolean(extractCalendarMotif(input))
+    )
+  const hasCalendarContext =
+    /\b(calendar|calendrier|evenement|événement|rendez vous|rendez-vous|rdv|meeting|meet|google meet|visio|invite)\b/.test(
+      normalized
+    )
+
+  return (
+    hasRedoMarker ||
+    (hasCalendarContext && Boolean(extractCalendarMotif(input)))
   )
 }
 
