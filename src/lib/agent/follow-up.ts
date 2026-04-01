@@ -56,9 +56,16 @@ function formatCalendarTitle(rawTitle: string) {
 }
 
 function requestNeedsMeetLink(input: string) {
-  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams|call)/.test(
-    normalizeInput(input)
-  )
+  const normalized = normalizeInput(input)
+  const explicitlyNoMeet =
+    /\b(sans|without|no|pas de|aucun)\s+(google meet|meet|visio|visioconference|video|zoom|teams|call)\b/.test(normalized) ||
+    /\b(google meet|meet|visio|visioconference|video|zoom|teams|call)\b.*\b(sans|without|no|off|disabled)\b/.test(normalized)
+
+  if (explicitlyNoMeet) {
+    return false
+  }
+
+  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams|call)/.test(normalized)
 }
 
 function looksLikeCalendarRedoRequest(input: string) {
@@ -122,10 +129,11 @@ export function buildCalendarRedoFollowUp(params: {
           startTime,
           endTime,
           attendees,
-          createMeetLink:
-            typeof latestCalendarAction.parameters.createMeetLink === 'boolean'
-              ? requestNeedsMeetLink(params.input) || latestCalendarAction.parameters.createMeetLink
-              : requestNeedsMeetLink(params.input),
+          createMeetLink: requestNeedsMeetLink(params.input)
+            ? true
+            : /\b(sans|without|no|pas de|aucun)\s+(google meet|meet|visio|visioconference|video|zoom|teams|call)\b/i.test(params.input)
+              ? false
+              : Boolean(latestCalendarAction.parameters.createMeetLink),
         },
         confidenceScore: 0.9,
       },

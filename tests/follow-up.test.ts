@@ -37,3 +37,27 @@ test('calendar redo follow-up returns null without a recent calendar action', ()
 
   assert.equal(result, null)
 })
+
+test('calendar redo follow-up can explicitly remove Google Meet', () => {
+  const result = buildCalendarRedoFollowUp({
+    input: 'Refais-le sans Google Meet en disant que c’est une raclette chez Maxime',
+    recentActions: [
+      {
+        type: 'create_calendar_event',
+        title: 'Create meeting invite for Maxime',
+        description: 'Create a Google Calendar invite.',
+        parameters: {
+          title: 'Rendez-vous avec Maxime',
+          startTime: '2026-03-27T14:00:00.000Z',
+          endTime: '2026-03-27T14:30:00.000Z',
+          attendees: ['maxime@example.com'],
+          createMeetLink: true,
+        },
+      },
+    ],
+    language: 'fr',
+  })
+
+  assert.ok(result)
+  assert.equal(result?.proposals[0]?.parameters.createMeetLink, false)
+})

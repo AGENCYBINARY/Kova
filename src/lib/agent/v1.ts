@@ -31,7 +31,23 @@ export {
 } from '@/lib/agent/v1-deterministic'
 
 function requestNeedsMeetLink(input: string) {
+  const normalized = input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+  const explicitlyNoMeet =
+    /\b(sans|without|no|pas de|aucun)\s+(google meet|meet|visio|visioconference|video|zoom|teams)\b/.test(normalized) ||
+    /\b(google meet|meet|visio|visioconference|video|zoom|teams)\b.*\b(sans|without|no|off|disabled)\b/.test(normalized)
+
+  if (explicitlyNoMeet) {
+    return false
+  }
+
   return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams)/i.test(input)
+}
+
+function requestForcesMeetLinkOff(input: string) {
+  return /\b(sans|without|no|pas de|aucun)\s+(google meet|meet|visio|visioconference|video|zoom|teams)\b/i.test(input)
 }
 
 function normalizeInput(input: string) {
@@ -66,6 +82,14 @@ function hasExplicitCalendarTime(input: string) {
 
 function hasConcreteCalendarSchedule(input: string) {
   return hasExplicitCalendarDate(input) && hasExplicitCalendarTime(input)
+}
+
+function responseClaimsActionReady(response: string) {
+  return /(c'?est pret|c'est pret|pret(?:e)?|ready|done|prepared|action prete|email pret|draft ready|brouillon pret|rdv pret|invite ready|partage drive pret|archivage pret)/i.test(
+    response
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+  )
 }
 
 export async function runAgentTurn(
@@ -216,14 +240,18 @@ export async function runAgentTurn(
           const maybeRecipient = extractRecipientName(input)
           const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
 
+          const forceMeetOff = requestForcesMeetLinkOff(input)
+          const wantsMeet = requestNeedsMeetLink(input)
+
           return {
             ...proposal,
             parameters: {
               ...proposal.parameters,
-              createMeetLink:
-                typeof proposal.parameters.createMeetLink === 'boolean'
-                  ? proposal.parameters.createMeetLink || requestNeedsMeetLink(input)
-                  : requestNeedsMeetLink(input),
+              createMeetLink: forceMeetOff
+                ? false
+                : typeof proposal.parameters.createMeetLink === 'boolean'
+                  ? proposal.parameters.createMeetLink || wantsMeet
+                  : wantsMeet,
               attendees:
                 attendees.length > 0
                   ? attendees
@@ -233,7 +261,7 @@ export async function runAgentTurn(
                       ? [knownContact.email]
                       : attendees,
             },
-            confidenceScore: Math.max(proposal.confidenceScore, requestNeedsMeetLink(input) ? 0.9 : 0.85),
+            confidenceScore: Math.max(proposal.confidenceScore, wantsMeet ? 0.9 : 0.85),
           }
         }
 
@@ -347,6 +375,12 @@ export async function runAgentTurn(
             ...fallbackResolutionForInvalidModel.disambiguations,
           ]
         : []
+      const deterministicFallbackResponse = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
+      const shouldUseFallbackResponse =
+        allowProposals &&
+        !hasDisambiguation &&
+        safeProposals.length === 0 &&
+        (fallbackForInvalidModelProposal.length > 0 || responseClaimsActionReady(aiResult.response))
 
       return {
         response:
@@ -356,10 +390,10 @@ export async function runAgentTurn(
               ? assistantProfile?.defaultLanguage === 'en'
                 ? 'I understood the request, but your workspace role is not allowed to use that tool.'
                 : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
-              : fallbackForInvalidModelProposal.length > 0
-                ? buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).response
+              : shouldUseFallbackResponse
+                ? deterministicFallbackResponse.response
                 : safeProposals.some((proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
-                  ? buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).response
+                  ? deterministicFallbackResponse.response
                   : !allowProposals && safeProposals.length > 0
                     ? buildConversationalResponse(input, assistantProfile)
                     : aiResult.response,

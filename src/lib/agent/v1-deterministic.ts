@@ -102,9 +102,16 @@ function normalizeInput(input: string) {
 }
 
 function requestNeedsMeetLink(input: string) {
-  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams)/.test(
-    normalizeInput(input)
-  )
+  const normalized = normalizeInput(input)
+  const explicitlyNoMeet =
+    /\b(sans|without|no|pas de|aucun)\s+(google meet|meet|visio|visioconference|video|zoom|teams)\b/.test(normalized) ||
+    /\b(google meet|meet|visio|visioconference|video|zoom|teams)\b.*\b(sans|without|no|off|disabled)\b/.test(normalized)
+
+  if (explicitlyNoMeet) {
+    return false
+  }
+
+  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams)/.test(normalized)
 }
 
 function hasExplicitCalendarDate(input: string) {
@@ -315,16 +322,16 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
   switch (firstProposal?.type) {
     case 'create_calendar_event':
       return language === 'en'
-        ? 'Yes. I can prepare the event, but I need the title, date, time, and attendees first.'
-        : 'Oui. Je peux le préparer, mais il me faut d’abord le titre, la date, l’heure et les invités.'
+        ? 'Yes. I can prepare the event cleanly. I just need the title, date, time, and attendees first.'
+        : 'Oui. Je peux te préparer ça proprement. Il me faut simplement le titre, la date, l’heure et les invités.'
     case 'send_email':
     case 'create_gmail_draft':
     case 'update_gmail_draft':
     case 'send_gmail_draft':
     case 'forward_email':
       return language === 'en'
-        ? 'Yes. I can handle the email, but I need the recipient and what you want to send.'
-        : 'Oui. Je peux gérer le mail, mais il me faut le destinataire et ce que tu veux envoyer.'
+        ? 'Yes. I can handle the email. Give me the recipient and what you want to send, and I’ll prepare it properly.'
+        : 'Oui. Je peux gérer le mail. Donne-moi le destinataire et ce que tu veux envoyer, et je te le prépare proprement.'
     case 'archive_gmail_thread':
     case 'unarchive_gmail_thread':
     case 'label_gmail_thread':
@@ -336,8 +343,8 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
     case 'trash_gmail_thread':
     case 'delete_gmail_thread_permanently':
       return language === 'en'
-        ? 'Yes. I can do that, but I need to know which Gmail thread you mean.'
-        : 'Oui. Je peux le faire, mais il faut que tu me dises quel thread Gmail tu vises.'
+        ? 'Yes. I can do that. I just need to know which Gmail thread you want me to use.'
+        : 'Oui. Je peux le faire. Il faut juste que tu me précises quel thread Gmail tu veux que j’utilise.'
     case 'create_google_drive_folder':
     case 'create_google_drive_file':
     case 'delete_google_drive_file':
@@ -350,24 +357,24 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
     case 'update_google_drive_appdata_file':
     case 'delete_google_drive_appdata_file':
       return language === 'en'
-        ? 'Yes. I can handle Drive, but I need the exact file or folder to act on.'
-        : 'Oui. Je peux gérer Drive, mais il me faut le fichier ou le dossier exact à utiliser.'
+        ? 'Yes. I can handle Drive. I just need the exact file or folder you want me to use.'
+        : 'Oui. Je peux gérer Drive. Il me faut simplement le fichier ou le dossier exact à utiliser.'
     case 'list_google_photos_media':
     case 'search_google_photos_media':
       return language === 'en'
-        ? 'Yes. I can search Google Photos. Tell me what photo or media you want me to look up.'
-        : 'Oui. Je peux chercher dans Google Photos. Dis-moi ce que tu veux retrouver.'
+        ? 'Yes. I can search Google Photos. Tell me exactly what photo, album, or media you want me to look up.'
+        : 'Oui. Je peux chercher dans Google Photos. Dis-moi précisément la photo, l’album ou le média que tu veux retrouver.'
     case 'update_notion_page':
     case 'update_notion_page_properties':
     case 'archive_notion_page':
     case 'create_notion_page':
       return language === 'en'
-        ? 'Yes. I can handle Notion, but I need the exact page or database you want.'
-        : 'Oui. Je peux gérer Notion, mais il me faut la page ou la base exacte que tu veux utiliser.'
+        ? 'Yes. I can handle Notion. I just need the exact page or database you want me to use.'
+        : 'Oui. Je peux gérer Notion. Il me faut simplement la page ou la base exacte que tu veux utiliser.'
     default:
       return language === 'en'
-        ? 'Yes. I can do that. Tell me exactly what you want me to prepare.'
-        : 'Oui. Je peux le faire. Dis-moi précisément ce que tu veux que je prépare.'
+        ? 'Yes. I can handle that. Tell me exactly what you want prepared and I’ll take it from there.'
+        : 'Oui. Je peux m’en charger. Dis-moi exactement ce que tu veux préparer et je prends le relais.'
   }
 }
 
@@ -411,13 +418,13 @@ export function buildConversationalResponse(input: string, profile?: AssistantPr
   const normalized = normalizeInput(input)
 
   if (isGreetingOnly(input)) {
-    return language === 'en' ? 'Hello. I’m ready. What do you want me to handle?' : 'Bonjour. Je suis prêt. Dis-moi ce que tu veux que je prenne en charge.'
+    return language === 'en' ? 'Hello. I’m ready. What do you want me to handle first?' : 'Bonjour. Je suis prêt. Qu’est-ce que tu veux que je prenne en charge en premier ?'
   }
 
   if (/parle moi|parle-moi/.test(normalized)) {
     return language === 'en'
-      ? 'Sure. What do you want me to handle first?'
-      : 'Oui. Qu’est-ce que tu veux que je prenne en premier ?'
+      ? 'Of course. What do you want me to handle first?'
+      : 'Bien sûr. Qu’est-ce que tu veux que je prenne en premier ?'
   }
 
   if (/comment ca va|comment ça va|ca va|ça va/.test(normalized)) {
@@ -427,8 +434,8 @@ export function buildConversationalResponse(input: string, profile?: AssistantPr
   }
 
   return language === 'en'
-    ? 'Give me the task and I’ll take it from there.'
-    : 'Donne-moi le sujet et je prends le relais.'
+    ? 'Give me the task, the goal, or the app involved, and I’ll take it from there.'
+    : 'Donne-moi le sujet, l’objectif ou l’application concernée, et je prends le relais.'
 }
 
 function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {

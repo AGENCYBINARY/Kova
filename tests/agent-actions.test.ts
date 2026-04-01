@@ -217,3 +217,23 @@ test('calendar fallback keeps explicit attendee emails when schedule details are
     }
   }
 })
+
+test('calendar fallback respects explicit requests without Google Meet', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn(
+      'Crée un événement demain à 15h pour une réunion avec massarelli.tristan@gmail.com sans Google Meet',
+      [],
+      []
+    )
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event'])
+    assert.equal(result.proposals[0]?.parameters.createMeetLink, false)
+    assert.doesNotMatch(result.response, /Google Meet/i)
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
