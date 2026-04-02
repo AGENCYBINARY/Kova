@@ -84,8 +84,8 @@ function hasConcreteCalendarSchedule(input: string) {
   return hasExplicitCalendarDate(input) && hasExplicitCalendarTime(input)
 }
 
-function responseClaimsActionReady(response: string) {
-  return /(c'?est pret|c'est pret|pret(?:e)?|ready|done|prepared|action prete|email pret|draft ready|brouillon pret|rdv pret|invite ready|partage drive pret|archivage pret|sera archive(?:e)?|will be archived|va etre archive(?:e)?)/i.test(
+export function responseClaimsActionReady(response: string) {
+  return /(c'?est pret|c'est pret|pret(?:e)?|ready|done|prepared|action prete|email pret|draft ready|brouillon pret|rdv pret|invite ready|partage drive pret|archivage pret|sera archive(?:e)?|will be archived|va etre archive(?:e)?|session google photos ouverte|google photos session opened|picker google photos ouvert|google photos picker opened)/i.test(
     response
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -350,7 +350,7 @@ export async function runAgentTurn(
       })
 
       const normalizedInput = normalizeInput(input)
-      const allowProposals = /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|google photos|photos|photo|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\\b|appdata|app data)/i.test(normalizedInput)
+      const allowProposals = /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|open|ouvrir|ouvre|select|selectionne|selectionner|choisis|choisir|gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|google photos|photos|photo|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\\b|appdata|app data)/i.test(normalizedInput)
       const modelClaimsActionReadyWithoutProposal =
         allowProposals &&
         aiResult.proposals.length === 0 &&

@@ -66,7 +66,7 @@ export type AgentExecutionMode = 'ask' | 'auto'
 
 const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,})/
 const actionIntentPattern =
-  /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|envoie|envoyer|rédige|redige|écris|ecris|crée|cree|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|déconnecte|deconnecte|actualise|rafraichis|archiver|restaure|restaurer|transférer|transferer|deplacer|deplace|renommer|renomme|labellise|labelise|duplique|dupliquer|corbeille|brouillon|brouillons|retire l acces|retirer l acces|dossier)/i
+  /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|open|ouvrir|ouvre|select|selectionne|selectionner|choisir|choisis|envoie|envoyer|rédige|redige|écris|ecris|crée|cree|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|déconnecte|deconnecte|actualise|rafraichis|archiver|restaure|restaurer|transférer|transferer|deplacer|deplace|renommer|renomme|labellise|labelise|duplique|dupliquer|corbeille|brouillon|brouillons|retire l acces|retirer l acces|dossier)/i
 const appIntentPattern =
   /(gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|google photos|photos|photo|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\b|appdata|app data)/i
 const greetingOnlyPattern =
@@ -400,7 +400,7 @@ export function shouldPreferDeterministicAction(input: string, proposals: AgentP
 
   if (
     /(google photos|photos|photo|album|image)/.test(normalized) &&
-    /(search|cherche|chercher|find|retrouve|show|montre|list|liste)/.test(normalized)
+    /(search|cherche|chercher|find|retrouve|show|montre|list|liste|open|ouvrir|ouvre|select|selectionne|selectionner|choisir|choisis)/.test(normalized)
   ) {
     return true
   }
@@ -1553,12 +1553,15 @@ export function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
-  if (/(google photos|photos|photo|album|image)/.test(intentText) && /(search|cherche|chercher|find|find me|retrouve|list|liste|show|montre)/.test(intentText)) {
+  if (
+    /(google photos|photos|photo|album|image)/.test(intentText) &&
+    /(search|cherche|chercher|find|find me|retrouve|list|liste|show|montre|open|ouvrir|ouvre|select|selectionne|selectionner|choisir|choisis)/.test(intentText)
+  ) {
     return {
       response:
         language === 'en'
-          ? 'Google Photos lookup is ready.'
-          : 'Recherche Google Photos prête.',
+          ? 'Google Photos access is ready.'
+          : 'Accès Google Photos prêt.',
       proposals: [buildGooglePhotosProposal(input, assistantProfile)],
     }
   }

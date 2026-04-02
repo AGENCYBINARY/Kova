@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { runAgentTurn } from '../src/lib/agent/v1'
+import { responseClaimsActionReady, runAgentTurn } from '../src/lib/agent/v1'
 
 test('fallback routes Gmail unarchive to the right action', async () => {
   const previousKey = process.env.OPENAI_API_KEY
@@ -71,6 +71,24 @@ test('fallback routes Google Photos requests to a picker session by default', as
       process.env.OPENAI_API_KEY = previousKey
     }
   }
+})
+
+test('fallback routes Google Photos picker opening requests to a picker session', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Ouvre Google Photos pour que je choisisse des images', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_google_photos_picker_session'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('action-ready guard treats an opened Google Photos session as executable state', () => {
+  assert.equal(responseClaimsActionReady('Session Google Photos ouverte, tu peux sélectionner les images à importer.'), true)
 })
 
 test('fallback routes Google Photos selected-media search when the user references the picked selection', async () => {
