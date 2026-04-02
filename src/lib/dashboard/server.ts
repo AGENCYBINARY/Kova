@@ -71,7 +71,7 @@ function targetAppForType(type: DashboardAction['type']): DashboardAction['targe
   ) {
     return 'Google Drive'
   }
-  if (type === 'list_google_photos_media' || type === 'search_google_photos_media') {
+  if (type === 'create_google_photos_picker_session' || type === 'list_google_photos_media' || type === 'search_google_photos_media') {
     return 'Google Photos'
   }
   return 'Notion'
@@ -110,7 +110,7 @@ function mapIntegration(record: {
     notion: 'Update pages, maintain databases, and publish workspace summaries.',
     google_docs: 'Create briefs, execution summaries, and structured documents from agent output.',
     google_drive: 'Create folders and save generated files to Drive for later sharing and reuse.',
-    google_photos: 'Browse recent photos and albums for media-heavy workflows.',
+    google_photos: 'Start secure picker sessions and work with user-selected photos.',
     slack: 'Route notifications and post approvals back to operating channels.',
   }
 
@@ -120,7 +120,7 @@ function mapIntegration(record: {
     notion: 'Knowledge base and docs automation.',
     google_docs: 'Docs generation and updates.',
     google_drive: 'Drive storage and file delivery.',
-    google_photos: 'Photo search and context.',
+    google_photos: 'Picker-based photo workflows.',
     slack: 'Team notifications and approvals.',
   }
 
@@ -159,7 +159,11 @@ function mapIntegration(record: {
 
   const warnings = [
     ...(googleCapabilityState?.needsReconnect
-      ? ['Reconnect Google to grant the latest read and write permissions for this surface.']
+      ? [
+          record.type === 'google_photos'
+            ? 'Reconnect Google to grant Google Photos Picker permissions.'
+            : 'Reconnect Google to grant the latest read and write permissions for this surface.',
+        ]
       : []),
     ...(providerError ? [providerError] : []),
   ]

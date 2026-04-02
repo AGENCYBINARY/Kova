@@ -41,6 +41,7 @@ export const agentActionTypeSchema = z.enum([
   'create_google_drive_appdata_file',
   'update_google_drive_appdata_file',
   'delete_google_drive_appdata_file',
+  'create_google_photos_picker_session',
   'list_google_photos_media',
   'search_google_photos_media',
 ])
@@ -359,11 +360,12 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
       return language === 'en'
         ? 'Yes. I can handle Drive. I just need the exact file or folder you want me to use.'
         : 'Oui. Je peux gérer Drive. Il me faut simplement le fichier ou le dossier exact à utiliser.'
+    case 'create_google_photos_picker_session':
     case 'list_google_photos_media':
     case 'search_google_photos_media':
       return language === 'en'
-        ? 'Yes. I can search Google Photos. Tell me exactly what photo, album, or media you want me to look up.'
-        : 'Oui. Je peux chercher dans Google Photos. Dis-moi précisément la photo, l’album ou le média que tu veux retrouver.'
+        ? 'Yes. I can help with Google Photos. I open a secure picker first, then I can work with the media you selected.'
+        : 'Oui. Je peux t’aider avec Google Photos. J’ouvre d’abord un sélecteur sécurisé, puis je travaille sur les médias que tu as choisis.'
     case 'update_notion_page':
     case 'update_notion_page_properties':
     case 'archive_notion_page':
@@ -957,16 +959,20 @@ function buildDeleteDriveAppDataProposal(input: string, profile?: AssistantProfi
 }
 
 function buildGooglePhotosProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const normalized = normalizeInput(input)
   const searchMatch = input.match(/["“]([^"”]+)["”]/)
   const hasSearchTerm = Boolean(searchMatch?.[1]?.trim())
-  return hasSearchTerm
+  const refersToSelectedPhotos =
+    /\b(selection|selected|picked|chosen|selectionnes|selectionnees|choisies|choisis|choisi)\b/.test(normalized)
+
+  return hasSearchTerm && refersToSelectedPhotos
     ? {
         type: 'search_google_photos_media',
         title: profile?.defaultLanguage === 'en' ? 'Search Google Photos' : 'Chercher dans Google Photos',
         description:
           profile?.defaultLanguage === 'en'
-            ? 'Search recent Google Photos media by filename or media type.'
-            : 'Chercher dans les médias récents Google Photos par nom de fichier ou type de média.',
+            ? 'Search through the Google Photos media that was already selected in the picker.'
+            : 'Chercher dans les médias Google Photos déjà sélectionnés dans le picker.',
         parameters: {
           query: searchMatch?.[1]?.trim() || input.trim(),
           maxResults: 12,
@@ -974,16 +980,14 @@ function buildGooglePhotosProposal(input: string, profile?: AssistantProfile): A
         confidenceScore: 0.78,
       }
     : {
-        type: 'list_google_photos_media',
-        title: profile?.defaultLanguage === 'en' ? 'List recent Google Photos media' : 'Lister les médias Google Photos récents',
+        type: 'create_google_photos_picker_session',
+        title: profile?.defaultLanguage === 'en' ? 'Open Google Photos picker' : 'Ouvrir le picker Google Photos',
         description:
           profile?.defaultLanguage === 'en'
-            ? 'List recent media from Google Photos.'
-            : 'Lister les médias récents de Google Photos.',
-        parameters: {
-          maxResults: 12,
-        },
-        confidenceScore: 0.72,
+            ? 'Start a secure picker session so the user can choose the exact photos to use.'
+            : 'Démarrer une session picker sécurisée pour que l’utilisateur choisisse les photos exactes à utiliser.',
+        parameters: {},
+        confidenceScore: 0.8,
       }
 }
 

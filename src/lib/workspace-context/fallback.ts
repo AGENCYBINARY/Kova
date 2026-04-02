@@ -42,6 +42,11 @@ interface SourceMetadataSummary {
     webViewLink?: string | null
   }>
   photoCount?: number
+  pickerRequired?: boolean
+  pickerSession?: {
+    pickerUri?: string | null
+    mediaItemsSet?: boolean
+  }
   photos?: Array<{
     photoId?: string
     filename?: string
@@ -135,6 +140,11 @@ export function buildConnectedContextFallbackResponse(
     }
 
     if (summary.source === 'google_photos') {
+      if (summary.pickerRequired) {
+        return language === 'en'
+          ? ['photos: open a picker session first']
+          : ['photos: ouvre d’abord une session picker']
+      }
       return language === 'en'
         ? [`photos: ${summary.photoCount || 0} matching media item(s)`]
         : [`photos: ${summary.photoCount || 0} media correspondants`]

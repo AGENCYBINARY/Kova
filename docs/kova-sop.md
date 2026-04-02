@@ -470,6 +470,22 @@ npx vercel logs --environment production --since 20m --level error --no-branch
 
 If the new deployment is still queued or building, do not claim the alias has switched until `inspect` on the production domain shows the new deployment id.
 
+### Google Photos Notes
+
+Since March 31, 2025, Kova must not rely on the old Google Photos Library browsing model.
+
+Important product rule:
+
+- do not promise "browse recent library photos/albums" server-side
+- use Google Photos Picker for user-library selection
+- only work with media explicitly selected in the picker session
+
+Current implementation baseline:
+
+- required scope: `https://www.googleapis.com/auth/photospicker.mediaitems.readonly`
+- validate Google Photos by creating a Picker session, not by calling old Library `mediaItems` listing
+- if production still reports insufficient scopes after enabling the API, reconnect Google to mint a fresh token with Picker scope
+
 ### Mandatory Closeout Checklist For Future Sessions
 
 Before ending a substantial session:

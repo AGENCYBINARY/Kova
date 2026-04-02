@@ -6,7 +6,9 @@ import {
   type GoogleCalendarEventSummary,
 } from '@/lib/integrations/google-calendar'
 import {
-  listRecentGooglePhotos,
+  getGooglePhotosPickerSession,
+  getGooglePhotosPickerSessionMetadata,
+  listGooglePhotosMedia,
   searchGooglePhotosMedia,
   type GooglePhotoSummary,
 } from '@/lib/integrations/google-photos'
@@ -362,28 +364,74 @@ async function buildPhotosContext(params: {
   request: ConnectedContextRequest
   accessToken: string
   connectedAccount: string | null
+  integrationMetadata: unknown
 }) {
-  const photos =
+  const storedSession = getGooglePhotosPickerSessionMetadata(params.integrationMetadata)
+
+  if (!storedSession?.sessionId) {
+    return {
+      source: 'google_photos' as const,
+      lines: [
+        `Google Photos${params.connectedAccount ? ` (${params.connectedAccount})` : ''}`,
+        '- no active picker session',
+        '- start a Google Photos picker session before asking Kova to inspect photos',
+      ],
+      metadata: {
+        source: 'google_photos',
+        connectedAccount: params.connectedAccount,
+        photoCount: 0,
+        pickerRequired: true,
+      },
+    } satisfies SourceContextBlock
+  }
+
+  const session = await getGooglePhotosPickerSession(params.accessToken, storedSession.sessionId)
+
+  if (!session.mediaItemsSet) {
+    return {
+      source: 'google_photos' as const,
+      lines: [
+        `Google Photos${params.connectedAccount ? ` (${params.connectedAccount})` : ''}`,
+        '- picker session active, waiting for selection',
+        ...(session.pickerUri ? [`- open picker: ${session.pickerUri}`] : []),
+      ],
+      metadata: {
+        source: 'google_photos',
+        connectedAccount: params.connectedAccount,
+        photoCount: 0,
+        pickerRequired: true,
+        pickerSession: session,
+      },
+    } satisfies SourceContextBlock
+  }
+
+  const listed =
     params.request.searchQuery
-      ? await searchGooglePhotosMedia(params.accessToken, {
-          query: params.request.searchQuery,
+      ? {
+          items: await searchGooglePhotosMedia(params.accessToken, {
+            sessionId: storedSession.sessionId,
+            query: params.request.searchQuery,
+            maxResults: 10,
+          }),
+        }
+      : await listGooglePhotosMedia(params.accessToken, {
+          sessionId: storedSession.sessionId,
           maxResults: 10,
         })
-      : await listRecentGooglePhotos(params.accessToken, {
-          maxResults: 10,
-        })
+  const photos = listed.items
 
   return {
     source: 'google_photos' as const,
     lines: [
       `Google Photos${params.connectedAccount ? ` (${params.connectedAccount})` : ''}`,
-      `- media loaded: ${photos.length}`,
-      ...(photos.length > 0 ? photos.map((photo) => `- ${formatGooglePhotoLine(photo)}`) : ['- no matching media']),
+      `- selected media loaded: ${photos.length}`,
+      ...(photos.length > 0 ? photos.map((photo) => `- ${formatGooglePhotoLine(photo)}`) : ['- no matching selected media']),
     ],
     metadata: {
       source: 'google_photos',
       connectedAccount: params.connectedAccount,
       photoCount: photos.length,
+      pickerSession: session,
       photos: photos.slice(0, 10).map((photo) => ({
         photoId: photo.id,
         filename: photo.filename,
@@ -550,6 +598,7 @@ async function resolveSourceContext(params: {
       request: params.request,
       accessToken,
       connectedAccount,
+      integrationMetadata: integration.metadata,
     })
   }
 

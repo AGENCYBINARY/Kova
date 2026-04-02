@@ -5,6 +5,7 @@ import {
   GOOGLE_READ_TIMEOUT_MS,
   googleFetch,
 } from '@/lib/integrations/google-http'
+import { GOOGLE_PHOTOS_PICKER_SCOPE } from '@/lib/integrations/google-photos'
 
 const GOOGLE_SCOPES = [
   'openid',
@@ -19,7 +20,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/documents',
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/drive.appdata',
-  'https://www.googleapis.com/auth/photoslibrary.readonly',
+  GOOGLE_PHOTOS_PICKER_SCOPE,
 ]
 
 export const GOOGLE_PROVIDER_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos'] as const
@@ -43,7 +44,7 @@ const GOOGLE_REQUIRED_SCOPES = {
     'https://www.googleapis.com/auth/drive.appdata',
   ],
   google_photos: [
-    'https://www.googleapis.com/auth/photoslibrary.readonly',
+    GOOGLE_PHOTOS_PICKER_SCOPE,
   ],
 } as const
 

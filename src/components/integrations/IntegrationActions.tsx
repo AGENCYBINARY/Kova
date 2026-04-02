@@ -40,10 +40,10 @@ export function IntegrationActions({ provider, status, needsReconnect }: Integra
     )
   }
 
-  if (status === 'connected') {
+  if (status === 'connected' || status === 'error') {
     return (
       <>
-        {needsReconnect ? (
+        {needsReconnect || status === 'error' ? (
           <a href={`/api/integrations/connect/${provider}`}>
             <Button variant="primary" size="sm">
               Reconnect

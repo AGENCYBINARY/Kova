@@ -43,8 +43,12 @@ import {
   updateGoogleDriveAppDataFile,
 } from '@/lib/integrations/google-drive'
 import {
+  createGooglePhotosPickerSession,
+  getGooglePhotosPickerSession,
+  getGooglePhotosPickerSessionMetadata,
   listGooglePhotosMedia,
   searchGooglePhotosMedia,
+  withGooglePhotosPickerSessionMetadata,
 } from '@/lib/integrations/google-photos'
 import {
   archiveNotionPage,
@@ -100,6 +104,22 @@ const createGoogleDriveFolderSchema = z.object({
   folderName: z.string().optional(),
   folderPath: z.string().optional(),
   parentFolderId: z.string().optional(),
+}).passthrough()
+
+const createGooglePhotosPickerSessionSchema = z.object({
+  requestId: z.string().min(1).optional(),
+}).passthrough()
+
+const listGooglePhotosMediaSchema = z.object({
+  sessionId: z.string().min(1).optional(),
+  maxResults: z.number().int().positive().optional(),
+  pageToken: z.string().min(1).optional(),
+}).passthrough()
+
+const searchGooglePhotosMediaSchema = z.object({
+  sessionId: z.string().min(1).optional(),
+  query: z.string().min(1),
+  maxResults: z.number().int().positive().optional(),
 }).passthrough()
 
 const createNotionPageSchema = z.object({
@@ -1054,11 +1074,58 @@ export const tools: Array<McpToolDefinition> = [
     },
   },
   {
+    name: 'photos.start_picker',
+    actionType: 'create_google_photos_picker_session',
+    provider: 'google_photos',
+    title: 'Open Google Photos picker',
+    description: 'Create a secure Google Photos Picker session so the user can choose media from their library.',
+    version: '2026-04-02',
+    riskLevel: 'low',
+    deterministic: true,
+    zeroDataMovement: true,
+    inputSchemaJson: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+      },
+      additionalProperties: true,
+    },
+    inputSchema: createGooglePhotosPickerSessionSchema,
+    execute: async (context, input) => {
+      const integration = await getConnectedIntegration(context, 'google_photos')
+      const accessToken = await getValidGoogleAccessToken(integration)
+      const session = await createGooglePhotosPickerSession(accessToken, {
+        requestId: typeof input.requestId === 'string' ? input.requestId : undefined,
+      })
+      const metadata = withGooglePhotosPickerSessionMetadata(integration.metadata, session)
+      await prisma.integration.update({
+        where: { id: integration.id },
+        data: {
+          lastSyncAt: new Date(),
+          status: 'connected',
+          metadata,
+        },
+      })
+      return {
+        details: session.pickerUri
+          ? `Google Photos Picker prêt. Ouvre ce lien pour choisir les médias: ${session.pickerUri}`
+          : 'Google Photos Picker prêt. Ouvre le sélecteur pour choisir les médias.',
+        output: {
+          provider: 'google_photos',
+          sessionId: session.sessionId,
+          pickerUri: session.pickerUri,
+          mediaItemsSet: session.mediaItemsSet,
+          expireTime: session.expireTime,
+        },
+      } satisfies IntegrationExecutionResult
+    },
+  },
+  {
     name: 'photos.list_media',
     actionType: 'list_google_photos_media',
     provider: 'google_photos',
-    title: 'List Google Photos media',
-    description: 'List recent media items from Google Photos.',
+    title: 'List picked Google Photos media',
+    description: 'List media items that were chosen in the current Google Photos Picker session.',
     version: '2026-03-30',
     riskLevel: 'low',
     deterministic: true,
@@ -1066,22 +1133,53 @@ export const tools: Array<McpToolDefinition> = [
     inputSchemaJson: {
       type: 'object',
       properties: {
+        sessionId: { type: 'string' },
         maxResults: { type: 'number' },
+        pageToken: { type: 'string' },
       },
       additionalProperties: true,
     },
-    inputSchema: z.object({
-      maxResults: z.number().int().positive().optional(),
-    }).passthrough(),
+    inputSchema: listGooglePhotosMediaSchema,
     execute: async (context, input) => {
       const integration = await getConnectedIntegration(context, 'google_photos')
       const accessToken = await getValidGoogleAccessToken(integration)
-      const items = await listGooglePhotosMedia(accessToken, input)
+      const storedSession = getGooglePhotosPickerSessionMetadata(integration.metadata)
+      const sessionId =
+        typeof input.sessionId === 'string' && input.sessionId.trim().length > 0
+          ? input.sessionId.trim()
+          : storedSession?.sessionId
+
+      if (!sessionId) {
+        throw new Error('Google Photos a besoin d’une session Picker active. Lance d’abord "Open Google Photos picker".')
+      }
+
+      const session = await getGooglePhotosPickerSession(accessToken, sessionId)
+      const listed = await listGooglePhotosMedia(accessToken, {
+        sessionId,
+        maxResults: typeof input.maxResults === 'number' ? input.maxResults : undefined,
+        pageToken: typeof input.pageToken === 'string' ? input.pageToken : undefined,
+      })
+
+      await prisma.integration.update({
+        where: { id: integration.id },
+        data: {
+          lastSyncAt: new Date(),
+          status: 'connected',
+          metadata: withGooglePhotosPickerSessionMetadata(integration.metadata, session, {
+            pickedCount: listed.items.length,
+          }),
+        },
+      })
+
       return {
-        details: `Found ${items.length} Google Photos item${items.length === 1 ? '' : 's'}.`,
+        details: `Found ${listed.items.length} Google Photos item${listed.items.length === 1 ? '' : 's'} in the selected picker session.`,
         output: {
           provider: 'google_photos',
-          items,
+          sessionId,
+          pickerUri: session.pickerUri,
+          mediaItemsSet: session.mediaItemsSet,
+          items: listed.items,
+          nextPageToken: listed.nextPageToken,
         },
       } satisfies IntegrationExecutionResult
     },
@@ -1090,8 +1188,8 @@ export const tools: Array<McpToolDefinition> = [
     name: 'photos.search_media',
     actionType: 'search_google_photos_media',
     provider: 'google_photos',
-    title: 'Search Google Photos media',
-    description: 'Search recent Google Photos media items by filename or mime type.',
+    title: 'Search picked Google Photos media',
+    description: 'Search media items that were chosen in the current Google Photos Picker session.',
     version: '2026-03-30',
     riskLevel: 'low',
     deterministic: true,
@@ -1099,24 +1197,52 @@ export const tools: Array<McpToolDefinition> = [
     inputSchemaJson: {
       type: 'object',
       properties: {
+        sessionId: { type: 'string' },
         query: { type: 'string' },
         maxResults: { type: 'number' },
       },
       required: ['query'],
       additionalProperties: true,
     },
-    inputSchema: z.object({
-      query: z.string().min(1),
-      maxResults: z.number().int().positive().optional(),
-    }).passthrough(),
+    inputSchema: searchGooglePhotosMediaSchema,
     execute: async (context, input) => {
       const integration = await getConnectedIntegration(context, 'google_photos')
       const accessToken = await getValidGoogleAccessToken(integration)
-      const items = await searchGooglePhotosMedia(accessToken, input as { query: string; maxResults?: number })
+      const storedSession = getGooglePhotosPickerSessionMetadata(integration.metadata)
+      const sessionId =
+        typeof input.sessionId === 'string' && input.sessionId.trim().length > 0
+          ? input.sessionId.trim()
+          : storedSession?.sessionId
+
+      if (!sessionId) {
+        throw new Error('Google Photos a besoin d’une session Picker active. Lance d’abord "Open Google Photos picker".')
+      }
+
+      const session = await getGooglePhotosPickerSession(accessToken, sessionId)
+      const items = await searchGooglePhotosMedia(accessToken, {
+        sessionId,
+        query: String(input.query || ''),
+        maxResults: typeof input.maxResults === 'number' ? input.maxResults : undefined,
+      })
+
+      await prisma.integration.update({
+        where: { id: integration.id },
+        data: {
+          lastSyncAt: new Date(),
+          status: 'connected',
+          metadata: withGooglePhotosPickerSessionMetadata(integration.metadata, session, {
+            pickedCount: items.length,
+          }),
+        },
+      })
+
       return {
         details: `Found ${items.length} Google Photos match${items.length === 1 ? '' : 'es'}.`,
         output: {
           provider: 'google_photos',
+          sessionId,
+          pickerUri: session.pickerUri,
+          mediaItemsSet: session.mediaItemsSet,
           items,
         },
       } satisfies IntegrationExecutionResult

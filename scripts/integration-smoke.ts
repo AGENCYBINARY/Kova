@@ -1,9 +1,10 @@
 import { prisma } from '../src/lib/db/prisma'
 import {
+  createGooglePhotosPickerSession,
+  deleteGooglePhotosPickerSession,
   getValidGoogleAccessToken,
   listGoogleCalendarEvents,
   listRecentGoogleDocs,
-  listGooglePhotosMedia,
   listTodayGmailMessages,
   searchGoogleDriveFiles,
 } from '../src/lib/integrations/google'
@@ -104,8 +105,11 @@ async function main() {
   if (photos) {
     try {
       const accessToken = await getValidGoogleAccessToken(photos)
-      const media = await listGooglePhotosMedia(accessToken, { maxResults: 5 })
-      results.push({ provider: 'google_photos', ok: true, detail: `${media.length} media item(s) loaded` })
+      const session = await createGooglePhotosPickerSession(accessToken, {
+        requestId: `smoke-${Date.now()}`,
+      })
+      await deleteGooglePhotosPickerSession(accessToken, session.sessionId)
+      results.push({ provider: 'google_photos', ok: true, detail: `picker session ${session.sessionId} created` })
     } catch (error) {
       results.push({ provider: 'google_photos', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
     }

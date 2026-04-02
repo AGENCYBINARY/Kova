@@ -59,12 +59,26 @@ test('fallback routes Drive app data updates to the right action', async () => {
   }
 })
 
-test('fallback routes Google Photos search to the right action', async () => {
+test('fallback routes Google Photos requests to a picker session by default', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   delete process.env.OPENAI_API_KEY
 
   try {
     const result = await runAgentTurn('Cherche dans Google Photos "raclette"', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_google_photos_picker_session'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('fallback routes Google Photos selected-media search when the user references the picked selection', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Cherche dans les photos sélectionnées Google Photos "raclette"', [], [])
     assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['search_google_photos_media'])
   } finally {
     if (previousKey) {

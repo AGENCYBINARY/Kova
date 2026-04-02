@@ -14,6 +14,32 @@ export function MessageBubble({ role, content, isStreaming, thinking, userFallba
   const lines = content.split('\n')
   const hasVisibleContent = lines.some((line) => line.trim().length > 0)
   const shouldRenderBubble = hasVisibleContent || (isStreaming && !thinking)
+  const urlPattern = /(https?:\/\/[^\s]+)/g
+
+  const renderLine = (line: string, index: number) => {
+    if (!line) {
+      return (
+        <p key={`${role}-${index}`} className={styles.textLine}>
+          {'\u00A0'}
+        </p>
+      )
+    }
+
+    const parts = line.split(urlPattern)
+    return (
+      <p key={`${role}-${index}`} className={styles.textLine}>
+        {parts.map((part, partIndex) =>
+          /^https?:\/\//.test(part)
+            ? (
+              <a key={`${role}-${index}-${partIndex}`} href={part} target="_blank" rel="noreferrer">
+                {part}
+              </a>
+            )
+            : <span key={`${role}-${index}-${partIndex}`}>{part}</span>
+        )}
+      </p>
+    )
+  }
 
   return (
     <div className={`${styles.message} ${isUser ? styles.user : styles.assistant}`}>
@@ -58,11 +84,7 @@ export function MessageBubble({ role, content, isStreaming, thinking, userFallba
         {shouldRenderBubble ? (
           <div className={styles.bubble}>
             <div className={styles.text}>
-              {lines.map((line, index) => (
-                <p key={`${role}-${index}`} className={styles.textLine}>
-                  {line || '\u00A0'}
-                </p>
-              ))}
+              {lines.map((line, index) => renderLine(line, index))}
             </div>
             {isStreaming && <span className={styles.cursor} />}
           </div>

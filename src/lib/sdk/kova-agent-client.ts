@@ -42,6 +42,7 @@ export interface ExecuteAgentActionInput {
     | 'create_google_drive_appdata_file'
     | 'update_google_drive_appdata_file'
     | 'delete_google_drive_appdata_file'
+    | 'create_google_photos_picker_session'
     | 'list_google_photos_media'
     | 'search_google_photos_media'
     | 'create_notion_page'

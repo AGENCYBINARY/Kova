@@ -42,6 +42,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_google_drive_appdata_file',
     'update_google_drive_appdata_file',
     'delete_google_drive_appdata_file',
+    'create_google_photos_picker_session',
     'list_google_photos_media',
     'search_google_photos_media',
     'create_notion_page',
@@ -82,6 +83,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_google_drive_appdata_file',
     'update_google_drive_appdata_file',
     'delete_google_drive_appdata_file',
+    'create_google_photos_picker_session',
     'list_google_photos_media',
     'search_google_photos_media',
     'create_notion_page',
@@ -120,6 +122,7 @@ const defaultRolePermissions: Record<WorkspaceRole, DashboardAction['type'][]> =
     'create_google_drive_appdata_file',
     'update_google_drive_appdata_file',
     'delete_google_drive_appdata_file',
+    'create_google_photos_picker_session',
     'list_google_photos_media',
     'search_google_photos_media',
     'create_notion_page',
@@ -192,6 +195,7 @@ function parseGovernancePreferences(value: unknown): GovernancePreferences {
           permission === 'create_google_drive_appdata_file' ||
           permission === 'update_google_drive_appdata_file' ||
           permission === 'delete_google_drive_appdata_file' ||
+          permission === 'create_google_photos_picker_session' ||
           permission === 'list_google_photos_media' ||
           permission === 'search_google_photos_media' ||
           permission === 'create_notion_page' ||

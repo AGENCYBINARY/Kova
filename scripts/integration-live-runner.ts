@@ -7,11 +7,11 @@ import { listKnownContacts } from '../src/lib/contacts'
 import { executeAgentToolRequest } from '../src/lib/agent/tool-execution'
 import { resolveConnectedWorkspaceContext } from '../src/lib/workspace-context/service'
 import {
+  createGooglePhotosPickerSession,
+  deleteGooglePhotosPickerSession,
   getValidGoogleAccessToken,
-  listGooglePhotosMedia,
   searchGmailMessages,
   searchGoogleDriveFiles,
-  searchGooglePhotosMedia,
 } from '../src/lib/integrations/google'
 import {
   getValidNotionAccessToken,
@@ -91,7 +91,6 @@ async function resolveScenarioDefaults(params: {
   let driveQuery = getOptionalEnv('KOVA_LIVE_DRIVE_QUERY')
   let notionPageQuery = getOptionalEnv('KOVA_LIVE_NOTION_PAGE_QUERY')
   let notionDatabaseQuery = getOptionalEnv('KOVA_LIVE_NOTION_DATABASE_QUERY')
-  let photosQuery = getOptionalEnv('KOVA_LIVE_PHOTOS_QUERY')
   let gmailThreadId: string | null = null
   let gmailMessageId: string | null = null
   let driveFileId: string | null = null
@@ -134,13 +133,6 @@ async function resolveScenarioDefaults(params: {
     }
   }
 
-  const photos = byType.get('google_photos')
-  if (photos && !photosQuery) {
-    const accessToken = await getValidGoogleAccessToken(photos)
-    const media = await listGooglePhotosMedia(accessToken, { maxResults: 5 })
-    photosQuery = media[0]?.filename || null
-  }
-
   return {
     gmailQuery,
     gmailThreadId,
@@ -156,7 +148,6 @@ async function resolveScenarioDefaults(params: {
     notionPageId,
     notionDatabaseQuery,
     notionDatabaseId,
-    photosQuery,
   }
 }
 
@@ -257,9 +248,8 @@ async function main() {
     scenarios.push({ name: 'notion-database-preview', prompt: withReference(`Crée une page dans la base de données Notion sélectionnée avec le titre "Live Runner"`, { source: 'notion', field: 'parentDatabaseId', id: defaults.notionDatabaseId }) })
   }
 
-  if (defaults.photosQuery) {
-    scenarios.push({ name: 'photos-search-preview', prompt: `Cherche dans Google Photos "${defaults.photosQuery}"` })
-    scenarios.push({ name: 'photos-list-preview', prompt: 'Liste mes médias Google Photos récents' })
+  if (byType.has('google_photos')) {
+    scenarios.push({ name: 'photos-picker-preview', prompt: 'Ouvre Google Photos pour que je choisisse des images' })
   }
 
   if (scenarios.length === 0) {
@@ -394,13 +384,16 @@ async function main() {
     }
 
     const photos = byType.get('google_photos')
-    if (photos && defaults.photosQuery) {
+    if (photos) {
       try {
         const accessToken = await getValidGoogleAccessToken(photos)
-        const media = await searchGooglePhotosMedia(accessToken, { query: defaults.photosQuery, maxResults: 2 })
-        results.push({ name: 'photos-search-execute', ok: true, detail: `${media.length} Google Photos item(s) matched` })
+        const session = await createGooglePhotosPickerSession(accessToken, {
+          requestId: `live-${Date.now()}`,
+        })
+        await deleteGooglePhotosPickerSession(accessToken, session.sessionId)
+        results.push({ name: 'photos-picker-execute', ok: true, detail: `picker session ${session.sessionId} created` })
       } catch (error) {
-        results.push({ name: 'photos-search-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
+        results.push({ name: 'photos-picker-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
       }
     }
   }

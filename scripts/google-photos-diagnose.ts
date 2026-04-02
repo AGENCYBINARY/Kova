@@ -1,5 +1,10 @@
 import { prisma } from '../src/lib/db/prisma'
 import { getValidGoogleAccessToken } from '../src/lib/integrations/google-auth'
+import {
+  createGooglePhotosPickerSession,
+  deleteGooglePhotosPickerSession,
+  getGooglePhotosPickerSession,
+} from '../src/lib/integrations/google-photos'
 
 async function main() {
   const workspaceId = process.env.KOVA_LIVE_WORKSPACE_ID || 'cmn3sp13d0002l50489gqx2pn'
@@ -19,21 +24,28 @@ async function main() {
   }
 
   const accessToken = await getValidGoogleAccessToken(integration)
-  const response = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems?pageSize=3', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
+  let sessionId: string | null = null
 
-  const body = await response.text()
+  try {
+    const session = await createGooglePhotosPickerSession(accessToken, {
+      requestId: `diag-${Date.now()}`,
+    })
+    sessionId = session.sessionId
+    const refreshed = await getGooglePhotosPickerSession(accessToken, session.sessionId)
 
-  console.log(JSON.stringify({
-    workspaceId,
-    userId,
-    status: response.status,
-    metadata: integration.metadata,
-    body,
-  }, null, 2))
+    console.log(JSON.stringify({
+      workspaceId,
+      userId,
+      ok: true,
+      metadata: integration.metadata,
+      session,
+      refreshed,
+    }, null, 2))
+  } finally {
+    if (sessionId) {
+      await deleteGooglePhotosPickerSession(accessToken, sessionId).catch(() => null)
+    }
+  }
 }
 
 main()

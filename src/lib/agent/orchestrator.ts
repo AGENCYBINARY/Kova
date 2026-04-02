@@ -400,11 +400,11 @@ async function orchestrateConnectedReadTurn(params: {
     data: {
       content: liveResponse,
       role: 'assistant',
-      metadata: {
+      metadata: toJsonValue({
         ...params.connectedContextResult.metadata,
         proposalCount: 0,
         workspaceRole: params.governanceRole,
-      },
+      }),
       userId,
       workspaceId,
     },

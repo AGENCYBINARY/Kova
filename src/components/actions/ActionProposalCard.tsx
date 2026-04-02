@@ -95,6 +95,16 @@ function renderDrivePreview(parameters: Record<string, unknown>, t: ReturnType<t
   )
 }
 
+function renderGooglePhotosPickerPreview() {
+  return (
+    <div className={styles.previewBlock}>
+      <div className={styles.previewBody}>
+        Open a secure Google Photos picker session so the user can choose the exact media to use.
+      </div>
+    </div>
+  )
+}
+
 const actionIcons: Record<string, JSX.Element> = {
   send_email: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -124,6 +134,13 @@ const actionIcons: Record<string, JSX.Element> = {
       <path d="M9 3 4 12M15 3l5 9M7 16h10" />
     </svg>
   ),
+  create_google_photos_picker_session: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M19 5 21 3" />
+    </svg>
+  ),
 }
 
 export function ActionProposalCard({ id, type, title, description, parameters, onApprove, onReject, loading }: ActionProposalCardProps) {
@@ -133,6 +150,7 @@ export function ActionProposalCard({ id, type, title, description, parameters, o
     if (type === 'send_email') return renderEmailPreview(parameters, t)
     if (type === 'create_calendar_event') return renderCalendarPreview(parameters, t)
     if (type === 'create_google_drive_file') return renderDrivePreview(parameters, t)
+    if (type === 'create_google_photos_picker_session') return renderGooglePhotosPickerPreview()
     return (
       <div className={styles.parametersCompact}>
         <pre className={styles.paramsJson}>{JSON.stringify(parameters, null, 2)}</pre>

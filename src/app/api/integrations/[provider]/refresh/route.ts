@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
 import { getGoogleIntegrationCapabilityState, getValidGoogleAccessToken } from '@/lib/integrations/google-auth'
-import { listGooglePhotosMedia } from '@/lib/integrations/google'
+import {
+  createGooglePhotosPickerSession,
+  deleteGooglePhotosPickerSession,
+  withGooglePhotosPickerSessionMetadata,
+} from '@/lib/integrations/google'
 import { getValidNotionAccessToken } from '@/lib/integrations/notion'
 
 const GOOGLE_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos'] as const
@@ -100,18 +104,15 @@ export async function POST(
     if (googlePhotosIntegration && !googlePhotosCapabilityState?.needsReconnect) {
       try {
         const accessToken = await getValidGoogleAccessToken(googlePhotosIntegration)
-        await listGooglePhotosMedia(accessToken, { maxResults: 1 })
+        const session = await createGooglePhotosPickerSession(accessToken)
+        await deleteGooglePhotosPickerSession(accessToken, session.sessionId)
 
         await prisma.integration.update({
           where: { id: googlePhotosIntegration.id },
           data: {
             lastSyncAt: now,
             status: 'connected',
-            metadata: {
-              ...asRecord(googlePhotosIntegration.metadata),
-              providerError: null,
-              healthCheckAt: now.toISOString(),
-            },
+            metadata: withGooglePhotosPickerSessionMetadata(googlePhotosIntegration.metadata, session),
           },
         })
       } catch (error) {

@@ -49,6 +49,7 @@ export interface DashboardAction {
     | 'create_google_drive_appdata_file'
     | 'update_google_drive_appdata_file'
     | 'delete_google_drive_appdata_file'
+    | 'create_google_photos_picker_session'
     | 'list_google_photos_media'
     | 'search_google_photos_media'
   title: string
@@ -254,8 +255,8 @@ export const dashboardIntegrations: DashboardIntegration[] = [
   {
     id: 'google_photos',
     name: 'Google Photos',
-    description: 'Surface recent photos and albums for reference workflows and media lookups.',
-    shortDescription: 'Photo library visibility and retrieval.',
+    description: 'Start secure picker sessions and work with the photos the user explicitly selects.',
+    shortDescription: 'Picker-based photo selection.',
     color: '#FABB05',
     icon: '◉',
     status: 'disconnected',

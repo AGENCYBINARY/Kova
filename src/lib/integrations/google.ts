@@ -71,10 +71,15 @@ export {
 } from '@/lib/integrations/google-drive'
 
 export {
-  listGooglePhotoAlbums,
+  GOOGLE_PHOTOS_PICKER_SCOPE,
+  createGooglePhotosPickerSession,
+  deleteGooglePhotosPickerSession,
+  getGooglePhotosPickerSession,
+  getGooglePhotosPickerSessionMetadata,
   listGooglePhotosMedia,
-  listRecentGooglePhotos,
   searchGooglePhotosMedia,
-  type GooglePhotoAlbumSummary,
+  withGooglePhotosPickerSessionMetadata,
+  type GooglePhotosPickerSession,
+  type GooglePhotosPickerSessionMetadata,
   type GooglePhotoSummary,
 } from '@/lib/integrations/google-photos'
