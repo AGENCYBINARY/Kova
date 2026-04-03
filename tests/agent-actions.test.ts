@@ -31,6 +31,34 @@ test('fallback routes Gmail label removal to the right action', async () => {
   }
 })
 
+test('gmail subjects containing the word Starts do not trigger a star action by mistake', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Archive le thread Gmail "OpenClaw Foundation Starts Hiring"', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['archive_gmail_thread'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
+test('gmail draft requests with Starts in the quoted subject stay draft actions', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Prépare un brouillon Gmail pour contact@agencybinary.fr à propos de "OpenClaw Foundation Starts Hiring"', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_gmail_draft'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
 test('fallback routes Drive folder creation to the right action', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   delete process.env.OPENAI_API_KEY

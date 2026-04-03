@@ -207,20 +207,20 @@ async function main() {
   }
 
   const results: Array<{ name: string; ok: boolean; detail: string }> = []
-  const scenarios: Array<{ name: string; prompt: string }> = []
+  const scenarios: Array<{ name: string; prompt: string; expectedTypes?: string[] }> = []
 
   if (defaults.gmailQuery) {
-    scenarios.push({ name: 'gmail-archive-preview', prompt: withReference(`Archive le thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
-    scenarios.push({ name: 'gmail-unarchive-preview', prompt: withReference(`Remets le thread Gmail "${defaults.gmailQuery}" dans la boîte de réception`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
-    scenarios.push({ name: 'gmail-label-preview', prompt: withReference(`Ajoute le label "${defaults.gmailLabel}" au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
-    scenarios.push({ name: 'gmail-unread-preview', prompt: withReference(`Marque le thread Gmail "${defaults.gmailQuery}" comme non lu`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
-    scenarios.push({ name: 'gmail-star-preview', prompt: withReference(`Ajoute une étoile au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
-    scenarios.push({ name: 'gmail-trash-preview', prompt: withReference(`Mets le thread Gmail "${defaults.gmailQuery}" dans la corbeille`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }) })
+    scenarios.push({ name: 'gmail-archive-preview', prompt: withReference(`Archive le thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['archive_gmail_thread'] })
+    scenarios.push({ name: 'gmail-unarchive-preview', prompt: withReference(`Remets le thread Gmail "${defaults.gmailQuery}" dans la boîte de réception`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['unarchive_gmail_thread'] })
+    scenarios.push({ name: 'gmail-label-preview', prompt: withReference(`Ajoute le label "${defaults.gmailLabel}" au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['label_gmail_thread'] })
+    scenarios.push({ name: 'gmail-unread-preview', prompt: withReference(`Marque le thread Gmail "${defaults.gmailQuery}" comme non lu`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['mark_gmail_thread_unread'] })
+    scenarios.push({ name: 'gmail-star-preview', prompt: withReference(`Ajoute une étoile au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['star_gmail_thread'] })
+    scenarios.push({ name: 'gmail-trash-preview', prompt: withReference(`Mets le thread Gmail "${defaults.gmailQuery}" dans la corbeille`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['trash_gmail_thread'] })
   }
 
   if (defaults.gmailQuery && defaults.forwardTo) {
-    scenarios.push({ name: 'gmail-forward-preview', prompt: withReference(`Transfère le mail Gmail "${defaults.gmailQuery}" à ${defaults.forwardTo}`, { source: 'gmail', field: 'messageId', id: defaults.gmailMessageId }) })
-    scenarios.push({ name: 'gmail-draft-preview', prompt: `Prépare un brouillon Gmail pour ${defaults.forwardTo} à propos de "${defaults.gmailQuery}"` })
+    scenarios.push({ name: 'gmail-forward-preview', prompt: withReference(`Transfère le mail Gmail "${defaults.gmailQuery}" à ${defaults.forwardTo}`, { source: 'gmail', field: 'messageId', id: defaults.gmailMessageId }), expectedTypes: ['forward_email'] })
+    scenarios.push({ name: 'gmail-draft-preview', prompt: `Prépare un brouillon Gmail pour ${defaults.forwardTo} à propos de "${defaults.gmailQuery}"`, expectedTypes: ['create_gmail_draft'] })
   }
 
   if (defaults.driveQuery) {
@@ -230,26 +230,27 @@ async function main() {
         `Crée un dossier Google Drive "Kova Live Folder ${new Date().toISOString().slice(0, 10)}" dans "${defaults.driveFolder}"`,
         { source: 'google_drive', field: 'parentFolderId', id: defaults.driveFolderId }
       ),
+      expectedTypes: ['create_google_drive_folder'],
     })
-    scenarios.push({ name: 'drive-move-preview', prompt: withReference(`Déplace le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
-    scenarios.push({ name: 'drive-rename-preview', prompt: withReference(`Renomme le fichier Google Drive nommé "${defaults.driveQuery}" en "kova-live-renamed"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
-    scenarios.push({ name: 'drive-copy-preview', prompt: withReference(`Duplique le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
+    scenarios.push({ name: 'drive-move-preview', prompt: withReference(`Déplace le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['move_google_drive_file'] })
+    scenarios.push({ name: 'drive-rename-preview', prompt: withReference(`Renomme le fichier Google Drive nommé "${defaults.driveQuery}" en "kova-live-renamed"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['rename_google_drive_file'] })
+    scenarios.push({ name: 'drive-copy-preview', prompt: withReference(`Duplique le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['copy_google_drive_file'] })
   }
   if (defaults.driveQuery && defaults.driveShareTo) {
-    scenarios.push({ name: 'drive-share-preview', prompt: withReference(`Partage le fichier Google Drive sélectionné avec ${defaults.driveShareTo}`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
-    scenarios.push({ name: 'drive-unshare-preview', prompt: withReference(`Retire l'accès au fichier Google Drive sélectionné pour ${defaults.driveShareTo}`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }) })
+    scenarios.push({ name: 'drive-share-preview', prompt: withReference(`Partage le fichier Google Drive sélectionné avec ${defaults.driveShareTo}`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['share_google_drive_file'] })
+    scenarios.push({ name: 'drive-unshare-preview', prompt: withReference(`Retire l'accès au fichier Google Drive sélectionné pour ${defaults.driveShareTo}`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['unshare_google_drive_file'] })
   }
 
   if (defaults.notionPageQuery) {
-    scenarios.push({ name: 'notion-properties-preview', prompt: withReference(`Mets à jour le statut de la page Notion "${defaults.notionPageQuery}" à Done`, { source: 'notion', field: 'pageId', id: defaults.notionPageId }) })
-    scenarios.push({ name: 'notion-archive-preview', prompt: withReference(`Archive la page Notion "${defaults.notionPageQuery}"`, { source: 'notion', field: 'pageId', id: defaults.notionPageId }) })
+    scenarios.push({ name: 'notion-properties-preview', prompt: withReference(`Mets à jour le statut de la page Notion "${defaults.notionPageQuery}" à Done`, { source: 'notion', field: 'pageId', id: defaults.notionPageId }), expectedTypes: ['update_notion_page_properties'] })
+    scenarios.push({ name: 'notion-archive-preview', prompt: withReference(`Archive la page Notion "${defaults.notionPageQuery}"`, { source: 'notion', field: 'pageId', id: defaults.notionPageId }), expectedTypes: ['archive_notion_page'] })
   }
   if (defaults.notionDatabaseQuery) {
-    scenarios.push({ name: 'notion-database-preview', prompt: withReference(`Crée une page dans la base de données Notion sélectionnée avec le titre "Live Runner"`, { source: 'notion', field: 'parentDatabaseId', id: defaults.notionDatabaseId }) })
+    scenarios.push({ name: 'notion-database-preview', prompt: withReference(`Crée une page dans la base de données Notion sélectionnée avec le titre "Live Runner"`, { source: 'notion', field: 'parentDatabaseId', id: defaults.notionDatabaseId }), expectedTypes: ['create_notion_page'] })
   }
 
   if (byType.has('google_photos')) {
-    scenarios.push({ name: 'photos-picker-preview', prompt: 'Ouvre Google Photos pour que je choisisse des images' })
+    scenarios.push({ name: 'photos-picker-preview', prompt: 'Ouvre Google Photos pour que je choisisse des images', expectedTypes: ['create_google_photos_picker_session'] })
   }
 
   if (scenarios.length === 0) {
@@ -265,11 +266,17 @@ async function main() {
         userId: target.userId,
         prompt: scenario.prompt,
       })
+      const proposalTypes = preview.proposals.map((proposal) => proposal.type)
       const hasActionOrClarification = preview.proposals.length > 0 || (preview.disambiguations || []).length > 0
+      const matchesExpectedTypes =
+        scenario.expectedTypes && scenario.expectedTypes.length > 0
+          ? proposalTypes.length === scenario.expectedTypes.length &&
+            scenario.expectedTypes.every((expectedType, index) => proposalTypes[index] === expectedType)
+          : true
       results.push({
         name: scenario.name,
-        ok: hasActionOrClarification,
-        detail: `${preview.proposals.length} proposal(s) | types=${preview.proposals.map((proposal) => proposal.type).join(', ') || 'none'} | ${(preview.disambiguations || []).length} clarification(s) | ${preview.response}`,
+        ok: hasActionOrClarification && matchesExpectedTypes,
+        detail: `${preview.proposals.length} proposal(s) | types=${proposalTypes.join(', ') || 'none'} | expected=${scenario.expectedTypes?.join(', ') || 'any'} | ${(preview.disambiguations || []).length} clarification(s) | ${preview.response}`,
       })
     } catch (error) {
       results.push({

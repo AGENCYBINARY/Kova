@@ -1224,8 +1224,8 @@ export function buildFallbackResponseWithContactsAndProfile(
   const removeLabelIntent = /(remove label|remove labels|retire le label|retire les labels|supprime le label|supprime les labels)/.test(intentText)
   const markUnreadIntent = /(non lu|unread|marque.*non lu|mark.*unread)/.test(intentText)
   const markReadIntent = /(marque.*lu|mark.*read|\blu\b)/.test(intentText) && !markUnreadIntent
-  const starIntent = /(star|etoile|étoile|epingle|épingl)/.test(intentText)
-  const unstarIntent = /(unstar|retire.*etoile|retire.*étoile|enleve.*etoile|enleve.*étoile)/.test(intentText)
+  const starIntent = /\b(star|etoile|étoile|epingle|épingl(?:e|er|é|ée|er)?)\b/.test(intentText)
+  const unstarIntent = /\b(unstar)\b|(retire|retirer|enleve|enlever).*(etoile|étoile)/.test(intentText)
   const trashIntent = /(trash|corbeille|supprime.*gmail|jette)/.test(intentText)
   const permanentDeleteIntent = /(supprime definitivement|supprimer definitivement|hard delete|delete permanently|efface definitivement)/.test(intentText)
   const deleteIntent = /(delete|remove|supprime|supprimer|efface|annule|cancel)/.test(intentText)
