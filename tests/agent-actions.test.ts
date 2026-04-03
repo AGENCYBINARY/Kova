@@ -176,6 +176,20 @@ test('gmail draft requests create a real draft proposal instead of a conversatio
   }
 })
 
+test('google doc section additions are treated as document updates', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn('Ajoute une section "Décisions" dans le Google Doc sélectionné', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['update_google_doc'])
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
 test('generic capability calendar questions do not create action proposals', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   delete process.env.OPENAI_API_KEY

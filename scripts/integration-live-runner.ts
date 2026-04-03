@@ -5,11 +5,17 @@ import { runAgentTurn } from '../src/lib/agent/v1'
 import { getWorkspaceGovernance } from '../src/lib/agent/governance'
 import { listKnownContacts } from '../src/lib/contacts'
 import { executeAgentToolRequest } from '../src/lib/agent/tool-execution'
+import { claimPendingActionIds } from '../src/lib/actions/claim-pending'
+import { executePersistedActionBatch } from '../src/lib/actions/execute-persisted-batch'
 import { resolveConnectedWorkspaceContext } from '../src/lib/workspace-context/service'
 import {
   createGooglePhotosPickerSession,
   deleteGooglePhotosPickerSession,
+  deleteGoogleCalendarEvent,
+  deleteGoogleDriveFile,
   getValidGoogleAccessToken,
+  listGoogleCalendarEvents,
+  listRecentGoogleDocs,
   searchGmailMessages,
   searchGoogleDriveFiles,
 } from '../src/lib/integrations/google'
@@ -65,6 +71,49 @@ async function previewPrompt(params: {
   }
 }
 
+async function executeLiveAction(params: {
+  workspaceId: string
+  userId: string
+  actionType: string
+  parameters: Record<string, unknown>
+}) {
+  const result = await executeAgentToolRequest({
+    actionType: params.actionType as never,
+    parameters: params.parameters,
+    requireApproval: false,
+    context: { workspaceId: params.workspaceId, userId: params.userId },
+  })
+
+  if (result.mode === 'executed') {
+    return result.execution.output
+  }
+
+  await claimPendingActionIds(prisma, {
+    actionIds: [result.action.id],
+    workspaceId: params.workspaceId,
+    userId: params.userId,
+  })
+
+  const batchResult = await executePersistedActionBatch({
+    actions: [{
+      id: result.action.id,
+      type: result.action.type,
+      title: result.action.title,
+      description: result.action.description,
+      parameters: result.action.parameters,
+      workspaceId: params.workspaceId,
+      userId: params.userId,
+    }],
+    trigger: 'approval',
+  })
+
+  if (batchResult.failed || batchResult.completed.length === 0) {
+    throw new Error(batchResult.failed?.error || `${params.actionType} failed after approval.`)
+  }
+
+  return batchResult.completed[0].execution.output
+}
+
 async function resolveScenarioDefaults(params: {
   workspaceId: string
   userId: string
@@ -89,12 +138,16 @@ async function resolveScenarioDefaults(params: {
 
   let gmailQuery = getOptionalEnv('KOVA_LIVE_GMAIL_QUERY')
   let driveQuery = getOptionalEnv('KOVA_LIVE_DRIVE_QUERY')
+  let docsQuery = getOptionalEnv('KOVA_LIVE_DOCS_QUERY')
   let notionPageQuery = getOptionalEnv('KOVA_LIVE_NOTION_PAGE_QUERY')
   let notionDatabaseQuery = getOptionalEnv('KOVA_LIVE_NOTION_DATABASE_QUERY')
   let gmailThreadId: string | null = null
   let gmailMessageId: string | null = null
+  let calendarEventQuery = getOptionalEnv('KOVA_LIVE_CALENDAR_QUERY')
+  let calendarEventId: string | null = null
   let driveFileId: string | null = null
   let driveFolderId: string | null = null
+  let docsDocumentId: string | null = null
   let notionPageId: string | null = null
   let notionDatabaseId: string | null = null
 
@@ -118,6 +171,28 @@ async function resolveScenarioDefaults(params: {
     driveFolderId = firstFolder?.id || null
   }
 
+  const calendar = byType.get('calendar')
+  if (calendar && !calendarEventQuery) {
+    const accessToken = await getValidGoogleAccessToken(calendar)
+    const now = new Date()
+    const later = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const events = await listGoogleCalendarEvents(accessToken, {
+      timeMin: now.toISOString(),
+      timeMax: later.toISOString(),
+      maxResults: 5,
+    })
+    calendarEventQuery = events[0]?.title || null
+    calendarEventId = events[0]?.id || null
+  }
+
+  const docs = byType.get('google_docs')
+  if (docs && !docsQuery) {
+    const accessToken = await getValidGoogleAccessToken(docs)
+    const documents = await listRecentGoogleDocs(accessToken, { maxResults: 5 })
+    docsQuery = documents[0]?.title || null
+    docsDocumentId = documents[0]?.id || null
+  }
+
   const notion = byType.get('notion')
   if (notion && (!notionPageQuery || !notionDatabaseQuery)) {
     const accessToken = getValidNotionAccessToken(notion)
@@ -139,11 +214,15 @@ async function resolveScenarioDefaults(params: {
     gmailMessageId,
     gmailLabel: getOptionalEnv('KOVA_LIVE_GMAIL_LABEL') || 'À traiter',
     forwardTo: getOptionalEnv('KOVA_LIVE_FORWARD_TO') || knownContacts[0]?.email || user?.email || null,
+    calendarEventQuery,
+    calendarEventId,
     driveQuery,
     driveFileId,
     driveFolder: getOptionalEnv('KOVA_LIVE_DRIVE_FOLDER') || 'Kova Live Tests',
     driveFolderId,
     driveShareTo: getOptionalEnv('KOVA_LIVE_DRIVE_SHARE_TO') || knownContacts[0]?.email || user?.email || null,
+    docsQuery,
+    docsDocumentId,
     notionPageQuery,
     notionPageId,
     notionDatabaseQuery,
@@ -152,7 +231,7 @@ async function resolveScenarioDefaults(params: {
 }
 
 function withReference(prompt: string, reference?: {
-  source: 'gmail' | 'google_drive' | 'notion'
+  source: 'gmail' | 'calendar' | 'google_docs' | 'google_drive' | 'notion'
   field: string
   id: string | null
 }) {
@@ -208,6 +287,9 @@ async function main() {
 
   const results: Array<{ name: string; ok: boolean; detail: string }> = []
   const scenarios: Array<{ name: string; prompt: string; expectedTypes?: string[] }> = []
+  const previewStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+  previewStart.setUTCHours(9, 0, 0, 0)
+  const previewEnd = new Date(previewStart.getTime() + 30 * 60 * 1000)
 
   if (defaults.gmailQuery) {
     scenarios.push({ name: 'gmail-archive-preview', prompt: withReference(`Archive le thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['archive_gmail_thread'] })
@@ -223,6 +305,26 @@ async function main() {
     scenarios.push({ name: 'gmail-draft-preview', prompt: `Prépare un brouillon Gmail pour ${defaults.forwardTo} à propos de "${defaults.gmailQuery}"`, expectedTypes: ['create_gmail_draft'] })
   }
 
+  if (byType.has('calendar')) {
+    scenarios.push({
+      name: 'calendar-create-preview',
+      prompt: 'Crée un événement Google Calendar demain à 9h pendant 30 minutes intitulé "Kova Live Preview"',
+      expectedTypes: ['create_calendar_event'],
+    })
+  }
+  if (byType.has('calendar') && defaults.calendarEventQuery) {
+    scenarios.push({
+      name: 'calendar-update-preview',
+      prompt: withReference("Mets à jour l'événement Google Calendar sélectionné en le décalant de 30 minutes", { source: 'calendar', field: 'eventId', id: defaults.calendarEventId }),
+      expectedTypes: ['update_calendar_event'],
+    })
+    scenarios.push({
+      name: 'calendar-delete-preview',
+      prompt: withReference("Supprime l'événement Google Calendar sélectionné", { source: 'calendar', field: 'eventId', id: defaults.calendarEventId }),
+      expectedTypes: ['delete_calendar_event'],
+    })
+  }
+
   if (defaults.driveQuery) {
     scenarios.push({
       name: 'drive-folder-preview',
@@ -232,9 +334,9 @@ async function main() {
       ),
       expectedTypes: ['create_google_drive_folder'],
     })
-    scenarios.push({ name: 'drive-move-preview', prompt: withReference(`Déplace le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['move_google_drive_file'] })
-    scenarios.push({ name: 'drive-rename-preview', prompt: withReference(`Renomme le fichier Google Drive nommé "${defaults.driveQuery}" en "kova-live-renamed"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['rename_google_drive_file'] })
-    scenarios.push({ name: 'drive-copy-preview', prompt: withReference(`Duplique le fichier Google Drive nommé "${defaults.driveQuery}" dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['copy_google_drive_file'] })
+    scenarios.push({ name: 'drive-move-preview', prompt: withReference(`Déplace le fichier Google Drive sélectionné dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['move_google_drive_file'] })
+    scenarios.push({ name: 'drive-rename-preview', prompt: withReference('Renomme le fichier Google Drive sélectionné en "kova-live-renamed"', { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['rename_google_drive_file'] })
+    scenarios.push({ name: 'drive-copy-preview', prompt: withReference(`Duplique le fichier Google Drive sélectionné dans le dossier "${defaults.driveFolder}"`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['copy_google_drive_file'] })
   }
   if (defaults.driveQuery && defaults.driveShareTo) {
     scenarios.push({ name: 'drive-share-preview', prompt: withReference(`Partage le fichier Google Drive sélectionné avec ${defaults.driveShareTo}`, { source: 'google_drive', field: 'fileId', id: defaults.driveFileId }), expectedTypes: ['share_google_drive_file'] })
@@ -247,6 +349,21 @@ async function main() {
   }
   if (defaults.notionDatabaseQuery) {
     scenarios.push({ name: 'notion-database-preview', prompt: withReference(`Crée une page dans la base de données Notion sélectionnée avec le titre "Live Runner"`, { source: 'notion', field: 'parentDatabaseId', id: defaults.notionDatabaseId }), expectedTypes: ['create_notion_page'] })
+  }
+
+  if (byType.has('google_docs')) {
+    scenarios.push({
+      name: 'docs-create-preview',
+      prompt: 'Crée un Google Doc intitulé "Kova Live Preview Doc" avec un résumé exécutif et des prochaines étapes.',
+      expectedTypes: ['create_google_doc'],
+    })
+  }
+  if (byType.has('google_docs') && defaults.docsQuery) {
+    scenarios.push({
+      name: 'docs-update-preview',
+      prompt: withReference('Ajoute une section "Décisions" dans le Google Doc sélectionné', { source: 'google_docs', field: 'documentId', id: defaults.docsDocumentId }),
+      expectedTypes: ['update_google_doc'],
+    })
   }
 
   if (byType.has('google_photos')) {
@@ -336,6 +453,75 @@ async function main() {
         }
       } catch (error) {
         results.push({ name: 'drive-rename-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
+      }
+    }
+
+    const calendar = byType.get('calendar')
+    if (calendar) {
+      try {
+        const calendarOutput = await executeLiveAction({
+          workspaceId: target.workspaceId,
+          userId: target.userId,
+          actionType: 'create_calendar_event',
+          parameters: {
+            title: `Kova Live ${new Date().toISOString()}`,
+            startTime: previewStart.toISOString(),
+            endTime: previewEnd.toISOString(),
+            attendees: defaults.forwardTo ? [defaults.forwardTo] : [],
+            createMeetLink: false,
+            description: 'Created by Kova integration live runner.',
+          },
+        })
+        const eventId = typeof calendarOutput.eventId === 'string' ? calendarOutput.eventId : ''
+        if (!eventId) {
+          throw new Error('Calendar create did not return an eventId.')
+        }
+        const accessToken = await getValidGoogleAccessToken(calendar)
+        await deleteGoogleCalendarEvent(accessToken, { eventId })
+        results.push({ name: 'calendar-create-execute', ok: true, detail: `event ${eventId} created and cleaned up` })
+      } catch (error) {
+        results.push({ name: 'calendar-create-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
+      }
+    }
+
+    const docs = byType.get('google_docs')
+    if (docs) {
+      try {
+        const createDocOutput = await executeLiveAction({
+          workspaceId: target.workspaceId,
+          userId: target.userId,
+          actionType: 'create_google_doc',
+          parameters: {
+            title: `Kova Live Doc ${new Date().toISOString()}`,
+            sections: ['Résumé exécutif', 'Décisions', 'Prochaines étapes'],
+            sourcePrompt: 'Validation live Kova',
+            content: 'Document créé automatiquement pour valider les write-paths Google Docs.',
+          },
+        })
+        const documentId = typeof createDocOutput.documentId === 'string' ? createDocOutput.documentId : ''
+        if (!documentId) {
+          throw new Error('Google Doc create did not return a documentId.')
+        }
+
+        await executeLiveAction({
+          workspaceId: target.workspaceId,
+          userId: target.userId,
+          actionType: 'update_google_doc',
+          parameters: {
+            documentId,
+            content: 'Ajout automatique de validation live Kova.',
+          },
+        })
+
+        const drive = byType.get('google_drive')
+        if (drive) {
+          const accessToken = await getValidGoogleAccessToken(drive)
+          await deleteGoogleDriveFile(accessToken, { fileId: documentId })
+        }
+
+        results.push({ name: 'docs-write-execute', ok: true, detail: `document ${documentId} created, updated and cleaned up` })
+      } catch (error) {
+        results.push({ name: 'docs-write-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
       }
     }
 

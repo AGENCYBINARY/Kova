@@ -173,6 +173,21 @@ export function getValidNotionAccessToken(integration: { accessToken: string }) 
   return token
 }
 
+export async function probeNotionAccess(token: string) {
+  const response = await notionRequest('https://api.notion.com/v1/users/me', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Notion-Version': NOTION_VERSION,
+    },
+  }, { timeoutMs: NOTION_READ_TIMEOUT_MS, retries: 1 })
+
+  if (!response.ok) {
+    throw new Error(`Notion access probe failed: ${response.status}`)
+  }
+
+  return response.json() as Promise<{ object?: string; id?: string }>
+}
+
 async function notionFetch(
   path: string,
   token: string,

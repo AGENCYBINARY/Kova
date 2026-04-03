@@ -13,6 +13,8 @@
     "integration:smoke:prod": "tsx --env-file-if-exists=.env.vercel.prod.local scripts/integration-smoke.ts",
     "integration:live": "tsx --env-file-if-exists=.env.vercel.local scripts/run-integration-live.ts",
     "integration:live:prod": "tsx --env-file-if-exists=.env.vercel.prod.local scripts/run-integration-live.ts",
+    "integration:live:execute": "KOVA_LIVE_EXECUTE=true tsx --env-file-if-exists=.env.vercel.local scripts/run-integration-live.ts",
+    "integration:live:execute:prod": "KOVA_LIVE_EXECUTE=true tsx --env-file-if-exists=.env.vercel.prod.local scripts/run-integration-live.ts",
     "integration:live:setup": "KOVA_LIVE_WRITE_ENV=true tsx --env-file-if-exists=.env.vercel.local scripts/run-integration-live.ts --setup-only",
     "integration:live:setup:prod": "KOVA_LIVE_WRITE_ENV=true tsx --env-file-if-exists=.env.vercel.prod.local scripts/run-integration-live.ts --setup-only",
     "integration:photos:diag:prod": "tsx --env-file-if-exists=.env.vercel.prod.local scripts/google-photos-diagnose.ts",

@@ -1229,7 +1229,7 @@ export function buildFallbackResponseWithContactsAndProfile(
   const trashIntent = /(trash|corbeille|supprime.*gmail|jette)/.test(intentText)
   const permanentDeleteIntent = /(supprime definitivement|supprimer definitivement|hard delete|delete permanently|efface definitivement)/.test(intentText)
   const deleteIntent = /(delete|remove|supprime|supprimer|efface|annule|cancel)/.test(intentText)
-  const updateIntent = /(update|edit|revise|rewrite|modifie|modifier|mets a jour|mettre a jour|complete|compl[eè]te)/.test(
+  const updateIntent = /(update|edit|revise|rewrite|modifie|modifier|mets a jour|mettre a jour|complete|compl[eè]te|add|append|ajoute|ajouter|insere|inserer|insert)/.test(
     intentText
   )
   const moveIntent = /(move|deplace|deplacer|range dans|place dans)/.test(intentText)

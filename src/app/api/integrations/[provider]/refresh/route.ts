@@ -5,9 +5,13 @@ import { getGoogleIntegrationCapabilityState, getValidGoogleAccessToken } from '
 import {
   createGooglePhotosPickerSession,
   deleteGooglePhotosPickerSession,
+  listGoogleCalendarEvents,
+  listRecentGoogleDocs,
+  listTodayGmailMessages,
+  searchGoogleDriveFiles,
   withGooglePhotosPickerSessionMetadata,
 } from '@/lib/integrations/google'
-import { getValidNotionAccessToken } from '@/lib/integrations/notion'
+import { getValidNotionAccessToken, probeNotionAccess } from '@/lib/integrations/notion'
 
 const GOOGLE_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos'] as const
 
@@ -17,6 +21,87 @@ function asRecord(value: unknown): Record<string, unknown> {
   }
 
   return {}
+}
+
+function withProviderHealthMetadata(
+  metadata: unknown,
+  params: {
+    providerError?: string | null
+    healthCheckAt: string
+    extra?: Record<string, unknown>
+  }
+) {
+  return {
+    ...asRecord(metadata),
+    ...(params.extra || {}),
+    providerError: params.providerError ?? null,
+    healthCheckAt: params.healthCheckAt,
+  }
+}
+
+async function probeGoogleIntegration(record: {
+  id: string
+  type: (typeof GOOGLE_TYPES)[number]
+  metadata: unknown
+  accessToken: string
+  refreshToken: string | null
+  expiresAt: Date | null
+}) {
+  const accessToken = await getValidGoogleAccessToken(record)
+  const now = new Date()
+  const healthCheckAt = now.toISOString()
+
+  switch (record.type) {
+    case 'gmail': {
+      await listTodayGmailMessages(accessToken, { maxResults: 1 })
+      return {
+        status: 'connected' as const,
+        lastSyncAt: now,
+        metadata: withProviderHealthMetadata(record.metadata, { healthCheckAt }),
+      }
+    }
+    case 'calendar': {
+      const later = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      await listGoogleCalendarEvents(accessToken, {
+        timeMin: now.toISOString(),
+        timeMax: later.toISOString(),
+        maxResults: 1,
+      })
+      return {
+        status: 'connected' as const,
+        lastSyncAt: now,
+        metadata: withProviderHealthMetadata(record.metadata, { healthCheckAt }),
+      }
+    }
+    case 'google_docs': {
+      await listRecentGoogleDocs(accessToken, { maxResults: 1 })
+      return {
+        status: 'connected' as const,
+        lastSyncAt: now,
+        metadata: withProviderHealthMetadata(record.metadata, { healthCheckAt }),
+      }
+    }
+    case 'google_drive': {
+      await searchGoogleDriveFiles(accessToken, { maxResults: 1 })
+      return {
+        status: 'connected' as const,
+        lastSyncAt: now,
+        metadata: withProviderHealthMetadata(record.metadata, { healthCheckAt }),
+      }
+    }
+    case 'google_photos': {
+      const session = await createGooglePhotosPickerSession(accessToken)
+      await deleteGooglePhotosPickerSession(accessToken, session.sessionId)
+      return {
+        status: 'connected' as const,
+        lastSyncAt: now,
+        metadata: withGooglePhotosPickerSessionMetadata(
+          withProviderHealthMetadata(record.metadata, { healthCheckAt }),
+          session
+        ),
+      }
+    }
+  }
 }
 
 export async function POST(
@@ -40,8 +125,6 @@ export async function POST(
   }
 
   if (params.provider === 'google') {
-    await getValidGoogleAccessToken(integration)
-
     const googleIntegrations = await prisma.integration.findMany({
       where: {
         userId: dbUserId,
@@ -60,87 +143,95 @@ export async function POST(
       },
     })
 
-    const now = new Date()
-    const groupedStatuses = googleIntegrations.reduce(
-      (groups, record) => {
-        const capabilityState = getGoogleIntegrationCapabilityState(
-          record.type as typeof GOOGLE_TYPES[number],
-          record.metadata
-        )
+    const failures: Array<{ provider: string; error: string }> = []
+    for (const googleIntegration of googleIntegrations) {
+      const now = new Date()
+      const capabilityState = getGoogleIntegrationCapabilityState(
+        googleIntegration.type as typeof GOOGLE_TYPES[number],
+        googleIntegration.metadata
+      )
 
-        groups[capabilityState.needsReconnect ? 'error' : 'connected'].push(record.id)
-        return groups
-      },
-      { connected: [] as string[], error: [] as string[] }
-    )
-
-    await Promise.all([
-      groupedStatuses.connected.length > 0
-        ? prisma.integration.updateMany({
-            where: { id: { in: groupedStatuses.connected } },
-            data: {
-              lastSyncAt: now,
-              status: 'connected',
-            },
-          })
-        : Promise.resolve(),
-      groupedStatuses.error.length > 0
-        ? prisma.integration.updateMany({
-            where: { id: { in: groupedStatuses.error } },
-            data: {
-              lastSyncAt: now,
-              status: 'error',
-            },
-          })
-        : Promise.resolve(),
-    ])
-
-    const googlePhotosIntegration = googleIntegrations.find((item) => item.type === 'google_photos')
-    const googlePhotosCapabilityState =
-      googlePhotosIntegration
-        ? getGoogleIntegrationCapabilityState('google_photos', googlePhotosIntegration.metadata)
-        : null
-
-    if (googlePhotosIntegration && !googlePhotosCapabilityState?.needsReconnect) {
-      try {
-        const accessToken = await getValidGoogleAccessToken(googlePhotosIntegration)
-        const session = await createGooglePhotosPickerSession(accessToken)
-        await deleteGooglePhotosPickerSession(accessToken, session.sessionId)
-
+      if (capabilityState.needsReconnect) {
+        const error = `Reconnect Google pour autoriser ${googleIntegration.type}.`
+        failures.push({ provider: googleIntegration.type, error })
         await prisma.integration.update({
-          where: { id: googlePhotosIntegration.id },
-          data: {
-            lastSyncAt: now,
-            status: 'connected',
-            metadata: withGooglePhotosPickerSessionMetadata(googlePhotosIntegration.metadata, session),
-          },
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Google Photos refresh failed.'
-
-        await prisma.integration.update({
-          where: { id: googlePhotosIntegration.id },
+          where: { id: googleIntegration.id },
           data: {
             lastSyncAt: now,
             status: 'error',
-            metadata: {
-              ...asRecord(googlePhotosIntegration.metadata),
-              providerError: message,
+            metadata: withProviderHealthMetadata(googleIntegration.metadata, {
+              providerError: error,
               healthCheckAt: now.toISOString(),
-            },
+            }),
           },
         })
+        continue
+      }
 
-        return NextResponse.json({ error: message }, { status: 424 })
+      try {
+        const probeResult = await probeGoogleIntegration({
+          ...googleIntegration,
+          type: googleIntegration.type as typeof GOOGLE_TYPES[number],
+        })
+        await prisma.integration.update({
+          where: { id: googleIntegration.id },
+          data: {
+            lastSyncAt: probeResult.lastSyncAt,
+            status: probeResult.status,
+            metadata: probeResult.metadata,
+          },
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : `${googleIntegration.type} refresh failed.`
+        failures.push({ provider: googleIntegration.type, error: message })
+
+        await prisma.integration.update({
+          where: { id: googleIntegration.id },
+          data: {
+            lastSyncAt: now,
+            status: 'error',
+            metadata: withProviderHealthMetadata(googleIntegration.metadata, {
+              providerError: message,
+              healthCheckAt: now.toISOString(),
+            }),
+          },
+        })
       }
     }
+
+    if (failures.length > 0) {
+      return NextResponse.json({ error: 'Google integration refresh failed.', failures }, { status: 424 })
+    }
   } else if (params.provider === 'notion') {
-    getValidNotionAccessToken(integration)
+    const now = new Date()
+    const accessToken = getValidNotionAccessToken(integration)
+    try {
+      await probeNotionAccess(accessToken)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Notion refresh failed.'
+      await prisma.integration.update({
+        where: { id: integration.id },
+        data: {
+          lastSyncAt: now,
+          status: 'error',
+          metadata: withProviderHealthMetadata(integration.metadata, {
+            providerError: message,
+            healthCheckAt: now.toISOString(),
+          }),
+        },
+      })
+      return NextResponse.json({ error: message }, { status: 424 })
+    }
+
     await prisma.integration.update({
       where: { id: integration.id },
       data: {
-        lastSyncAt: new Date(),
+        lastSyncAt: now,
         status: 'connected',
+        metadata: withProviderHealthMetadata(integration.metadata, {
+          healthCheckAt: now.toISOString(),
+        }),
       },
     })
   }

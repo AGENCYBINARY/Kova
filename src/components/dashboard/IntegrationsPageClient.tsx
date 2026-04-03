@@ -7,6 +7,62 @@ import { useLang } from '@/lib/lang-context'
 import type { IntegrationsPageData } from '@/lib/dashboard/server'
 import styles from '@/app/(dashboard)/integrations/page.module.css'
 
+function formatIntegrationError(errorCode: string, lang: 'fr' | 'en') {
+  const messages = {
+    google_oauth_state: {
+      fr: 'La connexion Google a expiré ou le lien de retour est invalide. Relance la connexion.',
+      en: 'Google sign-in expired or the callback link is invalid. Reconnect Google.',
+    },
+    google_oauth_config: {
+      fr: 'La configuration OAuth Google est incomplète côté serveur.',
+      en: 'Google OAuth server configuration is incomplete.',
+    },
+    google_oauth_exchange: {
+      fr: 'Google a refusé l’échange du code OAuth. Réessaie la connexion.',
+      en: 'Google rejected the OAuth code exchange. Try connecting again.',
+    },
+    google_oauth_account: {
+      fr: 'Google n’a pas permis de lire le compte connecté. Réessaie la connexion.',
+      en: 'Google did not allow reading the connected account. Reconnect Google.',
+    },
+    google_oauth_failed: {
+      fr: 'La connexion Google a échoué. Réessaie dans quelques secondes.',
+      en: 'Google connection failed. Try again in a few seconds.',
+    },
+    notion_oauth_state: {
+      fr: 'La connexion Notion a expiré ou le lien de retour est invalide. Relance la connexion.',
+      en: 'Notion sign-in expired or the callback link is invalid. Reconnect Notion.',
+    },
+    notion_oauth_config: {
+      fr: 'La configuration OAuth Notion est incomplète côté serveur.',
+      en: 'Notion OAuth server configuration is incomplete.',
+    },
+    notion_oauth_exchange: {
+      fr: 'Notion a refusé l’échange du code OAuth. Réessaie la connexion.',
+      en: 'Notion rejected the OAuth code exchange. Try connecting again.',
+    },
+    notion_oauth_context: {
+      fr: 'Le workspace actif n’a pas pu être résolu pendant la connexion Notion.',
+      en: 'The active workspace could not be resolved during Notion sign-in.',
+    },
+    notion_oauth_persist: {
+      fr: 'La connexion Notion a réussi mais l’enregistrement local a échoué.',
+      en: 'Notion connected but local persistence failed.',
+    },
+    notion_oauth_failed: {
+      fr: 'La connexion Notion a échoué. Réessaie dans quelques secondes.',
+      en: 'Notion connection failed. Try again in a few seconds.',
+    },
+  } as const
+
+  const message = messages[errorCode as keyof typeof messages]
+  if (message) {
+    return message[lang]
+  }
+
+  return lang === 'fr' ? `Erreur d’intégration : ${errorCode.replace(/_/g, ' ')}` : `Integration error: ${errorCode.replace(/_/g, ' ')}`
+}
+
 export function IntegrationsPageClient({ data }: { data: IntegrationsPageData }) {
   const { t, lang } = useLang()
   const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
@@ -16,7 +72,7 @@ export function IntegrationsPageClient({ data }: { data: IntegrationsPageData })
   const connectedCount = data.integrations.filter((integration) => integration.status === 'connected').length
 
   const successMessage = connectedParam ? `${t.integrations.connectedMsg} ${connectedParam}` : null
-  const errorMessage = errorParam ? `${t.integrations.errorMsg} ${errorParam.replace(/_/g, ' ')}` : null
+  const errorMessage = errorParam ? formatIntegrationError(errorParam, lang) : null
 
   return (
     <div className={styles.container}>
