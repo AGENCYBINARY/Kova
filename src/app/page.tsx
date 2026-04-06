@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import nextDynamic from 'next/dynamic'
-import { KovaAppIcon } from '@/components/brand/KovaAppIcon'
+import { KovaLayerMark } from '@/components/brand/KovaLayerMark'
 import styles from './page.module.css'
 
 const KovaDemoVideo = nextDynamic(() => import('@/components/landing/KovaDemoVideo'), {
@@ -67,7 +67,7 @@ export default function HomePage() {
       <header className={styles.nav}>
         <div className={styles.navInner}>
           <Link href="/" className={styles.brand}>
-            <KovaAppIcon size={26} gradientIdSuffix="landing-nav" />
+            <KovaLayerMark size={26} priority />
             <span>Kova</span>
           </Link>
           <div className={styles.navLinks}>
@@ -164,7 +164,7 @@ export default function HomePage() {
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           <Link href="/" className={styles.brand} style={{ opacity: 0.5 }}>
-            <KovaAppIcon size={20} gradientIdSuffix="landing-footer" />
+            <KovaLayerMark size={20} />
             <span>Kova</span>
           </Link>
           <div className={styles.footerLinks}>

@@ -1,6 +1,6 @@
 import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
-import { KovaAppIcon } from '@/components/brand/KovaAppIcon'
+import { KovaLayerMark } from '@/components/brand/KovaLayerMark'
 import styles from '../../auth.module.css'
 
 const features = [
@@ -16,7 +16,7 @@ export default function SignInPage() {
       {/* Left — branding */}
       <div className={styles.left}>
         <Link href="/" className={styles.leftBrand}>
-          <KovaAppIcon size={26} gradientIdSuffix="sign-in" />
+          <KovaLayerMark size={26} />
           Kova
         </Link>
 
