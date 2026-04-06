@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { asActionParameters } from '@/lib/actions/parameter-resolution'
 
 const MEET_LINK_PLACEHOLDER = /\{\{\s*meet_?link\s*\}\}/i
@@ -15,7 +16,9 @@ function emailBodyReferencesMeetPlaceholder(parameters: Record<string, unknown>)
  * Ensures stable execution order: proposal creation order first, then calendar before any
  * email/draft that still contains a Meet placeholder (so priorOutputs can inject the real URL).
  */
-export function sortBatchActionsForExecution<T extends { type: string; parameters: unknown }>(actions: T[]): T[] {
+export function sortBatchActionsForExecution<T extends { type: string; parameters: Prisma.JsonValue | Record<string, unknown> }>(
+  actions: T[]
+): T[] {
   if (actions.length < 2) {
     return actions
   }
@@ -28,7 +31,8 @@ export function sortBatchActionsForExecution<T extends { type: string; parameter
 
   const mailI = ordered.findIndex(
     (a) =>
-      (a.type === 'send_email' || a.type === 'create_gmail_draft') && emailBodyReferencesMeetPlaceholder(asActionParameters(a.parameters))
+      (a.type === 'send_email' || a.type === 'create_gmail_draft') &&
+      emailBodyReferencesMeetPlaceholder(asActionParameters(a.parameters))
   )
   const calI = ordered.findIndex((a) => a.type === 'create_calendar_event')
   if (mailI < 0 || calI < 0 || calI < mailI) {
