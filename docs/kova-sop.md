@@ -377,19 +377,49 @@ This section is the short operational memory for future sessions. Update it when
 
 ### Current Production Baseline
 
-As of `2026-04-01`:
+As of `2026-04-06`:
 
 - GitHub branch: `main`
 - current delivery line:
-  - `caf019c` `fix: harden app error handling`
-  - `16793d3` `fix: polish dashboard workspace ui`
-  - `743a45f` `fix: add dashboard error boundary`
+  - `ce3d26b` `feat(agent): keep OpenAI voice when merging deterministic proposals`
+  - `0ae5c11` `fix: harden provider refresh and live coverage`
 - current production deployment:
-  - Vercel deployment id: `dpl_5uJzyVzpAWEhuBxNjjMs6kJbGRcU`
+  - Vercel deployment id: `dpl_7MtbWq4QAHmkdbg4kd8VfAntkfCq`
   - production URL: [kova.agencybinary.fr](https://kova.agencybinary.fr)
 - database: Neon Postgres
+- current validation baseline:
+  - `npm test` -> `87/87`
+  - `npm run lint` -> OK
+  - `npm run build` -> OK
+  - `npm run integration:smoke:prod` -> OK on Gmail, Calendar, Google Docs, Google Drive, Notion, Google Photos
+  - `npm run integration:live:prod` -> OK `LIVE_RUNNER_OK 23`
+  - `npm run integration:live:execute:prod` -> OK on Gmail, Calendar, Google Drive, Google Docs, Notion, Google Photos
 
 ### Production Issues Already Closed
+
+#### Provider refresh was optimistic and OAuth errors were opaque
+
+Observed symptom:
+
+- `/integrations` could show a provider as healthy even if the provider call would fail
+- Google and Notion callback failures surfaced as generic integration errors
+- live validation covered previews well, but not enough write-path execution
+
+Resolution already applied:
+
+- refresh route now performs real provider probes per connected integration instead of trusting scope metadata alone
+- Notion refresh now calls a real probe (`/v1/users/me`)
+- Google and Notion OAuth callbacks now redirect with explicit error codes
+- integrations page translates those codes into user-facing messages
+- production live runner now covers preview plus write-path execution, including approval-gated Google Docs updates
+
+Main files:
+
+- [src/app/api/integrations/[provider]/refresh/route.ts](/Users/agencybinary/Documents/CODEX/src/app/api/integrations/[provider]/refresh/route.ts)
+- [src/app/api/integrations/callback/google/route.ts](/Users/agencybinary/Documents/CODEX/src/app/api/integrations/callback/google/route.ts)
+- [src/app/api/integrations/callback/notion/route.ts](/Users/agencybinary/Documents/CODEX/src/app/api/integrations/callback/notion/route.ts)
+- [src/components/dashboard/IntegrationsPageClient.tsx](/Users/agencybinary/Documents/CODEX/src/components/dashboard/IntegrationsPageClient.tsx)
+- [scripts/integration-live-runner.ts](/Users/agencybinary/Documents/CODEX/scripts/integration-live-runner.ts)
 
 #### Dashboard crash on open
 
