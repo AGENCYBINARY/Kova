@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Manrope } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 
 const manrope = Manrope({
@@ -31,7 +32,10 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" className={`${manrope.className} ${manrope.variable}`}>
-        <body>{children}</body>
+        <body>
+          {children}
+          <SpeedInsights />
+        </body>
       </html>
     </ClerkProvider>
   )
