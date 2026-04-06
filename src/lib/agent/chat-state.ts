@@ -21,6 +21,8 @@ export interface PendingActionRecord {
   title: string
   description: string
   parameters: Record<string, unknown>
+  /** ISO timestamp — disambiguates multiple pending bundles */
+  createdAt: string
 }
 
 export interface ChatMessageMetadata {
@@ -238,6 +240,7 @@ export async function loadChatRuntimeState(context: ChatContext) {
       title: action.title,
       description: action.description,
       parameters: asRecord(action.parameters),
+      createdAt: action.createdAt.toISOString(),
     })) satisfies PendingActionRecord[],
     recentActions: recentActionsRaw.map((action) => ({
       id: action.id,
@@ -245,6 +248,7 @@ export async function loadChatRuntimeState(context: ChatContext) {
       title: action.title,
       description: action.description,
       parameters: asRecord(action.parameters),
+      createdAt: action.createdAt.toISOString(),
     })) satisfies PendingActionRecord[],
   }
 }

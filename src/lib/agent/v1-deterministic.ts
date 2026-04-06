@@ -500,11 +500,21 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
 
 export function shouldPreferDeterministicAction(input: string, proposals: AgentProposal[]) {
   if (proposals.length === 0) return false
-  const useShortcuts =
-    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === 'true' ||
-    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === '1'
-  if (!useShortcuts) {
+
+  const explicitlyOff =
+    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === 'false' ||
+    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === '0'
+  if (explicitlyOff) {
     return false
+  }
+
+  const hasCal = proposals.some((p) => p.type === 'create_calendar_event')
+  const hasMail = proposals.some((p) => p.type === 'send_email' || p.type === 'create_gmail_draft')
+  if (hasCal && hasMail) {
+    return true
+  }
+  if (hasCal && proposals.length === 1) {
+    return true
   }
 
   const normalized = normalizeInput(input)
@@ -618,7 +628,7 @@ function buildCalendarEventDescriptionFromInput(input: string, meetingTitle: str
   return [`Ordre du jour : ${meetingTitle}`, '', 'Demande initiale :', trimmed].join('\n').slice(0, 8000)
 }
 
-function buildCalendarProposal(input: string, profile?: AssistantProfile, contact?: KnownContact | null): AgentProposal {
+export function buildCalendarProposal(input: string, profile?: AssistantProfile, contact?: KnownContact | null): AgentProposal {
   const durationMinutes = profile?.meetingDefaultDurationMinutes || 30
   const inferredRange = inferCalendarRangeFromUserText(input, durationMinutes)
   const now = Date.now()

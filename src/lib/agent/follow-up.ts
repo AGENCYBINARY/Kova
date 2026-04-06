@@ -1,8 +1,9 @@
 import type { AssistantProfile } from '@/lib/assistant/profile'
 import type { PendingActionRecord } from '@/lib/agent/chat-state'
 import type { AgentProposal } from '@/lib/agent/v1'
-import { buildMeetingEmailFollowupProposal } from '@/lib/agent/v1-deterministic'
+import { buildCalendarProposal, buildMeetingEmailFollowupProposal } from '@/lib/agent/v1-deterministic'
 import { deriveNameFromEmail, type KnownContact } from '@/lib/contacts'
+import { canInferCalendarRangeFromUserText } from '@/lib/scheduling/user-schedule'
 import { isMeetingDeliveryRefinementIntent } from '@/lib/workspace-context/intents'
 
 interface RecentActionCandidate {
@@ -198,20 +199,46 @@ function findAnchorMeetingUserContent(history: Array<{ role: string; content: st
   return scored.sort((a, b) => b.length - a.length)[0]
 }
 
-function pickCalendarAndMailFromPending(pending: PendingActionRecord[]) {
-  const cals = pending.filter((a) => a.type === 'create_calendar_event')
-  const mails = pending.filter((a) => a.type === 'send_email' || a.type === 'create_gmail_draft')
+function actionCreatedAt(a: PendingActionRecord): number {
+  const t = Date.parse(a.createdAt)
+  return Number.isFinite(t) ? t : 0
+}
 
-  for (const cal of cals) {
-    const gid = cal.parameters.requestGroupId
-    if (typeof gid === 'string') {
-      const mail = mails.find((m) => m.parameters.requestGroupId === gid)
-      if (mail) {
-        return { calendar: cal, mail }
-      }
+function pickCalendarAndMailFromPending(pending: PendingActionRecord[]) {
+  type Pair = { calendar: PendingActionRecord; mail: PendingActionRecord; ts: number }
+  const pairs: Pair[] = []
+  const byGid = new Map<string, PendingActionRecord[]>()
+
+  for (const a of pending) {
+    const gid = a.parameters.requestGroupId
+    if (typeof gid === 'string' && gid.length > 0) {
+      const list = byGid.get(gid) || []
+      list.push(a)
+      byGid.set(gid, list)
     }
   }
 
+  for (const actions of Array.from(byGid.values())) {
+    const cal = actions.find((x) => x.type === 'create_calendar_event')
+    const mail = actions.find((x) => x.type === 'send_email' || x.type === 'create_gmail_draft')
+    if (cal && mail) {
+      pairs.push({
+        calendar: cal,
+        mail,
+        ts: Math.max(actionCreatedAt(cal), actionCreatedAt(mail)),
+      })
+    }
+  }
+
+  if (pairs.length > 0) {
+    pairs.sort((a, b) => b.ts - a.ts)
+    return { calendar: pairs[0].calendar, mail: pairs[0].mail }
+  }
+
+  const cals = pending.filter((a) => a.type === 'create_calendar_event')
+  const mails = pending.filter((a) => a.type === 'send_email' || a.type === 'create_gmail_draft')
+  cals.sort((a, b) => actionCreatedAt(b) - actionCreatedAt(a))
+  mails.sort((a, b) => actionCreatedAt(b) - actionCreatedAt(a))
   const calendar = cals[0]
   const mail = mails[0]
   if (calendar && mail) {
@@ -336,6 +363,79 @@ export function buildMeetingBundleRefinementFollowUp(params: {
           confidenceScore: 0.92,
         },
       ],
+      supersedeActionIds,
+    }
+  }
+
+  if (picked.mail) {
+    supersedeActionIds.push(picked.mail.id)
+    const contact = contactFromPendingEmail(picked.mail)
+    const anchorUse = anchor || params.input
+    const duration = params.assistantProfile?.meetingDefaultDurationMinutes || 30
+    const profile = params.assistantProfile
+
+    const body = typeof picked.mail.parameters.body === 'string' ? picked.mail.parameters.body : ''
+    const subject = typeof picked.mail.parameters.subject === 'string' ? picked.mail.parameters.subject : ''
+    const rebuiltTemplate = buildMeetingEmailFollowupProposal(anchorUse, contact, profile)
+    const rebuiltSubject =
+      typeof rebuiltTemplate.parameters.subject === 'string' ? rebuiltTemplate.parameters.subject : undefined
+
+    const shouldRebuildEmail =
+      looksLikeMetaInstructionEmailBody(body) ||
+      looksCorruptedEmailSubject(subject) ||
+      (!MEET_PLACEHOLDER_RE.test(body) && /meet|visio|lien/i.test(normalizeInput(params.input)))
+
+    const mailType = picked.mail.type as AgentProposal['type']
+    let emailProposal: AgentProposal
+
+    if (shouldRebuildEmail) {
+      emailProposal = {
+        ...rebuiltTemplate,
+        type: mailType,
+        title: picked.mail.title,
+        description: picked.mail.description,
+      }
+    } else {
+      emailProposal = {
+        type: mailType,
+        title: picked.mail.title,
+        description: picked.mail.description,
+        parameters: {
+          ...stripPersistOnlyParameterKeys(picked.mail.parameters),
+          body: MEET_PLACEHOLDER_RE.test(body)
+            ? body
+            : [body.trim(), '', lang === 'en' ? 'Google Meet link:' : 'Lien Google Meet :', '{{meet_link}}'].join('\n'),
+          subject: looksCorruptedEmailSubject(subject) && rebuiltSubject ? rebuiltSubject : subject,
+        },
+        confidenceScore: 0.94,
+      }
+    }
+
+    if (profile && canInferCalendarRangeFromUserText(anchorUse, duration)) {
+      const calProp = buildCalendarProposal(anchorUse, profile, contact)
+      calProp.parameters.createMeetLink = true
+      const attendees = Array.isArray(calProp.parameters.attendees)
+        ? calProp.parameters.attendees.filter((x): x is string => typeof x === 'string')
+        : []
+      if (contact && attendees.length === 0) {
+        calProp.parameters.attendees = [contact.email]
+      }
+      return {
+        response:
+          lang === 'en'
+            ? 'Prepared a fresh calendar invite with Google Meet plus your email/draft with {{meet_link}} (resolved after the event is created). Approve calendar first, then the message.'
+            : 'J’ai recréé une invitation agenda avec Google Meet et remis le mail/brouillon avec {{meet_link}} (rempli après création de l’événement). Valide d’abord l’agenda, puis le message.',
+        proposals: [calProp, emailProposal],
+        supersedeActionIds,
+      }
+    }
+
+    return {
+      response:
+        lang === 'en'
+          ? 'Refreshed the pending email/draft with a Meet placeholder. To inject a real link at send time, approve a calendar invite too — or tell me the date/time so I can add one next turn.'
+          : 'J’ai remis le mail ou brouillon en attente avec le placeholder Meet. Pour un vrai lien à l’envoi, valide aussi une invitation agenda — ou donne-moi date/heure pour que je la recrée au prochain message.',
+      proposals: [emailProposal],
       supersedeActionIds,
     }
   }

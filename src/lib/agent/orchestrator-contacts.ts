@@ -151,6 +151,7 @@ export async function resolveCorrectedContactFromChatInput(params: {
         title: updatedAction.title,
         description: updatedAction.description,
         parameters: asRecord(updatedAction.parameters),
+        createdAt: updatedAction.createdAt.toISOString(),
       },
       assistantResponse: `Adresse corrigée pour ${name}. Vérifie puis confirme.`,
     }

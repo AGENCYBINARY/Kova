@@ -174,7 +174,8 @@ function extractSearchQuery(normalized: string) {
  */
 export function isMeetingDeliveryRefinementIntent(input: string) {
   const normalized = normalizeInput(input)
-  const mentionsTarget = /\b(mail|email|courriel|calendrier|agenda|evenement|invitation|invite)\b/.test(normalized)
+  const mentionsTarget =
+    /\b(mail|email|courriel|calendrier|agenda|evenement|invitation|invite|brouillon|draft)\b/.test(normalized)
   const mentionsLinkish = /\b(liens?|google meet|\bmeet\b|visio|visioconf|zoom|teams)\b/.test(normalized)
   const refinementVerb =
     /\b(mets|met|mettre|rajoute|ajoute|ajouter|modifie|modifier|corrige|corriger|compl[eè]te|complete|active|activer)\b/.test(
