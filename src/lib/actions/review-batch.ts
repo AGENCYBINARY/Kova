@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { createAuditLog } from '@/lib/audit/service'
 import { claimPendingActionIds } from '@/lib/actions/claim-pending'
+import { syncActionPlansForActionIds } from '@/lib/actions/action-plans'
 import { asActionParameters } from '@/lib/actions/parameter-resolution'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import { isOpenAiConfigured } from '@/lib/ai/client'
@@ -256,6 +257,10 @@ export async function rejectPendingActionBatch(params: {
         details: 'Rejected by user before execution.',
       } as Prisma.JsonObject,
     },
+  })
+
+  await syncActionPlansForActionIds({
+    actionIds: params.actions.map((action) => action.id),
   })
 
   await Promise.all(

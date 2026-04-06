@@ -21,6 +21,9 @@ export interface PendingActionRecord {
   title: string
   description: string
   parameters: Record<string, unknown>
+  status?: string
+  planId?: string | null
+  planStepIndex?: number | null
   /** ISO timestamp — disambiguates multiple pending bundles */
   createdAt: string
 }
@@ -224,7 +227,7 @@ export async function loadChatRuntimeState(context: ChatContext) {
         userId: context.userId,
         workspaceId: context.workspaceId,
         status: {
-          in: ['pending', 'rejected'],
+          in: ['pending', 'rejected', 'completed', 'compensated'],
         },
       },
       orderBy: { updatedAt: 'desc' },
@@ -240,6 +243,9 @@ export async function loadChatRuntimeState(context: ChatContext) {
       title: action.title,
       description: action.description,
       parameters: asRecord(action.parameters),
+      status: action.status,
+      planId: action.planId,
+      planStepIndex: action.planStepIndex,
       createdAt: action.createdAt.toISOString(),
     })) satisfies PendingActionRecord[],
     recentActions: recentActionsRaw.map((action) => ({
@@ -248,6 +254,9 @@ export async function loadChatRuntimeState(context: ChatContext) {
       title: action.title,
       description: action.description,
       parameters: asRecord(action.parameters),
+      status: action.status,
+      planId: action.planId,
+      planStepIndex: action.planStepIndex,
       createdAt: action.createdAt.toISOString(),
     })) satisfies PendingActionRecord[],
   }

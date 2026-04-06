@@ -302,7 +302,7 @@ async function main() {
 
   if (defaults.gmailQuery && defaults.forwardTo) {
     scenarios.push({ name: 'gmail-forward-preview', prompt: withReference(`Transfère le mail Gmail "${defaults.gmailQuery}" à ${defaults.forwardTo}`, { source: 'gmail', field: 'messageId', id: defaults.gmailMessageId }), expectedTypes: ['forward_email'] })
-    scenarios.push({ name: 'gmail-draft-preview', prompt: `Prépare un brouillon Gmail pour ${defaults.forwardTo} à propos de "${defaults.gmailQuery}"`, expectedTypes: ['create_gmail_draft'] })
+    scenarios.push({ name: 'gmail-draft-preview', prompt: `Crée un nouveau brouillon Gmail pour ${defaults.forwardTo} avec pour objet "Kova live draft" et un message court`, expectedTypes: ['create_gmail_draft'] })
   }
 
   if (byType.has('calendar')) {
@@ -430,9 +430,88 @@ async function main() {
             context: { workspaceId: target.workspaceId, userId: target.userId },
           })
           results.push({ name: 'gmail-archive-execute', ok: true, detail: `thread ${firstMessage.threadId} archived` })
+
+          await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'label_gmail_thread',
+            parameters: {
+              threadId: firstMessage.threadId,
+              labelNames: [defaults.gmailLabel],
+            },
+          })
+          await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'remove_gmail_thread_labels',
+            parameters: {
+              threadId: firstMessage.threadId,
+              labelNames: [defaults.gmailLabel],
+            },
+          })
+          results.push({ name: 'gmail-label-cycle-execute', ok: true, detail: `thread ${firstMessage.threadId} labeled then cleaned up` })
+
+          await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'mark_gmail_thread_unread',
+            parameters: { threadId: firstMessage.threadId },
+          })
+          await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'mark_gmail_thread_read',
+            parameters: { threadId: firstMessage.threadId },
+          })
+          results.push({ name: 'gmail-read-cycle-execute', ok: true, detail: `thread ${firstMessage.threadId} unread/read cycle ok` })
+
+          await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'star_gmail_thread',
+            parameters: { threadId: firstMessage.threadId },
+          })
+          await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'unstar_gmail_thread',
+            parameters: { threadId: firstMessage.threadId },
+          })
+          results.push({ name: 'gmail-star-cycle-execute', ok: true, detail: `thread ${firstMessage.threadId} star/unstar cycle ok` })
         }
       } catch (error) {
         results.push({ name: 'gmail-archive-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
+      }
+    }
+
+    if (gmail && defaults.forwardTo) {
+      try {
+        const draftOutput = await executeLiveAction({
+          workspaceId: target.workspaceId,
+          userId: target.userId,
+          actionType: 'create_gmail_draft',
+          parameters: {
+            to: [defaults.forwardTo],
+            subject: `Kova live draft ${Date.now()}`,
+            body: 'Draft created by Kova live runner.',
+          },
+        })
+        const draftId = typeof draftOutput.draftId === 'string' ? draftOutput.draftId : ''
+        if (!draftId) {
+          throw new Error('Gmail draft create did not return a draftId.')
+        }
+        await executeLiveAction({
+          workspaceId: target.workspaceId,
+          userId: target.userId,
+          actionType: 'update_gmail_draft',
+          parameters: {
+            draftId,
+            body: 'Draft updated by Kova live runner.',
+          },
+        })
+        results.push({ name: 'gmail-draft-write-execute', ok: true, detail: `draft ${draftId} created and updated` })
+      } catch (error) {
+        results.push({ name: 'gmail-draft-write-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
       }
     }
 
@@ -450,6 +529,62 @@ async function main() {
             context: { workspaceId: target.workspaceId, userId: target.userId },
           })
           results.push({ name: 'drive-rename-execute', ok: true, detail: `file ${firstFile.id} renamed` })
+
+          const folderOutput = await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'create_google_drive_folder',
+            parameters: {
+              name: `Kova Live Folder ${Date.now()}`,
+              ...(defaults.driveFolderId ? { parentFolderId: defaults.driveFolderId } : {}),
+            },
+          })
+          const createdFolderId = typeof folderOutput.fileId === 'string' ? folderOutput.fileId : ''
+          if (!createdFolderId) {
+            throw new Error('Drive folder create did not return a fileId.')
+          }
+          await deleteGoogleDriveFile(accessToken, { fileId: createdFolderId })
+          results.push({ name: 'drive-folder-execute', ok: true, detail: `folder ${createdFolderId} created and cleaned up` })
+
+          const copyOutput = await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'copy_google_drive_file',
+            parameters: {
+              fileId: firstFile.id,
+              name: `kova-live-copy-${Date.now()}`,
+              ...(defaults.driveFolderId ? { destinationFolderId: defaults.driveFolderId } : {}),
+            },
+          })
+          const copiedFileId = typeof copyOutput.fileId === 'string' ? copyOutput.fileId : ''
+          if (!copiedFileId) {
+            throw new Error('Drive copy did not return a fileId.')
+          }
+          await deleteGoogleDriveFile(accessToken, { fileId: copiedFileId })
+          results.push({ name: 'drive-copy-execute', ok: true, detail: `copied file ${copiedFileId} cleaned up` })
+
+          if (defaults.driveShareTo) {
+            await executeLiveAction({
+              workspaceId: target.workspaceId,
+              userId: target.userId,
+              actionType: 'share_google_drive_file',
+              parameters: {
+                fileId: firstFile.id,
+                emails: [defaults.driveShareTo],
+                notify: false,
+              },
+            })
+            await executeLiveAction({
+              workspaceId: target.workspaceId,
+              userId: target.userId,
+              actionType: 'unshare_google_drive_file',
+              parameters: {
+                fileId: firstFile.id,
+                emails: [defaults.driveShareTo],
+              },
+            })
+            results.push({ name: 'drive-share-cycle-execute', ok: true, detail: `file ${firstFile.id} shared then unshared` })
+          }
         }
       } catch (error) {
         results.push({ name: 'drive-rename-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })
@@ -532,7 +667,7 @@ async function main() {
         const databases = await searchNotionDatabases(accessToken, { query: defaults.notionDatabaseQuery, maxResults: 2 })
         const firstDatabase = databases[0]
         if (firstDatabase?.id) {
-          await executeAgentToolRequest({
+          const result = await executeAgentToolRequest({
             actionType: 'create_notion_page',
             parameters: {
               title: `Live Runner ${new Date().toISOString()}`,
@@ -545,7 +680,22 @@ async function main() {
             requireApproval: false,
             context: { workspaceId: target.workspaceId, userId: target.userId },
           })
-          results.push({ name: 'notion-database-execute', ok: true, detail: `page created in database ${firstDatabase.id}` })
+          const createdPageId =
+            result.mode === 'executed' && typeof result.execution.output.pageId === 'string'
+              ? result.execution.output.pageId
+              : null
+          if (!createdPageId) {
+            throw new Error('Notion create did not return a pageId.')
+          }
+          await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
+            actionType: 'archive_notion_page',
+            parameters: {
+              pageId: createdPageId,
+            },
+          })
+          results.push({ name: 'notion-database-execute', ok: true, detail: `page ${createdPageId} created then archived` })
         }
       } catch (error) {
         results.push({ name: 'notion-database-execute', ok: false, detail: error instanceof Error ? error.message : 'unknown error' })

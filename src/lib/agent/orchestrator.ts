@@ -306,6 +306,7 @@ export async function orchestrateChatTurn(params: {
 
   const { reviewableActions, executionMessages, autoExecutionFailed } = await persistAndExecuteAgentProposals({
     proposals: agentResult.proposals,
+    plan: agentResult.plan,
     executionMode: effectiveExecutionMode,
     executionReason: executionDecision.reason,
     assistantMessageId: assistantMessage.id,

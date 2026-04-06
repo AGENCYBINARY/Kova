@@ -133,6 +133,66 @@ test('pick prefers newest requestGroupId bundle when several are pending', () =>
   assert.equal(out!.supersedeActionIds.includes('old_cal'), false)
 })
 
+test('pick prefers newest planId bundle before loose requestGroupId matching', () => {
+  const out = buildMeetingBundleRefinementFollowUp({
+    input: 'mets google meet dans le mail et calendrier stp',
+    pendingActions: [
+      {
+        id: 'plan_old_cal',
+        type: 'create_calendar_event',
+        title: 'Old plan',
+        description: '',
+        createdAt: '2026-04-05T10:00:00.000Z',
+        planId: 'plan_old',
+        parameters: { requestGroupId: 'group_loose', title: 'Old plan', createMeetLink: false },
+      },
+      {
+        id: 'plan_old_mail',
+        type: 'create_gmail_draft',
+        title: 'Old draft',
+        description: '',
+        createdAt: '2026-04-05T10:00:01.000Z',
+        planId: 'plan_old',
+        parameters: {
+          requestGroupId: 'group_loose',
+          to: ['old@example.com'],
+          subject: 'old',
+          body: 'old',
+        },
+      },
+      {
+        id: 'plan_new_cal',
+        type: 'create_calendar_event',
+        title: 'New plan',
+        description: '',
+        createdAt: '2026-04-06T12:00:00.000Z',
+        planId: 'plan_new',
+        parameters: { requestGroupId: 'group_loose', title: 'New plan', createMeetLink: false },
+      },
+      {
+        id: 'plan_new_mail',
+        type: 'create_gmail_draft',
+        title: 'New draft',
+        description: '',
+        createdAt: '2026-04-06T12:00:01.000Z',
+        planId: 'plan_new',
+        parameters: {
+          requestGroupId: 'group_loose',
+          to: ['new@example.com'],
+          resolvedContactName: 'New Contact',
+          subject: 'new',
+          body: '{{meet_link}}',
+        },
+      },
+    ],
+    conversationHistory: [{ role: 'user', content: 'reunion mardi 19h avec nouveau contact' }],
+    assistantProfile: { defaultLanguage: 'fr', signatureName: 'Kova' } as import('@/lib/assistant/profile').AssistantProfile,
+  })
+
+  assert.ok(out)
+  assert.deepEqual(out!.supersedeActionIds.sort(), ['plan_new_cal', 'plan_new_mail'].sort())
+})
+
 test('mail-only pending: adds calendar when schedule inferable from history', () => {
   const out = buildMeetingBundleRefinementFollowUp({
     input: 'mets le lien meet dans le brouillon stp',

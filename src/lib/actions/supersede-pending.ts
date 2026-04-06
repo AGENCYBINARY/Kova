@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { createAuditLog } from '@/lib/audit/service'
+import { syncActionPlansForActionIds } from '@/lib/actions/action-plans'
 
 /**
  * Marks pending actions as expired when a newer turn replaces them (e.g. user refines Meet + email bundle).
@@ -56,4 +57,8 @@ export async function expirePendingActionsAsSuperseded(params: {
       })
     )
   )
+
+  await syncActionPlansForActionIds({
+    actionIds: unique,
+  })
 }

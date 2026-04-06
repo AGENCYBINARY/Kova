@@ -207,7 +207,34 @@ function actionCreatedAt(a: PendingActionRecord): number {
 function pickCalendarAndMailFromPending(pending: PendingActionRecord[]) {
   type Pair = { calendar: PendingActionRecord; mail: PendingActionRecord; ts: number }
   const pairs: Pair[] = []
+  const byPlanId = new Map<string, PendingActionRecord[]>()
   const byGid = new Map<string, PendingActionRecord[]>()
+
+  for (const a of pending) {
+    const planId = a.planId
+    if (typeof planId === 'string' && planId.length > 0) {
+      const list = byPlanId.get(planId) || []
+      list.push(a)
+      byPlanId.set(planId, list)
+    }
+  }
+
+  for (const actions of Array.from(byPlanId.values())) {
+    const cal = actions.find((x) => x.type === 'create_calendar_event')
+    const mail = actions.find((x) => x.type === 'send_email' || x.type === 'create_gmail_draft')
+    if (cal && mail) {
+      pairs.push({
+        calendar: cal,
+        mail,
+        ts: Math.max(actionCreatedAt(cal), actionCreatedAt(mail)),
+      })
+    }
+  }
+
+  if (pairs.length > 0) {
+    pairs.sort((a, b) => b.ts - a.ts)
+    return { calendar: pairs[0].calendar, mail: pairs[0].mail }
+  }
 
   for (const a of pending) {
     const gid = a.parameters.requestGroupId

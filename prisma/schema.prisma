@@ -16,6 +16,7 @@ model User {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   actions           Action[]
+  actionPlans       ActionPlan[]
   activeWorkspace   Workspace?          @relation("ActiveWorkspace", fields: [activeWorkspaceId], references: [id], onDelete: SetNull)
   contacts          Contact[]
   executionLogs     ExecutionLog[]
@@ -37,6 +38,7 @@ model Workspace {
   ownerId         String
   preferences     Json?
   actions         Action[]
+  actionPlans     ActionPlan[]
   activeUsers     User[]              @relation("ActiveWorkspace")
   contacts        Contact[]
   executionLogs   ExecutionLog[]
@@ -57,6 +59,7 @@ model Message {
   workspaceId String
   userId      String
   action      Action?
+  actionPlan  ActionPlan?
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
@@ -74,14 +77,18 @@ model Action {
   updatedAt     DateTime       @updatedAt
   workspaceId   String
   userId        String
+  planId        String?
+  planStepIndex Int?
   messageId     String?        @unique
   message       Message?       @relation(fields: [messageId], references: [id])
+  plan          ActionPlan?    @relation(fields: [planId], references: [id], onDelete: SetNull)
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   executionLogs ExecutionLog[]
 
   @@index([workspaceId, userId, status, createdAt])
   @@index([workspaceId, userId, updatedAt])
+  @@index([planId, planStepIndex])
 }
 
 model Integration {
@@ -139,6 +146,43 @@ model Contact {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId, email])
+}
+
+model ActionPlan {
+  id          String           @id @default(cuid())
+  summary     String
+  status      String           @default("pending_review")
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  workspaceId String
+  userId      String
+  messageId   String?          @unique
+  actions     Action[]
+  message     Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  steps       ActionPlanStep[]
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId, updatedAt])
+  @@index([status, updatedAt])
+}
+
+model ActionPlanStep {
+  id        String     @id @default(cuid())
+  title     String
+  detail    String
+  app       String?
+  status    String     @default("pending")
+  metadata  Json?
+  stepIndex Int
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  planId    String
+  plan      ActionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, stepIndex])
+  @@index([planId, status])
 }
 
 model WorkspaceMembership {

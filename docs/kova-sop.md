@@ -608,3 +608,62 @@ Remaining honest gap after this slice:
   - [src/lib/agent/orchestrator.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/orchestrator.ts)
   - [src/lib/agent/v1-deterministic.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1-deterministic.ts)
   - connected read / follow-up planning paths that still bypass model reasoning in some cases
+
+## Continuity Update — 2026-04-06 (persistent action plans + broader live execute)
+
+This slice moved Kova from “plan text in message metadata” to a real persisted multi-step object that can anchor execution state and follow-ups.
+
+What changed:
+
+- Added persistent plan models in Neon:
+  - `ActionPlan`
+  - `ActionPlanStep`
+  - `Action.planId`
+  - `Action.planStepIndex`
+- Agent proposal persistence now creates an `ActionPlan` when:
+  - the model returns a structured multi-step plan, or
+  - a turn generates multiple linked actions
+- Batch execution, rejection, expiration, and superseding now resynchronize plan/step lifecycle state from action statuses.
+- Follow-up bundle refinement now prefers `planId` grouping before looser `requestGroupId` heuristics.
+- Chat runtime state now keeps recent completed/compensated actions in memory so follow-up logic can stay anchored to the latest actual workflow, not only pending items.
+- Production live execute coverage was expanded on the configured Google-heavy target with more reversible write paths:
+  - Gmail: archive, label/remove label, unread/read, star/unstar, create+update draft
+  - Drive: rename, create folder, copy file, share/unshare
+  - Calendar: create+cleanup
+  - Docs: create+update+cleanup
+  - Photos: picker create/delete
+
+Validation baseline for this tranche:
+
+- `npm test` -> pass (`129/129`)
+- `npm run lint` -> pass
+- `npm run build` -> pass
+- `npm run integration:smoke:prod` -> pass on Gmail, Calendar, Google Docs, Google Drive, Google Photos
+- `npm run integration:live:prod` -> pass (`LIVE_RUNNER_OK 20`)
+- `npm run integration:live:execute:prod` -> pass on Gmail, Calendar, Drive, Docs, Photos
+- Prisma schema push applied to Neon:
+  - local Neon maintenance target
+  - production Neon target
+
+Files changed in this slice:
+
+- [prisma/schema.prisma](/Users/agencybinary/Documents/CODEX/prisma/schema.prisma)
+- [src/lib/actions/action-plans.ts](/Users/agencybinary/Documents/CODEX/src/lib/actions/action-plans.ts)
+- [src/lib/agent/orchestrator-actions.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/orchestrator-actions.ts)
+- [src/lib/actions/execute-persisted-batch.ts](/Users/agencybinary/Documents/CODEX/src/lib/actions/execute-persisted-batch.ts)
+- [src/lib/actions/review-batch.ts](/Users/agencybinary/Documents/CODEX/src/lib/actions/review-batch.ts)
+- [src/lib/actions/pending-expiration.ts](/Users/agencybinary/Documents/CODEX/src/lib/actions/pending-expiration.ts)
+- [src/lib/actions/supersede-pending.ts](/Users/agencybinary/Documents/CODEX/src/lib/actions/supersede-pending.ts)
+- [src/lib/agent/chat-state.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/chat-state.ts)
+- [src/lib/agent/follow-up.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/follow-up.ts)
+- [scripts/integration-live-runner.ts](/Users/agencybinary/Documents/CODEX/scripts/integration-live-runner.ts)
+
+Tests added:
+
+- plan lifecycle derivation
+- follow-up bundle preference by `planId` before `requestGroupId`
+
+Remaining honest gap after this slice:
+
+- The configured production execute target for this session still does not have `notion` connected, so the broadened write-path validation is excellent on Google surfaces but not yet mirrored by a live execute pass on Notion from this exact target.
+- The product now has a persistent multi-step workflow spine, but it is still not a durable resumable state machine with retries, waits, and long-lived steps.

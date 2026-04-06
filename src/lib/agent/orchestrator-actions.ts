@@ -1,11 +1,13 @@
 import { prisma } from '@/lib/db/prisma'
 import { createAuditLog } from '@/lib/audit/service'
 import { claimPendingActionIds } from '@/lib/actions/claim-pending'
+import { createActionPlanForTurn } from '@/lib/actions/action-plans'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import { isOpenAiConfigured } from '@/lib/ai/client'
 import { synthesizePostExecutionOutcome } from '@/lib/ai/narration'
 import { inferRiskLevel } from '@/lib/agent/policy'
 import type { AgentProposal } from '@/lib/agent/v1'
+import type { AgentPlanStep } from '@/lib/agent/planning'
 
 function templateAutoExecutionFollowUp(params: {
   lang: 'fr' | 'en'
@@ -46,34 +48,55 @@ export async function persistAndExecuteAgentProposals(params: {
   userTurnContent?: string
   /** Assistant message shown before auto-run (for LLM execution recap). */
   assistantPlanContent?: string
+  /** Structured model plan persisted for multi-step follow-up anchoring. */
+  plan?: AgentPlanStep[]
 }) {
   const lang = params.defaultLanguage === 'en' ? 'en' : 'fr'
   const requestGroupId = params.proposals.length > 1 ? `group_${Date.now()}_${params.userId.slice(0, 6)}` : null
 
-  const createdActions =
-    params.proposals.length > 0
-      ? await Promise.all(
-          params.proposals.map((proposal, index) =>
-            prisma.action.create({
-              data: {
-                type: proposal.type,
-                title: proposal.title,
-                description: proposal.description,
-                parameters: {
-                  ...proposal.parameters,
-                  confidenceScore: proposal.confidenceScore,
-                  proposalIndex: index,
-                  ...(requestGroupId ? { requestGroupId } : {}),
+  const { actionPlan, createdActions } = await prisma.$transaction(async (tx) => {
+    const actionPlan = await createActionPlanForTurn(tx, {
+      workspaceId: params.workspaceId,
+      userId: params.userId,
+      messageId: params.assistantMessageId,
+      proposals: params.proposals,
+      plan: params.plan || [],
+      assistantPlanContent: params.assistantPlanContent,
+      language: lang,
+    })
+
+    const createdActions =
+      params.proposals.length > 0
+        ? await Promise.all(
+            params.proposals.map((proposal, index) =>
+              tx.action.create({
+                data: {
+                  type: proposal.type,
+                  title: proposal.title,
+                  description: proposal.description,
+                  parameters: {
+                    ...proposal.parameters,
+                    confidenceScore: proposal.confidenceScore,
+                    proposalIndex: index,
+                    ...(requestGroupId ? { requestGroupId } : {}),
+                  },
+                  status: 'pending',
+                  userId: params.userId,
+                  workspaceId: params.workspaceId,
+                  planId: actionPlan?.id || null,
+                  planStepIndex: actionPlan ? index : null,
+                  ...(index === 0 ? { messageId: params.assistantMessageId } : {}),
                 },
-                status: 'pending',
-                userId: params.userId,
-                workspaceId: params.workspaceId,
-                ...(index === 0 ? { messageId: params.assistantMessageId } : {}),
-              },
-            })
+              })
+            )
           )
-        )
-      : []
+        : []
+
+    return {
+      actionPlan,
+      createdActions,
+    }
+  })
 
   if (createdActions.length > 0 && params.executionMode === 'ask') {
     await Promise.all(
@@ -201,6 +224,7 @@ export async function persistAndExecuteAgentProposals(params: {
   }
 
   return {
+    actionPlan,
     createdActions,
     reviewableActions,
     executionMessages,

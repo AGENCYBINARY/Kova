@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { executeBatch, type BatchAction } from '@/lib/actions/batch-execution'
+import { syncActionPlansForActionIds } from '@/lib/actions/action-plans'
 import { compensateCompletedActions } from '@/lib/actions/compensation'
 import { sortBatchActionsForExecution } from '@/lib/actions/batch-order'
 import { asActionParameters, injectExecutionOutputsIntoParameters } from '@/lib/actions/parameter-resolution'
@@ -245,6 +246,10 @@ export async function executePersistedActionBatch(params: {
       })
     )
   }
+
+  await syncActionPlansForActionIds({
+    actionIds: params.actions.map((action) => action.id),
+  })
 
   return {
     ...batchResult,

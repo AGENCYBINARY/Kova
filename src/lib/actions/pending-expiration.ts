@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { createAuditLog } from '@/lib/audit/service'
+import { syncActionPlansForActionIds } from '@/lib/actions/action-plans'
 
 const DEFAULT_PENDING_ACTION_TTL_HOURS = 72
 const MIN_PENDING_ACTION_TIMEOUT_SECONDS = 30
@@ -130,6 +131,12 @@ export async function expirePendingActions(params: {
         })
       )
     )
+  }
+
+  if (expiredActionIds.length > 0) {
+    await syncActionPlansForActionIds({
+      actionIds: expiredActionIds,
+    })
   }
 
   return expiredActionIds
