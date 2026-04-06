@@ -467,16 +467,14 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
 
 export function shouldPreferDeterministicAction(input: string, proposals: AgentProposal[]) {
   if (proposals.length === 0) return false
-  const normalized = normalizeInput(input)
-
-  if (
-    proposals.some((p) => p.type === 'create_calendar_event' || p.type === 'send_email') &&
-    hasConcreteCalendarSchedule(input) &&
-    /(calendar|calendrier|rdv|réunion|reunion|meet|evenement|événement|visio|google meet)/.test(normalized) &&
-    /(mail|email|courriel|envoyer|envoie|send|redige|rédige|rediger)/.test(normalized)
-  ) {
-    return true
+  const useShortcuts =
+    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === 'true' ||
+    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === '1'
+  if (!useShortcuts) {
+    return false
   }
+
+  const normalized = normalizeInput(input)
 
   if (
     /(gmail|email|e-mail|mail|message|thread|inbox)/.test(normalized) &&

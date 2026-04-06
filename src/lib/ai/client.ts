@@ -3,6 +3,17 @@ import { z } from 'zod'
 /** Locked model for Kova chat + structured analysis (`analyzeUserRequest`). Ignores `OPENAI_MODEL`. */
 export const KOVA_CHAT_MODEL = 'gpt-4.1' as const
 
+/** OpenAI key: primary `OPENAI_API_KEY`, optional alias `OPENAI_KEY` (common misconfiguration). */
+export function resolveOpenAiApiKey(): string | undefined {
+  const primary = process.env.OPENAI_API_KEY?.trim()
+  const alias = process.env.OPENAI_KEY?.trim()
+  return primary || alias || undefined
+}
+
+export function isOpenAiConfigured(): boolean {
+  return Boolean(resolveOpenAiApiKey())
+}
+
 type ConversationMessage = {
   role: 'user' | 'assistant'
   content: string
@@ -668,10 +679,10 @@ async function analyzeWithOpenAI(
   conversationHistory: ConversationMessage[],
   effectiveSystemPrompt: string
 ): Promise<{ response: string; proposals: ActionProposal[] }> {
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = resolveOpenAiApiKey()
 
   if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is missing.')
+    throw new Error('OPENAI_API_KEY (or OPENAI_KEY) is missing.')
   }
 
   const modelCandidates = buildModelCandidates()

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { responseClaimsActionReady, runAgentTurn } from '../src/lib/agent/v1'
+import { shouldPreferDeterministicAction, type AgentProposal } from '../src/lib/agent/v1-deterministic'
 
 test('fallback routes Gmail unarchive to the right action', async () => {
   const previousKey = process.env.OPENAI_API_KEY
@@ -309,5 +310,30 @@ test('calendar fallback respects explicit requests without Google Meet', async (
     if (previousKey) {
       process.env.OPENAI_API_KEY = previousKey
     }
+  }
+})
+
+test('action turns use OpenAI by default (deterministic shortcuts opt-in only)', () => {
+  const prevDet = process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS
+  const prevKey = process.env.OPENAI_KEY
+  delete process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS
+  delete process.env.OPENAI_KEY
+  try {
+    const proposal: AgentProposal = {
+      type: 'archive_gmail_thread',
+      title: 'Archive Gmail thread',
+      description: 'Archive the matching Gmail thread.',
+      parameters: { threadId: '' },
+      confidenceScore: 0.82,
+    }
+    assert.equal(shouldPreferDeterministicAction('Archive le thread Gmail "Test"', [proposal]), false)
+
+    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS = 'true'
+    assert.equal(shouldPreferDeterministicAction('Archive le thread Gmail "Test"', [proposal]), true)
+  } finally {
+    if (prevDet !== undefined) process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS = prevDet
+    else delete process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS
+    if (prevKey !== undefined) process.env.OPENAI_KEY = prevKey
+    else delete process.env.OPENAI_KEY
   }
 })

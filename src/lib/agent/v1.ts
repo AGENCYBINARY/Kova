@@ -1,4 +1,4 @@
-import { analyzeUserRequest } from '@/lib/ai/client'
+import { analyzeUserRequest, isOpenAiConfigured } from '@/lib/ai/client'
 import {
   executiveAssistantSkills,
   resolveEnabledAssistantSkills,
@@ -117,7 +117,7 @@ export async function runAgentTurn(
   )
 
   if (isConversationalInput(input)) {
-    if (process.env.OPENAI_API_KEY) {
+    if (isOpenAiConfigured()) {
       try {
         const aiResult = await analyzeUserRequest(
           input,
@@ -198,7 +198,7 @@ export async function runAgentTurn(
     }
   }
 
-  if (process.env.OPENAI_API_KEY) {
+  if (isOpenAiConfigured()) {
     try {
       const aiResult = await analyzeUserRequest(
         input,
