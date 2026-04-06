@@ -54,7 +54,65 @@ interface AnalyzeOptions {
   behaviorMode?: 'default' | 'conversation' | 'connected_read'
 }
 
-const OPENAI_REQUEST_TIMEOUT_MS = 20_000
+const OPENAI_REQUEST_TIMEOUT_MS = Number(process.env.KOVA_OPENAI_TIMEOUT_MS) || 45_000
+
+function resolveMaxOutputTokens(): number {
+  const raw = process.env.KOVA_OPENAI_MAX_OUTPUT_TOKENS?.trim()
+  if (raw) {
+    const n = Number.parseInt(raw, 10)
+    if (Number.isFinite(n) && n >= 256 && n <= 16_384) {
+      return n
+    }
+  }
+  /** Default high enough for long JSON proposals + polished copy (was 1200, too tight for quality). */
+  return 4096
+}
+
+type ResponsesApiUsage = {
+  input_tokens?: number
+  output_tokens?: number
+  total_tokens?: number
+  input_tokens_details?: { cached_tokens?: number }
+  output_tokens_details?: { reasoning_tokens?: number }
+}
+
+function resolveSamplingTemperature(model: string): number {
+  if (model.startsWith('gpt-5')) {
+    return 1
+  }
+  const raw = process.env.OPENAI_TEMPERATURE?.trim()
+  if (raw) {
+    const t = Number.parseFloat(raw)
+    if (Number.isFinite(t) && t >= 0 && t <= 2) {
+      return t
+    }
+  }
+  return 0.35
+}
+
+function logOpenAiUsage(params: {
+  model: string
+  usage: ResponsesApiUsage | undefined
+}) {
+  const u = params.usage
+  if (!u || (typeof u.input_tokens !== 'number' && typeof u.output_tokens !== 'number')) {
+    return
+  }
+  const cached = u.input_tokens_details?.cached_tokens ?? 0
+  const payload = {
+    kova: 'openai.usage',
+    model: params.model,
+    input_tokens: u.input_tokens ?? 0,
+    output_tokens: u.output_tokens ?? 0,
+    total_tokens: u.total_tokens ?? (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+    cached_input_tokens: cached,
+    note:
+      cached > 0
+        ? 'Part of the prompt may be billed at cached rates (dashboard can look lower than raw token counts).'
+        : undefined,
+  }
+  console.info(JSON.stringify(payload))
+}
 
 export interface ActionProposal {
   type: string
@@ -479,6 +537,7 @@ type ResponsesApiOutputItem = {
 
 type ResponsesApiResponse = {
   output?: ResponsesApiOutputItem[]
+  usage?: ResponsesApiUsage
   incomplete_details?: {
     reason?: string
   } | null
@@ -632,11 +691,12 @@ async function requestStructuredResponse(params: {
   conversationHistory: ConversationMessage[]
   effectiveSystemPrompt: string
 }) {
+  const maxOut = resolveMaxOutputTokens()
   const body: Record<string, unknown> = {
     model: params.model,
     instructions: params.effectiveSystemPrompt,
     input: buildResponsesInput(params.userMessage, params.conversationHistory),
-    max_output_tokens: 1200,
+    max_output_tokens: maxOut,
     store: false,
     ...(shouldUseGpt5Controls(params.model) ? { verbosity: resolveVerbosity() } : {}),
     text: {
@@ -653,7 +713,7 @@ async function requestStructuredResponse(params: {
       effort: resolveReasoningEffort(),
     }
   } else {
-    body.temperature = 0.2
+    body.temperature = resolveSamplingTemperature(params.model)
   }
 
   const response = await fetchJsonWithTimeout('https://api.openai.com/v1/responses', {
@@ -670,6 +730,8 @@ async function requestStructuredResponse(params: {
     const errorMessage = payload?.error?.message || `OpenAI Responses request failed: ${response.status}`
     throw Object.assign(new Error(errorMessage), { status: response.status })
   }
+
+  logOpenAiUsage({ model: params.model, usage: payload?.usage })
 
   return payload
 }
