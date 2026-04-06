@@ -13,6 +13,7 @@ import {
   buildFallbackResponseWithContactsAndProfile,
   isCapabilityQuestion,
   isConversationalInput,
+  isEmailCompositionAssistanceRequest,
   shouldPreferDeterministicAction,
   type AgentActionType,
   type AgentProposal,
@@ -359,9 +360,17 @@ export async function runAgentTurn(
       const hadModelProposalButNoneValidated = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
       const fallbackResolutionForMissingOrInvalidModel = hadModelProposalButNoneValidated || modelClaimsActionReadyWithoutProposal
         ? resolveActionReferencesDetailed({
-            proposals: buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).proposals.filter(
-              (proposal) => allowedActionTypes.includes(proposal.type)
-            ),
+            proposals: (() => {
+              const raw = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).proposals.filter(
+                (proposal) => allowedActionTypes.includes(proposal.type)
+              )
+              if (isEmailCompositionAssistanceRequest(input)) {
+                return raw.filter(
+                  (proposal) => proposal.type !== 'send_email' && proposal.type !== 'create_gmail_draft' && proposal.type !== 'update_gmail_draft'
+                )
+              }
+              return raw
+            })(),
             userInput: input,
             connectedContextMetadata: options.connectedContextMetadata,
           })

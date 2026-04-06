@@ -286,6 +286,26 @@ function proposalNeedsClarification(proposal: AgentProposal, input: string) {
   }
 }
 
+/**
+ * User is asking for help wording an email (meta-request), not providing the literal email to send.
+ * Deterministic email builders must not treat the whole sentence as the message body.
+ */
+export function isEmailCompositionAssistanceRequest(input: string): boolean {
+  const n = normalizeInput(input)
+  if (!/\b(mail|email|courriel|gmail|message)\b/.test(n)) {
+    return false
+  }
+  return (
+    /\b(aide|aider)\b.*\b(mail|email|courriel|message)\b/.test(n) ||
+    /\b(mail|email|courriel)\b.*\b(formuler|rédiger|rediger|ecrire|écrire|rédige|redige)\b/.test(n) ||
+    /\b(je veux que tu|peux-tu|pourrais-tu|tu peux)\b.*\b(formuler|rédiger|rediger|ecrire|écrire|aider)\b/.test(n) ||
+    /\b(help me (to )?(write|draft|word|formulate))\b/.test(n) ||
+    /\b(can you help (me )?(write|draft))\b/.test(n) ||
+    /\b(formulate|draft) (a |an |the )?(email|mail)\b/.test(n) ||
+    /\b(write|compose) (a |an |the )?(email|mail)\b/.test(n)
+  )
+}
+
 export function isCapabilityQuestion(input: string, proposals: AgentProposal[]) {
   const trimmed = input.trim()
   const normalized = normalizeInput(trimmed)
@@ -1593,6 +1613,16 @@ export function buildFallbackResponseWithContactsAndProfile(
           ? 'Notion page ready. Review and confirm.'
           : 'Page Notion prête. Vérifie et confirme.',
       proposals: [buildNotionProposal(input, assistantProfile)],
+    }
+  }
+
+  if (isEmailCompositionAssistanceRequest(input)) {
+    return {
+      response:
+        language === 'en'
+          ? 'Got it — you want help drafting an email to a colleague. I can’t build a useful draft from that sentence alone: share their email (or name if they’re in your contacts) and, in one line, the meeting purpose or what you want to propose. I’ll write a clean message you can paste or save as a draft.'
+          : 'Compris — tu veux de l’aide pour rédiger un mail à un collègue. Je ne peux pas inventer un texte utile à partir de cette phrase seule : envoie son email (ou son prénom s’il est dans tes contacts) et en une ligne l’objet du meeting ou ce que tu veux proposer. Je te rédige un message propre à coller ou à mettre en brouillon.',
+      proposals: [],
     }
   }
 
