@@ -6,6 +6,7 @@ import { dashboardIntegrations, type DashboardAction, type DashboardIntegration 
 import { buildDashboardScopeWhere } from '@/lib/dashboard/query'
 import { getGoogleIntegrationCapabilityState } from '@/lib/integrations/google-auth'
 import { expirePendingActions } from '@/lib/actions/pending-expiration'
+import { deferServerWork } from '@/lib/defer-server-work'
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -348,10 +349,13 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
     where: { id: scopeWhere.workspaceId },
     select: { preferences: true },
   })
-  await expirePendingActions({
-    ...scopeWhere,
-    workspacePreferences: workspaceRow?.preferences,
-  })
+  // Defer expiration so TTFB is not blocked by batched writes + audit logs (Speed Insights / RES).
+  deferServerWork(
+    expirePendingActions({
+      ...scopeWhere,
+      workspacePreferences: workspaceRow?.preferences,
+    })
+  )
   const [actions, integrations] = await Promise.all([
     prisma.action.findMany({
       where: scopeWhere,

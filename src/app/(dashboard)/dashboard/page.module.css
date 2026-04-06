@@ -327,36 +327,6 @@
   }
 }
 
-.gridLoading {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px 0 0;
-}
-
-.gridLoadingCard {
-  min-height: 264px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.03) 25%,
-    rgba(255, 255, 255, 0.07) 50%,
-    rgba(255, 255, 255, 0.03) 75%
-  );
-  background-size: 200% 100%;
-  animation: gridShimmer 1.15s ease-in-out infinite;
-}
-
-@keyframes gridShimmer {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: -100% 0;
-  }
-}
-
 @media (max-width: 768px) {
   .container {
     padding: 0 0 22px;
@@ -376,10 +346,6 @@
 
   .metricValue {
     font-size: 28px;
-  }
-
-  .gridLoading {
-    grid-template-columns: 1fr;
   }
 
   .title {

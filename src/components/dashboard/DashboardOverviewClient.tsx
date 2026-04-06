@@ -1,27 +1,11 @@
 'use client'
 
-import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { Badge, Button, Card } from '@/components/ui'
+import { DashboardOverviewGrid } from '@/components/dashboard/DashboardOverviewGrid'
 import { useLang } from '@/lib/lang-context'
 import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from '@/app/(dashboard)/dashboard/page.module.css'
-
-function GridLoading() {
-  return (
-    <section className={styles.gridLoading} aria-busy aria-label="Loading panels">
-      <div className={styles.gridLoadingCard} />
-      <div className={styles.gridLoadingCard} />
-      <div className={styles.gridLoadingCard} />
-      <div className={styles.gridLoadingCard} />
-    </section>
-  )
-}
-
-const DashboardOverviewGrid = dynamic(
-  () => import('@/components/dashboard/DashboardOverviewGrid').then((m) => m.DashboardOverviewGrid),
-  { loading: () => <GridLoading /> }
-)
 
 export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
   const { t, lang } = useLang()
