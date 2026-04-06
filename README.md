@@ -157,6 +157,22 @@ git log --oneline -5
 git push -u origin main
 ```
 
+## Deployment (GitHub + Vercel)
+
+**Source of truth for code is Git.** After you merge or push to the branch Vercel watches (usually `main`), Vercel runs a new build and deploys automatically if the project is connected to this GitHub repo.
+
+Recommended flow:
+
+1. Commit and push: `git push origin main`
+2. Confirm the deployment in the [Vercel dashboard](https://vercel.com/dashboard) (build must succeed).
+3. If you add or rename **environment variables**, update them in **Vercel → Project → Settings → Environment Variables** for Production (and Preview if needed). Secrets are not stored in Git.
+
+CLI deploy (optional, same project must be linked with `vercel link`):
+
+```bash
+npx vercel deploy --prod
+```
+
 ## Current Behavior
 
 - Gmail send flow works
