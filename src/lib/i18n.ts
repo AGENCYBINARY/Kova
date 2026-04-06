@@ -44,7 +44,7 @@ export const translations = {
     chat: {
       eyebrow: "Console Opérateur",
       title: "Chat",
-      subtitle: "Gmail, Agenda, Docs, Drive, Google Photos, Notion : Kova prépare les actions comme dans tes outils connectés. Tu choisis quand il doit demander ou agir.",
+      subtitle: "Assistant exécutif dans tes apps : courrier, agenda, fichiers, docs, Notion, Photos. Kova prépare les actions concrètes ; tu valides quand c’est sensible.",
       loading: "Chargement de ton espace de travail...",
       error: "Je n'ai pas pu compléter cette action. Vérifie la connexion au serveur et réessaie.",
     },
@@ -198,7 +198,7 @@ export const translations = {
     chat: {
       eyebrow: "Operator Console",
       title: "Chat",
-      subtitle: "Gmail, Calendar, Docs, Drive, Google Photos, Notion—Kova prepares actions across your connected stack. You choose when it asks or acts.",
+      subtitle: "Executive-style assistant across your apps: inbox, calendar, files, docs, Notion, photos. Kova prepares concrete actions; you approve when it matters.",
       loading: "Loading your operator workspace...",
       error: "I could not complete that turn. Check the server or database connection and try again.",
     },

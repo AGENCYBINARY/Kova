@@ -48,7 +48,7 @@ export function buildWelcomeMessage() {
     id: 'welcome',
     role: 'assistant' as const,
     content:
-      "I'm Kova. Tell me what you need: I use your connected apps (Gmail, Calendar, Docs, Drive, Google Photos, Notion) to prepare the right actions—as if I were inside your stack—with approval when it matters.",
+      "I'm Kova — built like an executive assistant: inbox, calendar, files, docs, Notion, Photos. Tell me what needs doing; I'll prepare concrete actions in your connected apps (approval when it matters).",
   }
 }
 

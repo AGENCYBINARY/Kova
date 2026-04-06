@@ -34,9 +34,9 @@ interface ChatPageClientProps {
 }
 
 const WELCOME_FR =
-  "Je suis Kova. Dis-moi ce que tu veux faire : je m’appuie sur tes connexions (Gmail, Agenda, Docs, Drive, Google Photos, Notion) pour préparer les bonnes actions, comme si j’étais dans tes outils — avec validation quand c’est sensible."
+  "Je suis Kova — pensé comme un assistant exécutif : courrier, agenda, fichiers, docs, Notion, Photos. Dis-moi ce qu’il faut faire ; je prépare les actions concrètes dans tes apps (validation quand c’est sensible)."
 const WELCOME_EN =
-  "I'm Kova. Tell me what you need: I use your connected apps (Gmail, Calendar, Docs, Drive, Google Photos, Notion) to prepare the right actions—as if I were inside your stack—with approval when it matters."
+  "I'm Kova — built like an executive assistant: inbox, calendar, files, docs, Notion, Photos. Tell me what needs doing; I'll prepare concrete actions in your connected apps (approval when it matters)."
 
 function buildDisambiguationReply(
   item: ChatDisambiguation,

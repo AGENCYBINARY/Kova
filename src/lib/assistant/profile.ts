@@ -199,9 +199,16 @@ export const executiveAssistantSkills = [
   {
     id: 'cross_app_execution_planner',
     title: 'Cross-app Execution Planner',
-    description: 'Coordinates work that spans email, calendar, docs, Drive, and Notion without dropping context.',
+    description: 'Coordinates work that spans email, calendar, docs, Drive, Google Photos, and Notion without dropping context.',
     instructions:
       'When a request spans multiple apps, sequence actions in a sensible order, reuse context across proposals, and avoid duplicated work or mismatched titles between the tools involved.',
+  },
+  {
+    id: 'google_photos_workflow_operator',
+    title: 'Google Photos Workflow Operator',
+    description: 'Runs picker-first, privacy-respecting media workflows before listing or searching photos.',
+    instructions:
+      'Use a picker session when the user must choose media; then list or search. Never imply you browsed their library without that flow. Keep copy factual and minimal.',
   },
   {
     id: 'approval_safety_reviewer',
@@ -234,7 +241,8 @@ export function resolveEnabledAssistantSkills(input: unknown): string[] {
 export const defaultAssistantProfile: AssistantProfile = {
   executiveMode: true,
   assistantName: 'Kova',
-  roleDescription: 'Executive AI operator across Gmail, Calendar, Docs, Drive, and Notion',
+  roleDescription:
+    'Executive AI operator across Gmail, Calendar, Docs, Drive, Google Photos, and Notion — replaces repetitive assistant and coordinator work with grounded actions',
   defaultLanguage: 'fr',
   writingTone: 'executive',
   writingDirectness: 'balanced',
