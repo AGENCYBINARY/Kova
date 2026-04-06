@@ -503,6 +503,52 @@ test('model-first path can return an ordered multi-step plan across apps', async
   }
 })
 
+test('bundled meeting + email requests fall back to the safe paired workflow when the model suggests a corrupted mail', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response: 'Prêt à envoyer à Tristan Massarelli.',
+    proposals: [
+      {
+        type: 'send_email',
+        title: 'Send email to Tristan Massarelli',
+        description: 'Prepare and send an email to Tristan Massarelli through Gmail.',
+        confidenceScore: 0.93,
+        parameters_json: JSON.stringify({
+          to: ['massarelli.tristan@gmail.com'],
+          subject:
+            "Écris-moi un mail à Madame Paula Massarelli, trouve son adresse dans Gmail et prépare l'invitation.",
+          body:
+            "Bonjour,\n\nÉcris-moi un mail à Madame Paula Massarelli, trouve son adresse dans Gmail et prépare l'invitation agenda avec Google Meet.\n\nMerci,\nAGENCY BINARY",
+          resolvedContactName: 'Tristan Massarelli',
+        }),
+      },
+    ],
+  })
+
+  try {
+    const result = await runAgentTurn(
+      "Écris-moi un mail à Madame Paula Massarelli, trouve son adresse dans Gmail, et rédige un message sur le même modèle qu’avant — réunion mardi à 19h, sur le même objectif que la demande précédente. Prépare l’invitation agenda avec Google Meet et l’email avec le lien.",
+      [{ role: 'user', content: 'Peux-tu préparer la réunion précédente pour Tristan mardi à 19h sur le même objectif ?' }],
+      [
+        { name: 'Paula Massarelli', email: 'paula.massarelli@gmail.com', aliases: ['Paula', 'Madame Paula Massarelli'] },
+        { name: 'Tristan Massarelli', email: 'massarelli.tristan@gmail.com', aliases: ['Tristan'] },
+      ]
+    )
+
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'send_email'])
+    assert.deepEqual(result.proposals[1]?.parameters.to, ['paula.massarelli@gmail.com'])
+    assert.match(String(result.proposals[1]?.parameters.body), /\{\{\s*meet_?link\s*\}\}/i)
+    assert.doesNotMatch(String(result.proposals[1]?.parameters.body), /Écris-moi un mail à Madame Paula/i)
+    assert.doesNotMatch(String(result.proposals[1]?.parameters.subject), /Écris-moi un mail à Madame Paula/i)
+    assert.match(result.response, /Google Meet|email/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
 test('model answers capability questions conversationally even if it over-eagerly suggests an action', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   process.env.OPENAI_API_KEY = 'test-key'

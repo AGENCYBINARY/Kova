@@ -109,6 +109,47 @@ function isActionOrWorkflowRequest(input: string) {
   )
 }
 
+function looksLikeMeetingEmailBundleRequest(input: string) {
+  const normalizedInput = normalizeInput(input)
+  const mentionsMeeting =
+    /(calendar|calendrier|meeting|reunion|réunion|rdv|rendez vous|rendez-vous|google meet|meet|agenda|invite|invitation|visio)/.test(
+      normalizedInput
+    )
+  const mentionsEmail =
+    /(gmail|mail|email|courriel|brouillon|draft|message)/.test(normalizedInput)
+  const mentionsBundleCue =
+    /(meme modele|meme objectif|meme horaires|mêmes horaires|same objective|same schedule|same as before|lien|link|trouve son adresse|find (her|his|their) address|prepare l invitation|prepare the invite)/.test(
+      normalizedInput
+    )
+  return mentionsMeeting && mentionsEmail && mentionsBundleCue
+}
+
+function looksLikeLiteralInstructionText(value: unknown) {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  const normalizedValue = normalizeInput(value)
+  if (!normalizedValue) {
+    return false
+  }
+
+  return /^(ecris moi|écris moi|redige|rédige|prepare|prépare|trouve|cherche|je t ai|je tai|je te demande|tu peux|peux tu|refais|fais|mets)\b/.test(
+    normalizedValue
+  )
+}
+
+function proposalLeaksLiteralUserInstruction(proposal: AgentProposal) {
+  if (proposal.type !== 'send_email' && proposal.type !== 'create_gmail_draft' && proposal.type !== 'update_gmail_draft') {
+    return false
+  }
+
+  return (
+    looksLikeLiteralInstructionText(proposal.parameters.subject) ||
+    looksLikeLiteralInstructionText(proposal.parameters.body)
+  )
+}
+
 function buildRoleDeniedResponse(language: 'fr' | 'en') {
   return language === 'en'
     ? 'I understood the request, but your workspace role is not allowed to use that tool.'
@@ -450,12 +491,23 @@ export async function runAgentTurn(
       const weakCalendarProposal = safeProposals.some(
         (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
       )
+      const literalInstructionLeakDetected = safeProposals.some(proposalLeaksLiteralUserInstruction)
+      const brokenMeetingBundleDetected =
+        looksLikeMeetingEmailBundleRequest(input) &&
+        (
+          !safeProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
+          !safeProposals.some(
+            (proposal) => proposal.type === 'send_email' || proposal.type === 'create_gmail_draft'
+          ) ||
+          literalInstructionLeakDetected
+        )
       const hadModelProposalButNoneValidated = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
       const fallbackResolutionForMissingOrInvalidModel =
         hadModelProposalButNoneValidated ||
         modelClaimsActionReadyWithoutProposal ||
         lowValueActionResponse ||
-        weakCalendarProposal
+        weakCalendarProposal ||
+        brokenMeetingBundleDetected
         ? resolveActionReferencesDetailed({
             proposals: (() => {
               const raw = deterministicFallback.proposals.filter(
@@ -491,26 +543,49 @@ export async function runAgentTurn(
       const shouldUseFallbackResponse =
         allowProposals &&
         !hasDisambiguation &&
-        safeProposals.length === 0 &&
-        (fallbackForMissingOrInvalidModelProposal.length > 0 ||
+        ((safeProposals.length === 0 && (fallbackForMissingOrInvalidModelProposal.length > 0 ||
           responseClaimsActionReady(aiResult.response) ||
-          isLowValueAssistantResponse(aiResult.response))
+          isLowValueAssistantResponse(aiResult.response))) ||
+          (brokenMeetingBundleDetected && fallbackForMissingOrInvalidModelProposal.length > 0))
+      const usingFallbackExecutableProposals =
+        allowProposals &&
+        !hasDisambiguation &&
+        fallbackForMissingOrInvalidModelProposal.length > 0 &&
+        (brokenMeetingBundleDetected || safeProposals.length === 0)
+
+      const finalExecutableProposals =
+        allowProposals && !hasDisambiguation
+          ? brokenMeetingBundleDetected && fallbackForMissingOrInvalidModelProposal.length > 0
+            ? fallbackForMissingOrInvalidModelProposal
+            : safeProposals.length > 0
+              ? safeProposals.filter(
+                  (proposal) => !(proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
+                )
+              : fallbackForMissingOrInvalidModelProposal
+          : []
 
       /** Prefer the model’s wording whenever it said something substantive — deterministic text is only a safety net. */
       const keepModelVoice =
         typeof aiResult.response === 'string' &&
         aiResult.response.trim().length > 0 &&
-        !isLowValueAssistantResponse(aiResult.response)
+        !isLowValueAssistantResponse(aiResult.response) &&
+        !brokenMeetingBundleDetected
 
       const pickVisibleResponse = () => {
-        if (safeProposals.length > 0 && !keepModelVoice) {
+        if (usingFallbackExecutableProposals) {
+          return deterministicFallback.response
+        }
+        if (finalExecutableProposals.length > 0 && !keepModelVoice) {
           return buildPlanBackedNarration({
             language,
             plan: aiResult.plan,
-            proposalCount: safeProposals.length,
+            proposalCount: finalExecutableProposals.length,
           })
         }
-        if (safeProposals.length > 0) {
+        if (brokenMeetingBundleDetected && fallbackForMissingOrInvalidModelProposal.length > 0) {
+          return deterministicFallback.response
+        }
+        if (finalExecutableProposals.length > 0) {
           return aiResult.response
         }
         if (shouldUseFallbackResponse && keepModelVoice) {
@@ -530,16 +605,7 @@ export async function runAgentTurn(
           hasDisambiguation
             ? buildDisambiguationResponse(disambiguations, assistantProfile)
             : pickVisibleResponse(),
-        proposals:
-          hasDisambiguation
-            ? []
-            : allowProposals
-              ? safeProposals.length > 0
-                ? safeProposals.filter(
-                    (proposal) => !(proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
-                  )
-                : fallbackForMissingOrInvalidModelProposal
-              : [],
+        proposals: finalExecutableProposals,
         disambiguations,
         plan: aiResult.plan,
       }

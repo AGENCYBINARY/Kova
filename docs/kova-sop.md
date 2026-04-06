@@ -667,3 +667,57 @@ Remaining honest gap after this slice:
 
 - The configured production execute target for this session still does not have `notion` connected, so the broadened write-path validation is excellent on Google surfaces but not yet mirrored by a live execute pass on Notion from this exact target.
 - The product now has a persistent multi-step workflow spine, but it is still not a durable resumable state machine with retries, waits, and long-lived steps.
+
+## Continuity Update — 2026-04-06 (agent regression: literal email leakage + wrong Massarelli contact)
+
+This slice fixed a real regression in the AI workflow, not a cosmetic issue.
+
+Observed failure:
+
+- Kova could accept a bundled “calendar invite + Gmail message” request and still output:
+  - a single `send_email` proposal instead of a paired calendar+email workflow
+  - the wrong Massarelli contact (`Tristan`) when the request targeted `Paula`
+  - the user’s own instruction text inside the email subject/body
+
+Root causes closed in this slice:
+
+- Contact extraction was too loose on courtesy titles such as `Madame Paula Massarelli`.
+- Gmail contact lookup could over-score surname-only matches from sent mail and return the wrong homonym.
+- Repeat-meeting replay text still looked too much like literal mail content.
+- Model rescue logic did not replace obviously broken bundled meeting/email outputs when the model returned a corrupted `send_email`.
+- Low-value model wording could still remain visible even when deterministic fallback proposals were the ones actually used.
+
+What changed:
+
+- `sanitizeContactNameCandidate()` now strips leading honorifics before contact matching.
+- Gmail lookup now requires a first-name anchor for multi-token names, preventing surname-only false positives like `Paula Massarelli` -> `Tristan Massarelli`.
+- The replay prompt for “same invite as before” is now phrased as an internal workflow request, not as literal mail copy.
+- `runAgentTurn()` now treats bundled meeting+email outputs as broken when:
+  - the calendar step is missing
+  - the email step is missing
+  - or the mail subject/body clearly repeats user-instruction text
+- When fallback proposals are used to rescue a broken model answer, Kova now uses the deterministic workflow narration instead of a generic model-flavored sentence.
+- Deterministic email subject/body builders now downgrade obvious prompt-instruction text to a safe placeholder instead of copying the raw instruction into an outgoing email.
+
+Validation baseline for this tranche:
+
+- `npm test` -> pass (`132/132`)
+- `npm run lint` -> pass
+- `npm run build` -> pass
+
+Files changed in this slice:
+
+- [src/lib/contacts-utils.ts](/Users/agencybinary/Documents/CODEX/src/lib/contacts-utils.ts)
+- [src/lib/integrations/google-gmail.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/google-gmail.ts)
+- [src/lib/agent/meeting-invite-repeat.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/meeting-invite-repeat.ts)
+- [src/lib/agent/v1-deterministic.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1-deterministic.ts)
+- [src/lib/agent/v1.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1.ts)
+- [tests/contacts.test.ts](/Users/agencybinary/Documents/CODEX/tests/contacts.test.ts)
+- [tests/google-gmail.test.ts](/Users/agencybinary/Documents/CODEX/tests/google-gmail.test.ts)
+- [tests/meeting-invite-repeat.test.ts](/Users/agencybinary/Documents/CODEX/tests/meeting-invite-repeat.test.ts)
+- [tests/agent-actions.test.ts](/Users/agencybinary/Documents/CODEX/tests/agent-actions.test.ts)
+
+Remaining honest gap after this slice:
+
+- This closes the concrete “wrong Massarelli + literal prompt in outgoing email” regression, but it does not mean every long ambiguous follow-up is now perfect.
+- The AI path is much safer again, but the deepest remaining product work is still around richer multi-step reasoning and broader live execution coverage across more complex user conversations.

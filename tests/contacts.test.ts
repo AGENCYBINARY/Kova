@@ -29,6 +29,12 @@ test('extractNameNearEmail and extractRecipientName capture likely recipient nam
   assert.equal(extractRecipientName('Envoie un mail à Marie Dupont pour le point de demain'), 'Marie Dupont')
   assert.equal(
     extractRecipientName(
+      "Écris-moi un mail à Madame Paula Massarelli, trouve son adresse dans Gmail et prépare aussi l'invitation agenda"
+    ),
+    'Paula Massarelli'
+  )
+  assert.equal(
+    extractRecipientName(
       'je veux que tu me redige un mail a tristan massarelli et que tu lui envoie le mail avec une invite google meet'
     ),
     'Tristan Massarelli'
@@ -41,6 +47,7 @@ test('extractNameNearEmail and extractRecipientName capture likely recipient nam
   )
   assert.equal(extractGmailLookupNameQuery('trouve toi le mail de tristan massarelli regarde mes mails envoyes'), 'Tristan Massarelli')
   assert.equal(extractGmailLookupNameQuery('cherche le mail de Marie Dupont sur gmail'), 'Marie Dupont')
+  assert.equal(extractGmailLookupNameQuery('trouve le mail de Madame Paula Massarelli dans Gmail'), 'Paula Massarelli')
 })
 
 test('extractRecipientFromSameInviteFollowUp catches pareil à / invitation pour lines', () => {

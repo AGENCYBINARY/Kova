@@ -200,10 +200,10 @@ export function composeBundledMeetingRequestFromPrior(
   const topic = topicTailForRepeat(priorUserMessage, lang)
   if (lang === 'en') {
     const schedBit = sched ? `scheduled ${sched}` : 'at the same time as before'
-    return `Write me an email to ${recipient}, find their address in Gmail, and draft a message in the same vein as before — ${schedBit}, ${topic}. Prepare the calendar invite with Google Meet and the follow-up email with the link.`
+    return `Prepare a Google Calendar invite for ${recipient}, find their address in Gmail, keep the same schedule and objective as the previous request — ${schedBit}, ${topic} — add Google Meet, and prepare the follow-up email with the same link.`
   }
   const schedBit = sched ? `prévue ${sched}` : 'aux mêmes horaires que tout à l’heure'
-  return `Écris-moi un mail à ${recipient}, trouve son adresse dans Gmail, et rédige un message sur le même modèle qu’avant — réunion ${schedBit}, ${topic}. Prépare l’invitation agenda avec Google Meet et l’email avec le lien.`
+  return `Prépare une invitation Google Calendar pour ${recipient}, retrouve son adresse dans Gmail, garde le même créneau et le même objectif que la demande précédente — réunion ${schedBit}, ${topic} — ajoute Google Meet et prépare aussi l’email de confirmation avec le lien.`
 }
 
 function resolveRepeatRecipient(trimmed: string): string | null {

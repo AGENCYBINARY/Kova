@@ -4,6 +4,7 @@ import {
   GOOGLE_READ_TIMEOUT_MS,
   GOOGLE_WRITE_TIMEOUT_MS,
 } from '@/lib/integrations/google-http'
+import { normalizeContactValue } from '@/lib/contacts-utils'
 
 function toBase64Url(value: string) {
   return Buffer.from(value)
@@ -92,6 +93,21 @@ function decodeBase64Url(value: string) {
 function getHeaderValue(headers: Array<{ name?: string; value?: string }>, name: string) {
   const header = headers.find((item) => item.name?.toLowerCase() === name.toLowerCase())
   return decodeMimeWords(header?.value || '')
+}
+
+function buildLookupSignals(name: string) {
+  const normalizedName = normalizeContactValue(name)
+  const nameTokens = normalizedName
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3)
+  const anchorTokens = nameTokens.length >= 2 ? [nameTokens[0]] : [...nameTokens]
+
+  return {
+    normalizedName,
+    nameTokens,
+    anchorTokens,
+  }
 }
 
 export interface GmailMessageSummary {
@@ -378,11 +394,10 @@ async function ensureGmailLabels(accessToken: string, labelNames: string[]) {
 }
 
 export async function findGoogleContactEmail(accessToken: string, name: string) {
-  const normalizedName = name.toLowerCase()
-  const nameTokens = normalizedName
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 3)
+  const { normalizedName, nameTokens, anchorTokens } = buildLookupSignals(name)
+  if (!normalizedName || nameTokens.length === 0) {
+    return null
+  }
 
   const sentQueries: string[] = [
     `in:sent to:"${name}"`,
@@ -468,24 +483,32 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
 
         const isRecipientField = headerName === 'to' || headerName === 'cc'
         const emails = extractAllEmailAddressesFromHeader(decoded)
-        const normalizedValue = decoded.toLowerCase()
+        const normalizedValue = normalizeContactValue(decoded)
 
         for (const email of emails) {
           let score = 0
+          const local = normalizeContactValue(email.split('@')[0] || '')
+          const hasAnchorMatch =
+            anchorTokens.length === 0 ||
+            anchorTokens.some((token) => normalizedValue.includes(token) || local.includes(token))
 
-          if (normalizedValue.includes(normalizedName)) {
-            score += 6
+          if (!hasAnchorMatch) {
+            continue
           }
 
-          for (const token of nameTokens) {
-            if (normalizedValue.includes(token)) {
-              score += 2
+          if (normalizedValue.includes(normalizedName)) {
+            score += 10
+          }
+
+          for (let index = 0; index < nameTokens.length; index += 1) {
+            const token = nameTokens[index]
+            if (normalizedValue.includes(token) || local.includes(token)) {
+              score += index === 0 ? 4 : 2
             }
           }
 
-          const local = email.split('@')[0]?.toLowerCase() || ''
           if (score === 0 && local && normalizedName.includes(local)) {
-            score += 2
+            score += 3
           }
           if (score === 0 && nameTokens.some((t) => local.includes(t) || t.includes(local))) {
             score += 1
@@ -519,11 +542,12 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
   }
 
   const ranked = Array.from(candidateScores.entries()).sort((left, right) => right[1] - left[1])
-  if (!ranked[0] || ranked[0][1] < 4) {
+  const minScore = nameTokens.length >= 2 ? 6 : 4
+  if (!ranked[0] || ranked[0][1] < minScore) {
     return null
   }
 
-  if (ranked[1] && ranked[0][1] - ranked[1][1] < 1) {
+  if (ranked[1] && ranked[0][1] - ranked[1][1] < 2) {
     return null
   }
 

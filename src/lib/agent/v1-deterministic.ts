@@ -581,7 +581,13 @@ export function buildConversationalResponse(input: string, profile?: AssistantPr
 }
 
 function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
-  if (isEmailCompositionAssistanceRequest(input)) {
+  const looksLikePromptInstruction =
+    isEmailCompositionAssistanceRequest(input) ||
+    /\b(trouve son adresse|find (her|his|their) address|prepare l['’]invitation|prepare the invite|sur le meme modele|same as before|meme objectif|same objective)\b/i.test(
+      normalizeInput(input)
+    )
+
+  if (looksLikePromptInstruction) {
     const signature = profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova'
     return profile?.defaultLanguage === 'en'
       ? ['Hello,', '', '[Message body will be drafted after you confirm recipient and purpose.]', '', 'Best regards,', signature].join('\n')
@@ -611,7 +617,12 @@ function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
 }
 
 function buildEmailSubject(input: string, profile?: AssistantProfile) {
-  if (isEmailCompositionAssistanceRequest(input)) {
+  if (
+    isEmailCompositionAssistanceRequest(input) ||
+    /\b(trouve son adresse|find (her|his|their) address|prepare l['’]invitation|prepare the invite|sur le meme modele|same as before|meme objectif|same objective)\b/i.test(
+      normalizeInput(input)
+    )
+  ) {
     return profile?.defaultLanguage === 'en' ? 'Follow-up' : 'Suivi'
   }
 
@@ -1468,7 +1479,7 @@ export function buildFallbackResponseWithContactsAndProfile(
   const wantsMeetingConfirmation =
     /(confirmation|confirm|confirmer|lien|link|visio|meet|invite)/.test(intentText)
   const explicitlyWantsSeparateEmail =
-    /(send an email|send email|email recap|mail recap|follow-up email|envoie un mail|envoyer un mail|envoie un email|envoyer un email|courriel distinct|rediger un mail|rédiger un mail|redige un mail|rédige un mail|me redige|me rediger|lui envoyer|lui envoie|envoyer.*mail|envoie.*mail)/.test(
+    /(send an email|send email|email recap|mail recap|follow-up email|envoie un mail|envoyer un mail|envoie un email|envoyer un email|courriel distinct|rediger un mail|rédiger un mail|redige un mail|rédige un mail|rediger un message|rédiger un message|redige un message|rédige un message|me redige|me rediger|lui envoyer|lui envoie|envoyer.*mail|envoie.*mail|same as before|meme modele|meme objectif|prepare l email|prepare le mail|prepare the email)/.test(
       intentText
     )
   const explicitEmailIntent = isEmailSendIntent(intentText)

@@ -7,6 +7,8 @@ export interface KnownContact {
 const emailAddressPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}/g
 const leadingCorrectionWordsPattern =
   /^(utilise|use|voici|voila|voilà|prends|take|mets|put|c est|c'est|pour|for|adresse|mail|email|le|la|du|de|des)\s+/i
+const leadingHonorificPattern =
+  /^(?:(?:madame|mme|mademoiselle|mlle|monsieur|mr|mrs|ms|m|dr|docteur|professeur|prof)\.?\s+)+/i
 const noisyContactNamePattern =
   /\b(utilise|use|voici|voila|voilà|prends|take|mets|put|mail|email|adresse|correcte?|bonne?|mauvaise?|remplace|plutot|plutôt|c est|c'est)\b/i
 
@@ -39,6 +41,7 @@ function sanitizeContactNameCandidate(value: string) {
   const cleaned = value
     .trim()
     .replace(leadingCorrectionWordsPattern, '')
+    .replace(leadingHonorificPattern, '')
     .replace(/\s+/g, ' ')
     .trim()
 

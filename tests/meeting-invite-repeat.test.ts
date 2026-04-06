@@ -36,6 +36,8 @@ test('composeBundledMeetingRequestFromPrior keeps schedule hints from the refere
   const out = composeBundledMeetingRequestFromPrior(priorFr, 'Claire Durand', 'fr')
   assert.match(out, /Claire Durand/)
   assert.match(out, /mardi/i)
+  assert.match(out, /Prépare une invitation Google Calendar/i)
+  assert.doesNotMatch(out, /Écris-moi un mail/i)
 })
 
 const inviteHelpFr =
