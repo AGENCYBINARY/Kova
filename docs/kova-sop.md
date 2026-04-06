@@ -14,6 +14,7 @@ Kova is not a generic chatbot. It is an action-oriented assistant that works acr
 - Google Calendar
 - Google Docs
 - Google Drive
+- Google Photos
 - Notion
 
 The product surface is:
@@ -28,6 +29,7 @@ The product surface is:
 ## Core Principles
 
 - Governance first: role and policy determine what can run
+- Model-first planning: the LLM should own interpretation, sequencing, and reformulation
 - Deterministic execution: tools are schema-validated before provider calls
 - Approval before risk: ambiguous or sensitive work stays behind review
 - Zero unnecessary data movement: Kova should not become a shadow data warehouse
@@ -85,7 +87,8 @@ Responsibilities:
 - load recent messages, contacts, assistant profile, governance
 - resolve connected workspace context
 - resolve contact corrections and recent references
-- decide whether to run deterministic or model-assisted planning
+- let the model lead planning by default
+- keep deterministic rescue only for malformed model output, missing facts, or safety-critical repair paths
 - create pending actions
 - auto-execute low-risk actions when policy allows it
 - persist assistant/user messages and execution outcomes
@@ -99,9 +102,11 @@ Core file:
 Responsibilities:
 
 - distinguish conversation vs action vs connected-read intent
-- propose typed actions
+- let OpenAI generate response, plan, and typed actions first when a real action request is present
+- validate, enrich, and reference-resolve those proposals safely
+- fall back to deterministic planning only when the model is unavailable, low-value, or structurally invalid
 - handle ambiguity and clarification
-- combine deterministic planning with OpenAI responses
+- keep multi-step planning explicit through a structured plan array
 
 ### 4. Tool execution
 
@@ -109,7 +114,11 @@ Core files:
 
 - [src/lib/agent/tool-execution.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/tool-execution.ts)
 - [src/lib/mcp/registry.ts](/Users/agencybinary/Documents/CODEX/src/lib/mcp/registry.ts)
-- [src/lib/integrations/google.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/google.ts)
+- [src/lib/integrations/google-calendar.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/google-calendar.ts)
+- [src/lib/integrations/google-docs.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/google-docs.ts)
+- [src/lib/integrations/google-drive.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/google-drive.ts)
+- [src/lib/integrations/google-gmail.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/google-gmail.ts)
+- [src/lib/integrations/google-photos.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/google-photos.ts)
 - [src/lib/integrations/notion.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/notion.ts)
 
 Responsibilities:
@@ -394,6 +403,26 @@ As of `2026-04-06`:
   - `npm run integration:smoke:prod` -> OK on Gmail, Calendar, Google Docs, Google Drive, Notion, Google Photos
   - `npm run integration:live:prod` -> OK `LIVE_RUNNER_OK 23`
   - `npm run integration:live:execute:prod` -> OK on Gmail, Calendar, Google Drive, Google Docs, Notion, Google Photos
+
+### Latest Local Candidate
+
+As of `2026-04-06`, not yet promoted as a new production baseline in this document:
+
+- theme: AI-first planning pass on the agent core
+- status:
+  - model-first planning path strengthened in [src/lib/agent/v1.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1.ts)
+  - structured `plan` array added to the OpenAI contract in [src/lib/ai/client.ts](/Users/agencybinary/Documents/CODEX/src/lib/ai/client.ts)
+  - assistant message metadata now persists plan steps in [src/lib/agent/orchestrator.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/orchestrator.ts)
+  - deterministic rescue for calendar update flows hardened in [src/lib/agent/v1-deterministic.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1-deterministic.ts)
+  - overly broad email intent detection narrowed in [src/lib/workspace-context/intents.ts](/Users/agencybinary/Documents/CODEX/src/lib/workspace-context/intents.ts)
+- local validation:
+  - `npm test` -> `125/125`
+  - `npm run build` -> OK
+- current prod-runner validation on the configured target:
+  - `npm run integration:smoke:prod` -> OK on Gmail, Calendar, Google Docs, Google Drive, Google Photos
+  - `npm run integration:live:prod` -> OK `LIVE_RUNNER_OK 20`
+- honest note:
+  - this pass makes the model more central in planning, but Kova is still not a free-form agent runtime. Deterministic guards remain intentionally present for capability answers, reference resolution, malformed model output, and safe execution repair.
 
 ### Production Issues Already Closed
 
