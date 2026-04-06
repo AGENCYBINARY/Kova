@@ -1,4 +1,5 @@
 import { analyzeUserRequest, isOpenAiConfigured } from '@/lib/ai/client'
+import { synthesizeDeterministicAssistantNarration } from '@/lib/ai/narration'
 import {
   executiveAssistantSkills,
   resolveEnabledAssistantSkills,
@@ -184,16 +185,48 @@ export async function runAgentTurn(
   }
 
   if (shouldPreferDeterministicAction(input, deterministicFallback.proposals)) {
+    const hasDisambiguation = deterministicResolution.disambiguations.length > 0
+    const permissionDenied =
+      deterministicFallback.proposals.length > 0 && deterministicFilteredProposals.length === 0
+
+    let response: string
+    if (hasDisambiguation) {
+      response = buildDisambiguationResponse(deterministicResolution.disambiguations, assistantProfile)
+    } else if (permissionDenied) {
+      response =
+        assistantProfile?.defaultLanguage === 'en'
+          ? 'I understood the request, but your workspace role is not allowed to use that tool.'
+          : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
+    } else {
+      response = deterministicFallback.response
+    }
+
+    if (
+      isOpenAiConfigured() &&
+      deterministicFilteredProposals.length > 0 &&
+      !hasDisambiguation &&
+      !permissionDenied
+    ) {
+      try {
+        response = await synthesizeDeterministicAssistantNarration({
+          defaultLanguage: assistantProfile?.defaultLanguage ?? 'fr',
+          userMessage: input,
+          draftResponse: response,
+          proposals: deterministicFilteredProposals.map((p) => ({
+            type: p.type,
+            title: p.title,
+            description: p.description,
+          })),
+          workspaceContext: options.workspaceContext,
+        })
+      } catch {
+        // keep deterministic draft
+      }
+    }
+
     return {
-      response:
-        deterministicResolution.disambiguations.length > 0
-          ? buildDisambiguationResponse(deterministicResolution.disambiguations, assistantProfile)
-          : deterministicFallback.proposals.length > 0 && deterministicFilteredProposals.length === 0
-            ? assistantProfile?.defaultLanguage === 'en'
-              ? 'I understood the request, but your workspace role is not allowed to use that tool.'
-              : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
-            : deterministicFallback.response,
-      proposals: deterministicResolution.disambiguations.length > 0 ? [] : deterministicFilteredProposals,
+      response,
+      proposals: hasDisambiguation ? [] : deterministicFilteredProposals,
       disambiguations: deterministicResolution.disambiguations,
     }
   }

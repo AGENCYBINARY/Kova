@@ -225,6 +225,7 @@ export async function orchestrateChatTurn(params: {
   const assistantMetadata = toJsonValue({
     proposalCount: agentResult.proposals.length,
     workspaceRole: governance.role,
+    unifiedAgentTurn: true,
     ...(agentDisambiguations.length > 0 ? { disambiguations: agentDisambiguations } : {}),
     ...(connectedContextResult?.metadata || {}),
   })
@@ -269,24 +270,14 @@ export async function orchestrateChatTurn(params: {
     assistantMessageId: assistantMessage.id,
     userId,
     workspaceId,
+    defaultLanguage: assistantProfile.defaultLanguage,
+    userTurnContent: params.content,
+    assistantPlanContent: agentResult.response,
   })
-
-  const finalAssistantMessage =
-    effectiveExecutionMode === 'auto' && !autoExecutionFailed && executionMessages.length > 0
-      ? await prisma.message.update({
-          where: { id: assistantMessage.id },
-          data: {
-            content:
-              assistantProfile.defaultLanguage === 'en'
-                ? 'I handled it automatically.'
-                : 'Je m’en suis chargé automatiquement.',
-          },
-        })
-      : assistantMessage
 
   return {
     userMessage,
-    assistantMessage: finalAssistantMessage,
+    assistantMessage,
     proposals:
       reviewableActions.length > 0 && (effectiveExecutionMode === 'ask' || autoExecutionFailed)
         ? reviewableActions.map((createdAction) => ({

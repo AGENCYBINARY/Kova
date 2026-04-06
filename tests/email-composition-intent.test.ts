@@ -22,12 +22,12 @@ test('literal send request is not composition assistance', () => {
   )
 })
 
-test('detects je veux que tu me redige un mail (verb before mail)', () => {
+test('named recipient plus send intent is not meta composition (agent should plan actions)', () => {
   assert.equal(
     isEmailCompositionAssistanceRequest(
       'je veux que tu me redige un mail a tristan massarelli et que tu lui envoie le mail avec une invite google meet'
     ),
-    true
+    false
   )
 })
 

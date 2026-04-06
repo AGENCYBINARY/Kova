@@ -204,7 +204,16 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   const asksForPriorities = priorityPattern.test(normalized)
   const explicitRead = readVerbPattern.test(normalized) || /\?$/.test(normalized)
   const softActionVerb = /\b(faire|fais|fait|refais|refaire|recree|recreer|recr[eé]e)\b/.test(normalized)
-  const explicitAction = explicitActionPattern.test(normalized) || (softActionVerb && !readVerbPattern.test(normalized))
+  /** "cherche/trouve son mail dans gmail" is an execution workflow, not a mailbox summary. */
+  const addressDiscoveryAction =
+    (/\b(cherche|chercher|trouve|trouver|retrouve|retrouver|regarde|regarder)\b/.test(normalized) &&
+      /\b(mail|email|courriel|adresse|gmail)\b/.test(normalized)) ||
+    /\b(son|sa|leur)\s+(mail|email|adresse)\b/.test(normalized)
+  const explicitAction =
+    explicitActionPattern.test(normalized) ||
+    emailActionPattern.test(normalized) ||
+    addressDiscoveryAction ||
+    (softActionVerb && !readVerbPattern.test(normalized))
   const referencesAllApps = allAppsPattern.test(normalized)
   const wantsMailboxListing =
     mentionsGmail &&

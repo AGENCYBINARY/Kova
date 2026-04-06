@@ -14,6 +14,7 @@ export {
   extractNameBeforeEmail,
   extractNameNearEmail,
   extractRecipientName,
+  extractStrictGmailAddressLookupName,
   findContactByName,
   findContactCandidatesByName,
   looksLikeContactCorrection,

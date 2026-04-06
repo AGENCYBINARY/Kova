@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAppContext } from '@/lib/app-context'
 import { approvePendingActionById } from '@/lib/actions/approve-pending'
+import { getAssistantProfile } from '@/lib/assistant/store'
 import { expirePendingActions } from '@/lib/actions/pending-expiration'
 import { getErrorStatus } from '@/lib/http/errors'
 import { buildIdempotencyFingerprint, executeIdempotentJsonRequest } from '@/lib/http/idempotency'
@@ -23,10 +24,12 @@ export async function POST(
       userId: dbUserId,
       fingerprint: buildIdempotencyFingerprint({ actionId: params.id }),
       execute: async () => {
+        const profile = await getAssistantProfile(workspaceId)
         const result = await approvePendingActionById({
           actionId: params.id,
           workspaceId,
           userId: dbUserId,
+          defaultLanguage: profile.defaultLanguage,
         })
 
         return {

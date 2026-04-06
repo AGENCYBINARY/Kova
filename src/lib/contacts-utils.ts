@@ -28,6 +28,13 @@ export function titleCaseContactValue(value: string) {
     .join(' ')
 }
 
+/** Single-token "names" produced by loose regexes (e.g. "mail a envoyer …") — not people. */
+const nonRecipientSingleTokens = new Set(
+  ['envoyer', 'envoie', 'rediger', 'redige', 'ecrire', 'ecris', 'formuler', 'ecrit'].map((w) =>
+    normalizeContactValue(w)
+  )
+)
+
 function sanitizeContactNameCandidate(value: string) {
   const cleaned = value
     .trim()
@@ -40,6 +47,13 @@ function sanitizeContactNameCandidate(value: string) {
   const words = cleaned.split(' ').filter(Boolean)
   if (words.length === 1 && words[0].length < 2) {
     return null
+  }
+
+  if (words.length === 1) {
+    const one = normalizeContactValue(words[0])
+    if (one && nonRecipientSingleTokens.has(one)) {
+      return null
+    }
   }
 
   if (words.length > 4 || noisyContactNamePattern.test(cleaned)) {
@@ -205,9 +219,10 @@ export function extractRecipientName(input: string) {
 }
 
 /**
- * Name for Gmail lookup when the user asks to find an address ("trouve le mail de X", etc.).
+ * Name from explicit "find X's email" phrasing only (no `extractRecipientName` fallback).
+ * Use when a loose recipient match would false-positive on meta-help wording ("help me write… to my manager").
  */
-export function extractGmailLookupNameQuery(input: string): string | null {
+export function extractStrictGmailAddressLookupName(input: string): string | null {
   const normalized = input.replace(/\s+/g, ' ').trim()
   /** Max 4 tokens; non-greedy so "… massarelli regarde …" stops at the name, not at "regarde". */
   const nameWords = '([A-Za-zÀ-ÿ\'-]+(?:\\s+[A-Za-zÀ-ÿ\'-]+){0,3}?)'
@@ -234,6 +249,16 @@ export function extractGmailLookupNameQuery(input: string): string | null {
       if (sanitized) return sanitized
     }
   }
+
+  return null
+}
+
+/**
+ * Name for Gmail lookup when the user asks to find an address ("trouve le mail de X", etc.).
+ */
+export function extractGmailLookupNameQuery(input: string): string | null {
+  const strict = extractStrictGmailAddressLookupName(input)
+  if (strict) return strict
 
   return extractRecipientName(input)
 }

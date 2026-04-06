@@ -2,8 +2,36 @@ import { prisma } from '@/lib/db/prisma'
 import { createAuditLog } from '@/lib/audit/service'
 import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
+import { isOpenAiConfigured } from '@/lib/ai/client'
+import { synthesizePostExecutionOutcome } from '@/lib/ai/narration'
 import { inferRiskLevel } from '@/lib/agent/policy'
 import type { AgentProposal } from '@/lib/agent/v1'
+
+function templateAutoExecutionFollowUp(params: {
+  lang: 'fr' | 'en'
+  completed: Array<{ action: { title: string }; execution: { details: string } }>
+  failed: null | { action: { title: string }; error: string; blockedCount: number }
+}) {
+  const { lang, completed, failed } = params
+  if (failed && completed.length > 0) {
+    return lang === 'en'
+      ? `Auto-run stopped on "${failed.action.title}": ${failed.error}. ${completed.length} prior action(s) still completed. ${failed.blockedCount} remain for your review.`
+      : `L’exécution auto s’est arrêtée sur « ${failed.action.title} » : ${failed.error}. ${completed.length} action(s) avaient déjà réussi. ${failed.blockedCount} restent à valider.`
+  }
+  if (failed && completed.length === 0) {
+    return lang === 'en'
+      ? `Auto-run stopped on "${failed.action.title}": ${failed.error}.`
+      : `L’exécution auto s’est arrêtée sur « ${failed.action.title} » : ${failed.error}.`
+  }
+  if (completed.length === 1) {
+    return lang === 'en'
+      ? `Ran it: ${completed[0].action.title}. ${completed[0].execution.details}`
+      : `Exécuté : ${completed[0].action.title}. ${completed[0].execution.details}`
+  }
+  return lang === 'en'
+    ? `All set — ${completed.length} actions ran.`
+    : `C’est bon — ${completed.length} actions ont été exécutées.`
+}
 
 export async function persistAndExecuteAgentProposals(params: {
   proposals: AgentProposal[]
@@ -12,7 +40,14 @@ export async function persistAndExecuteAgentProposals(params: {
   assistantMessageId: string
   userId: string
   workspaceId: string
+  /** Used for execution follow-up copy only (main assistant reply stays the model output). */
+  defaultLanguage?: 'fr' | 'en'
+  /** Last user chat line (for LLM execution recap). */
+  userTurnContent?: string
+  /** Assistant message shown before auto-run (for LLM execution recap). */
+  assistantPlanContent?: string
 }) {
+  const lang = params.defaultLanguage === 'en' ? 'en' : 'fr'
   const requestGroupId = params.proposals.length > 1 ? `group_${Date.now()}_${params.userId.slice(0, 6)}` : null
 
   const createdActions =
@@ -84,48 +119,77 @@ export async function persistAndExecuteAgentProposals(params: {
       trigger: 'auto',
     })
 
-    if (batchResult.completed.length > 0) {
-      const executionMessage = await prisma.message.create({
-        data: {
-          content:
-            batchResult.completed.length === 1
-              ? `C'est bon. "${batchResult.completed[0].action.title}" a ete execute automatiquement. ${batchResult.completed[0].execution.details}`
-              : `C'est bon. ${batchResult.completed.length} actions ont ete executees automatiquement.`,
-          role: 'assistant',
-          metadata: {
-            actionStatus: 'completed',
-            actionCount: batchResult.completed.length,
-            executionMode: 'auto',
-            executionReason: params.executionReason,
-          },
-          userId: params.userId,
-          workspaceId: params.workspaceId,
-        },
-      })
+    const hasSuccess = batchResult.completed.length > 0
+    const hasFailure = Boolean(batchResult.failed)
 
-      executionMessages.push(executionMessage)
-    }
-
-    if (batchResult.failed) {
+    if (hasFailure) {
       autoExecutionFailed = true
       reviewableActions = createdActions.filter((createdAction) =>
         batchResult.blocked.some((blockedAction) => blockedAction.action.id === createdAction.id)
       )
+    }
+
+    if (hasSuccess || hasFailure) {
+      const failure = batchResult.failed
+      let content = templateAutoExecutionFollowUp({
+        lang,
+        completed: batchResult.completed,
+        failed: failure
+          ? {
+              action: failure.action,
+              error: failure.error,
+              blockedCount: batchResult.blocked.length,
+            }
+          : null,
+      })
+
+      let narrationFromLlm = false
+      if (isOpenAiConfigured()) {
+        try {
+          content = await synthesizePostExecutionOutcome({
+            defaultLanguage: lang,
+            userRequest: params.userTurnContent?.trim() || null,
+            assistantPlanBeforeExecution: params.assistantPlanContent?.trim() || null,
+            completed: batchResult.completed.map((c) => ({
+              title: c.action.title,
+              type: c.action.type,
+              details: c.execution.details,
+            })),
+            failure: failure
+              ? {
+                  title: failure.action.title,
+                  error: failure.error,
+                  blockedCount: batchResult.blocked.length,
+                  priorCompletedCount: batchResult.completed.length,
+                }
+              : undefined,
+          })
+          narrationFromLlm = true
+        } catch {
+          // keep template
+        }
+      }
 
       const executionMessage = await prisma.message.create({
         data: {
-          content:
-            batchResult.blocked.length > 0
-              ? `L'execution automatique s'est arretee sur "${batchResult.failed.action.title}": ${batchResult.failed.error}. ${batchResult.blocked.length} action(s) restent en attente de validation.`
-              : `L'execution automatique s'est arretee sur "${batchResult.failed.action.title}": ${batchResult.failed.error}.`,
+          content,
           role: 'assistant',
           metadata: {
-            actionId: batchResult.failed.action.id,
-            actionStatus: 'failed',
-            blockedActionCount: batchResult.blocked.length,
+            ...(failure
+              ? {
+                  actionId: failure.action.id,
+                  actionStatus: hasSuccess ? 'partial_failure' : 'failed',
+                  blockedActionCount: batchResult.blocked.length,
+                  autoExecutionFailed: true,
+                }
+              : {
+                  actionStatus: 'completed',
+                  actionCount: batchResult.completed.length,
+                }),
             executionMode: 'auto',
-            autoExecutionFailed: true,
             executionReason: params.executionReason,
+            narrationSource: narrationFromLlm ? 'llm' : 'template',
+            unifiedAgentFollowUp: true,
           },
           userId: params.userId,
           workspaceId: params.workspaceId,

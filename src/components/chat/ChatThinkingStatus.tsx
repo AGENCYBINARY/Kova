@@ -54,11 +54,6 @@ export function ChatThinkingStatus({ lang }: { lang: 'fr' | 'en' }) {
               />
             </svg>
           </div>
-          <span className={bubbleStyles.avatarThinkingDots} aria-hidden="true">
-            <span className={bubbleStyles.avatarThinkingDot} />
-            <span className={bubbleStyles.avatarThinkingDot} />
-            <span className={bubbleStyles.avatarThinkingDot} />
-          </span>
         </div>
       </div>
       <div className={bubbleStyles.content}>

@@ -122,6 +122,15 @@ test('mixed workflow requests keep read context and action mode together', () =>
   })
 })
 
+test('finding someone email in Gmail is mixed/action workflow not mailbox read-only', () => {
+  const parsed = parseConnectedContextRequest(
+    "c'est un meeting pour l'objectif de l'agence et cherche son mail dans mon gmail"
+  )
+  assert.equal(parsed?.mode === 'read', false)
+  assert.equal(parsed?.mode, 'mixed')
+  assert.ok(parsed?.sources.includes('gmail'))
+})
+
 test('follow-up detail questions reuse the previous gmail context', () => {
   assert.deepEqual(
     resolveConnectedContextRequest('et tu peux me les detailler et me dire il parle de quoi ?', {

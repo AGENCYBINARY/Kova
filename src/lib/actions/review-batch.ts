@@ -4,6 +4,9 @@ import { createAuditLog } from '@/lib/audit/service'
 import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { asActionParameters } from '@/lib/actions/parameter-resolution'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
+import { isOpenAiConfigured } from '@/lib/ai/client'
+import { synthesizePostExecutionOutcome, type PostExecutionOutcomeFact } from '@/lib/ai/narration'
+import { loadChatTurnContextForActionMessage } from '@/lib/chat/turn-context'
 
 function asJsonRecord(value: unknown) {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -39,15 +42,39 @@ export async function loadPendingActionsForReview(params: {
   })
 }
 
+function templateBulkApprovalSummary(params: {
+  lang: 'fr' | 'en'
+  completedCount: number
+  failedCount: number
+  blockedCount: number
+}) {
+  const { lang, completedCount, failedCount, blockedCount } = params
+  if (failedCount > 0) {
+    if (blockedCount > 0) {
+      return lang === 'en'
+        ? `${completedCount} action(s) ran. ${failedCount} group(s) failed; ${blockedCount} action(s) still pending review.`
+        : `${completedCount} action(s) exécutée(s). ${failedCount} lot(s) en échec ; ${blockedCount} action(s) encore en attente.`
+    }
+    return lang === 'en'
+      ? `${completedCount} action(s) ran. ${failedCount} group(s) failed during bulk approval.`
+      : `${completedCount} action(s) exécutée(s). ${failedCount} lot(s) ont échoué pendant l’approbation groupée.`
+  }
+  return lang === 'en'
+    ? `All set — ${completedCount} actions ran successfully.`
+    : `C’est bon — ${completedCount} actions exécutées avec succès.`
+}
+
 export async function approvePendingActionBatch(params: {
   workspaceId: string
   userId: string
+  defaultLanguage?: 'fr' | 'en'
   actions: Array<{
     id: string
     type: string
     title: string
     description: string
     parameters: Prisma.JsonValue
+    messageId?: string | null
   }>
 }) {
   if (params.actions.length === 0) {
@@ -78,6 +105,8 @@ export async function approvePendingActionBatch(params: {
   let completedCount = 0
   let failedCount = 0
   let blockedCount = 0
+  const allCompleted: PostExecutionOutcomeFact[] = []
+  const batchFailures: Array<{ title: string; error: string; blockedCount: number }> = []
 
   for (const groupKey of groupOrder) {
     const actions = groups.get(groupKey) || []
@@ -106,6 +135,22 @@ export async function approvePendingActionBatch(params: {
     failedCount += batchResult.failed ? 1 : 0
     blockedCount += batchResult.blocked.length
 
+    for (const completed of batchResult.completed) {
+      allCompleted.push({
+        title: completed.action.title,
+        type: completed.action.type,
+        details: completed.execution.details,
+      })
+    }
+
+    if (batchResult.failed) {
+      batchFailures.push({
+        title: batchResult.failed.action.title,
+        error: batchResult.failed.error,
+        blockedCount: batchResult.blocked.length,
+      })
+    }
+
     const refreshedActions = await prisma.action.findMany({
       where: {
         id: {
@@ -120,20 +165,44 @@ export async function approvePendingActionBatch(params: {
     }
   }
 
+  const lang = params.defaultLanguage === 'en' ? 'en' : 'fr'
+  const messageId =
+    params.actions.map((action) => action.messageId).find((id) => typeof id === 'string' && id.length > 0) ?? null
+
+  const anchor = await loadChatTurnContextForActionMessage({
+    workspaceId: params.workspaceId,
+    userId: params.userId,
+    messageId,
+  })
+
+  let content = templateBulkApprovalSummary({ lang, completedCount, failedCount, blockedCount })
+  let narrationFromLlm = false
+  if (isOpenAiConfigured()) {
+    try {
+      content = await synthesizePostExecutionOutcome({
+        defaultLanguage: lang,
+        userRequest: anchor.userRequest,
+        assistantPlanBeforeExecution: anchor.assistantPlan,
+        completed: allCompleted,
+        batchFailures: batchFailures.length > 0 ? batchFailures : undefined,
+        scenarioNotes: `Bulk approval: ${params.actions.length} selected action(s) in ${groupOrder.length} execution group(s). ${completedCount} tool run(s) succeeded, ${failedCount} group(s) reported an error, ${blockedCount} action(s) left blocked/pending.`,
+      })
+      narrationFromLlm = true
+    } catch {
+      // template
+    }
+  }
+
   const assistantMessage = await prisma.message.create({
     data: {
-      content:
-        failedCount > 0
-          ? blockedCount > 0
-            ? `${completedCount} action(s) executee(s). ${failedCount} lot(s) en echec et ${blockedCount} action(s) restent en attente.`
-            : `${completedCount} action(s) executee(s). ${failedCount} lot(s) ont echoue pendant l'approbation en masse.`
-          : `C'est bon. ${completedCount} actions ont ete executees avec succes.`,
+      content,
       role: 'assistant',
       metadata: {
         actionStatus: failedCount > 0 ? 'partial_failure' : 'completed',
         actionCount: params.actions.length,
         blockedActionCount: blockedCount,
         batchReview: true,
+        narrationSource: narrationFromLlm ? 'llm' : 'template',
       },
       workspaceId: params.workspaceId,
       userId: params.userId,

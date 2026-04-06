@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db/prisma'
 import { asActionParameters } from '@/lib/actions/parameter-resolution'
 import { claimPendingActionIds } from '@/lib/actions/claim-pending'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
+import { isOpenAiConfigured } from '@/lib/ai/client'
+import { synthesizePostExecutionOutcome } from '@/lib/ai/narration'
+import { loadChatTurnContextForActionMessage } from '@/lib/chat/turn-context'
 
 type PersistedActionRecord = {
   id: string
@@ -12,12 +15,40 @@ type PersistedActionRecord = {
   parameters: Prisma.JsonValue
   workspaceId: string
   userId: string
+  messageId: string | null
+}
+
+function templateApprovalFollowUp(params: {
+  lang: 'fr' | 'en'
+  batchResult: Awaited<ReturnType<typeof executePersistedActionBatch>>
+}) {
+  const { lang, batchResult } = params
+  if (batchResult.failed) {
+    if (batchResult.blocked.length > 0) {
+      return lang === 'en'
+        ? `${batchResult.completed.length} action(s) ran. Stopped on "${batchResult.failed.action.title}": ${batchResult.failed.error}. ${batchResult.blocked.length} still pending review.`
+        : `${batchResult.completed.length} action(s) exécutée(s). Arrêt sur « ${batchResult.failed.action.title} » : ${batchResult.failed.error}. ${batchResult.blocked.length} en attente de validation.`
+    }
+    return lang === 'en'
+      ? `Stopped on "${batchResult.failed.action.title}": ${batchResult.failed.error}.`
+      : `Arrêt sur « ${batchResult.failed.action.title} » : ${batchResult.failed.error}.`
+  }
+  if (batchResult.completed.length > 1) {
+    return lang === 'en'
+      ? `All set — ${batchResult.completed.length} actions ran.`
+      : `C’est bon — ${batchResult.completed.length} actions exécutées.`
+  }
+  const first = batchResult.completed[0]
+  return lang === 'en'
+    ? `Done: ${first.action.title}. ${first.execution.details}`
+    : `Exécuté : ${first.action.title}. ${first.execution.details}`
 }
 
 export async function approvePendingActionById(params: {
   actionId: string
   workspaceId: string
   userId: string
+  defaultLanguage?: 'fr' | 'en'
 }) {
   const actionsToExecute = await prisma.$transaction(async (tx) => {
     const action = await tx.action.findFirst({
@@ -71,6 +102,7 @@ export async function approvePendingActionById(params: {
       parameters: item.parameters,
       workspaceId: params.workspaceId,
       userId: params.userId,
+      messageId: item.messageId,
     })) satisfies PersistedActionRecord[]
   })
 
@@ -80,6 +112,41 @@ export async function approvePendingActionById(params: {
   })
 
   const primaryAction = actionsToExecute[0]
+  const lang = params.defaultLanguage === 'en' ? 'en' : 'fr'
+
+  const anchor = await loadChatTurnContextForActionMessage({
+    workspaceId: params.workspaceId,
+    userId: params.userId,
+    messageId: primaryAction.messageId,
+  })
+
+  let content = templateApprovalFollowUp({ lang, batchResult })
+  let narrationFromLlm = false
+  if (isOpenAiConfigured()) {
+    try {
+      content = await synthesizePostExecutionOutcome({
+        defaultLanguage: lang,
+        userRequest: anchor.userRequest,
+        assistantPlanBeforeExecution: anchor.assistantPlan,
+        completed: batchResult.completed.map((c) => ({
+          title: c.action.title,
+          type: c.action.type,
+          details: c.execution.details,
+        })),
+        failure: batchResult.failed
+          ? {
+              title: batchResult.failed.action.title,
+              error: batchResult.failed.error,
+              blockedCount: batchResult.blocked.length,
+              priorCompletedCount: batchResult.completed.length,
+            }
+          : undefined,
+      })
+      narrationFromLlm = true
+    } catch {
+      // template
+    }
+  }
 
   const [updatedActions, assistantMessage] = await Promise.all([
     prisma.action.findMany({
@@ -92,20 +159,18 @@ export async function approvePendingActionById(params: {
     }),
     prisma.message.create({
       data: {
-        content:
-          batchResult.failed
-            ? batchResult.blocked.length > 0
-              ? `${batchResult.completed.length} action(s) executee(s). Echec sur "${batchResult.failed.action.title}": ${batchResult.failed.error}. ${batchResult.blocked.length} action(s) restent en attente.`
-              : `Echec sur "${batchResult.failed.action.title}": ${batchResult.failed.error}.`
-            : batchResult.completed.length > 1
-              ? `C'est bon. ${batchResult.completed.length} actions ont ete executees avec succes.`
-              : `C'est bon. "${batchResult.completed[0].action.title}" a ete execute. ${batchResult.completed[0].execution.details}`,
+        content,
         role: 'assistant',
         metadata: {
           actionId: primaryAction.id,
-          actionStatus: batchResult.failed ? 'partial_failure' : 'completed',
+          actionStatus: batchResult.failed
+            ? batchResult.completed.length > 0
+              ? 'partial_failure'
+              : 'failed'
+            : 'completed',
           actionCount: actionsToExecute.length,
-          blockedActionCount: batchResult.blocked.length,
+          blockedActionCount: batchResult.failed ? batchResult.blocked.length : 0,
+          narrationSource: narrationFromLlm ? 'llm' : 'template',
         },
         workspaceId: params.workspaceId,
         userId: params.userId,
@@ -117,57 +182,5 @@ export async function approvePendingActionById(params: {
     actions: updatedActions,
     assistantMessage,
     partialFailure: Boolean(batchResult.failed),
-  }
-}
-
-export async function approvePendingActionBatch(params: {
-  workspaceId: string
-  userId: string
-  actionIds?: string[]
-}) {
-  const requestedIds =
-    params.actionIds && params.actionIds.length > 0
-      ? Array.from(new Set(params.actionIds))
-      : (
-          await prisma.action.findMany({
-            where: {
-              workspaceId: params.workspaceId,
-              userId: params.userId,
-              status: 'pending',
-            },
-            orderBy: { createdAt: 'asc' },
-            select: { id: true },
-          })
-        ).map((action) => action.id)
-
-  const handledIds = new Set<string>()
-  const actions = new Map<string, Awaited<ReturnType<typeof approvePendingActionById>>['actions'][number]>()
-  const assistantMessages: Array<Awaited<ReturnType<typeof approvePendingActionById>>['assistantMessage']> = []
-  let partialFailure = false
-
-  for (const actionId of requestedIds) {
-    if (handledIds.has(actionId)) {
-      continue
-    }
-
-    const result = await approvePendingActionById({
-      actionId,
-      workspaceId: params.workspaceId,
-      userId: params.userId,
-    })
-
-    partialFailure = partialFailure || result.partialFailure
-    assistantMessages.push(result.assistantMessage)
-
-    for (const action of result.actions) {
-      handledIds.add(action.id)
-      actions.set(action.id, action)
-    }
-  }
-
-  return {
-    actions: Array.from(actions.values()),
-    assistantMessages,
-    partialFailure,
   }
 }

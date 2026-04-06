@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAppContext } from '@/lib/app-context'
+import { getAssistantProfile } from '@/lib/assistant/store'
 import { expirePendingActions } from '@/lib/actions/pending-expiration'
 import {
   approvePendingActionBatch,
@@ -48,10 +49,12 @@ export async function POST(request: Request) {
         }
 
         if (body.decision === 'approve') {
+          const profile = await getAssistantProfile(workspaceId)
           const result = await approvePendingActionBatch({
             workspaceId,
             userId: dbUserId,
             actions,
+            defaultLanguage: profile.defaultLanguage,
           })
 
           return {

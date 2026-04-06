@@ -5,6 +5,7 @@ import {
   deriveNameFromEmail,
   extractEmailAddresses,
   extractRecipientName,
+  extractStrictGmailAddressLookupName,
   findContactCandidatesByName,
   type KnownContact,
 } from '@/lib/contacts'
@@ -354,10 +355,21 @@ export function isEmailCompositionAssistanceRequest(input: string): boolean {
   if (!/\b(mail|email|courriel|gmail|message)\b/.test(n)) {
     return false
   }
+  if (
+    /\b(cherche|chercher|trouve|trouver|retrouve|retrouver|regarde|depuis)\b/.test(n) &&
+    /\b(mail|email|courriel|adresse|gmail|envoy|envoyes|envoyés|boite|inbox)\b/.test(n)
+  ) {
+    return false
+  }
+  if (extractStrictGmailAddressLookupName(input)) {
+    return false
+  }
+
   const draftingVerb =
     /\b(formuler|rediger|redige|ecrire|ecris)\b/.test(n) ||
     /\b(write|draft|compose|formulate)\b/.test(n)
-  return (
+
+  const metaHelp =
     /\b(aide|aider)\b.*\b(mail|email|courriel|message)\b/.test(n) ||
     /\b(mail|email|courriel)\b.*\b(formuler|rediger|redige|ecrire|ecris)\b/.test(n) ||
     /\b(formuler|rediger|redige|ecrire|ecris)\b.*\b(mail|email|courriel)\b/.test(n) ||
@@ -368,7 +380,21 @@ export function isEmailCompositionAssistanceRequest(input: string): boolean {
     /\b(can you help (me )?(write|draft))\b/.test(n) ||
     /\b(formulate|draft) (a |an |the )?(email|mail)\b/.test(n) ||
     /\b(write|compose) (a |an |the )?(email|mail)\b/.test(n)
-  )
+
+  if (!metaHelp) {
+    return false
+  }
+
+  const recipient = extractRecipientName(input)
+  if (
+    recipient &&
+    (/\b(me redige|m redige|me rediger|redige un mail|redige le mail|envoie|envoyer|send (the )?(email|mail)|transmets|transmettre|forward)\b/.test(n) ||
+      /\s+lui\s+(envoie|envoyer)\b/.test(n))
+  ) {
+    return false
+  }
+
+  return true
 }
 
 export function isCapabilityQuestion(input: string, proposals: AgentProposal[]) {
@@ -1765,16 +1791,6 @@ export function buildFallbackResponseWithContactsAndProfile(
     }
   }
 
-  if (isEmailCompositionAssistanceRequest(input)) {
-    return {
-      response:
-        language === 'en'
-          ? 'Got it — you want help drafting an email to a colleague. I can’t build a useful draft from that sentence alone: share their email (or name if they’re in your contacts) and, in one line, the meeting purpose or what you want to propose. I’ll write a clean message you can paste or save as a draft.'
-          : 'Compris — tu veux de l’aide pour rédiger un mail à un collègue. Je ne peux pas inventer un texte utile à partir de cette phrase seule : envoie son email (ou son prénom s’il est dans tes contacts) et en une ligne l’objet du meeting ou ce que tu veux proposer. Je te rédige un message propre à coller ou à mettre en brouillon.',
-      proposals: [],
-    }
-  }
-
   if (isEmailSendIntent(intentText)) {
     const matchedEmail = firstRealRecipientEmailFromInput(input)
     const ambiguousRecipients = contactMatchIsAmbiguous(contactCandidates)
@@ -1818,8 +1834,8 @@ export function buildFallbackResponseWithContactsAndProfile(
         return {
           response:
             language === 'en'
-              ? `I don't have an email for "${maybeRecipient}" in your workspace contacts. Paste their address.`
-              : `Je n’ai pas d’adresse pour « ${maybeRecipient} » dans tes contacts workspace. Colle son email.`,
+              ? `I don’t have "${maybeRecipient}" in workspace contacts yet. I’ll look them up from your Gmail threads when you confirm the next step, or paste their email here.`
+              : `Je n’ai pas encore « ${maybeRecipient} » en contacts workspace : je peux retrouver son adresse dans tes mails (envoyés/reçus) si Gmail est connecté, ou colle son email ici.`,
           proposals: [],
         }
       }
@@ -1849,8 +1865,8 @@ export function buildFallbackResponseWithContactsAndProfile(
       return {
         response:
           language === 'en'
-            ? 'Who should the draft be sent to? Give me an email address or a name from your workspace contacts.'
-            : 'À qui dois-je adresser le brouillon ? Donne un email ou un nom présent dans tes contacts workspace.',
+            ? 'Who is the draft for? Give an email, a full name (I can match Gmail history), or a workspace contact.'
+            : 'Pour qui est le brouillon ? Donne un email, un nom complet (je peux le retrouver dans Gmail), ou un contact workspace.',
         proposals: [],
       }
     }
@@ -1870,8 +1886,8 @@ export function buildFallbackResponseWithContactsAndProfile(
       return {
         response:
           language === 'en'
-            ? `I don't have an email for "${maybeRecipient}" in your workspace contacts. Paste their address.`
-            : `Je n’ai pas d’adresse pour « ${maybeRecipient} » dans tes contacts workspace. Colle son email.`,
+            ? `No saved address for "${maybeRecipient}" in workspace contacts. I can resolve it from Gmail threads when connected, or paste their email.`
+            : `Pas d’adresse enregistrée pour « ${maybeRecipient} » : je peux la retrouver dans tes mails Gmail si la connexion est active, ou colle son email.`,
         proposals: [],
       }
     }
@@ -1901,8 +1917,8 @@ export function buildFallbackResponseWithContactsAndProfile(
     return {
       response:
         language === 'en'
-          ? 'Who should receive this email? Give me their email or a name from your workspace contacts.'
-          : 'À qui veux-tu envoyer ce mail ? Donne l’email ou un nom présent dans tes contacts workspace.',
+          ? 'Who should receive this? Share an email or a person’s name (I’ll match Gmail + contacts).'
+          : 'À qui part ce mail ? Donne une adresse ou un nom (je croise Gmail et tes contacts).',
       proposals: [],
     }
   }
