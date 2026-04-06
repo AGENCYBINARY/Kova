@@ -96,7 +96,7 @@ export const executiveAssistantSkills = [
     title: 'Notion Workspace Manager',
     description: 'Keeps operational pages and knowledge bases structured and current.',
     instructions:
-      'Write clearly structured Notion content with sections, operational context, and actionable summaries.',
+      'Write clearly structured Notion content with sections, operational context, and actionable summaries. For **database pages** (tables, boards, task DBs), use update_notion_page_properties to set status, assignee, dates, and checkbox/done fields when the schema is known from context; create child pages under the right parent or database.',
   },
   {
     id: 'google_docs_formatter',

@@ -33,10 +33,14 @@ import { resolveConnectedWorkspaceContext } from '@/lib/workspace-context/servic
 export type ChatExecutionMode = 'ask' | 'auto'
 
 export async function getChatPageData(context: ChatContext) {
-  const { messages, proposals } = await loadChatPageState(context)
+  const [pageState, assistantProfile] = await Promise.all([
+    loadChatPageState(context),
+    getAssistantProfile(context.workspaceId),
+  ])
+  const { messages, proposals } = pageState
 
   return {
-    messages: messages.length > 0 ? messages : [buildWelcomeMessage()],
+    messages: messages.length > 0 ? messages : [buildWelcomeMessage(assistantProfile.defaultLanguage)],
     proposals,
   }
 }

@@ -43,12 +43,38 @@ export function toJsonValue(value: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
-export function buildWelcomeMessage() {
+export function buildWelcomeMessage(defaultLanguage: 'fr' | 'en' = 'fr') {
+  const content =
+    defaultLanguage === 'en'
+      ? [
+          "I'm **Kova** — a real operational assistant for your company (or personal stack), not a generic chatbot.",
+          '',
+          '**What I do with your connected apps** (once they’re linked):',
+          '• **Gmail** — draft or send mail, reply, forward, organize threads; when you only give a name, I use your **sent/received context** and contacts to find the right address, or I ask you once if I can’t.',
+          '• **Google Calendar** — create or update events, attendees, and **Google Meet** links when a call or external meeting makes sense (unless you say no Meet).',
+          '• **Google Docs & Drive** — write real documents, create folders, move, rename, share — so deliverables land where your team expects them.',
+          '• **Notion** — create or update pages, adjust **database properties** (status, dates, people, checkboxes / task-style fields) when the parent database is known from context, archive pages — keep your wiki and task DBs current.',
+          '• **Google Photos** — I open a **secure picker** so you choose images, then I work from that selection (privacy-first).',
+          '',
+          'I **think out loud**, propose **concrete actions** you can approve (or auto-run when your workspace allows), and follow up after execution. Tell me what you need done.',
+        ].join('\n')
+      : [
+          'Je suis **Kova** — une assistante **opérationnelle** pour ton entreprise (ou ton usage perso), pas un chatbot générique.',
+          '',
+          '**Ce que je fais sur tes apps connectées** (une fois les intégrations actives) :',
+          '• **Gmail** — rédiger ou envoyer des mails, répondre, transférer, ranger les conversations ; si tu ne donnes qu’un **nom**, j’utilise ton **historique mails** (envoyés/reçus), tes contacts et le contexte workspace pour retrouver l’adresse — sinon je te demande **une** précision.',
+          '• **Google Agenda** — créer ou modifier des événements, invités, et **lien Google Meet** quand un appel ou une réunion à distance est logique (sauf si tu demandes sans Meet).',
+          '• **Google Docs & Drive** — rédiger de vrais documents, créer des dossiers, déplacer, renommer, partager — pour que les livrables arrivent au bon endroit.',
+          '• **Notion** — créer ou mettre à jour des pages, ajuster les **propriétés de bases** (statuts, dates, personnes, cases / tâches) quand la base parente est connue via le contexte, archiver des pages — tenir ton wiki et tes DB à jour.',
+          '• **Google Photos** — j’ouvre un **sélecteur sécurisé** pour que tu choisisses des médias, puis je travaille sur cette sélection (respect de la vie privée).',
+          '',
+          'Je **réfléchis de façon visible**, je prépare des **actions concrètes** à valider (ou en exécution auto selon les réglages du workspace), et je te fais un retour après coup. Dis-moi ce que tu veux enclencher.',
+        ].join('\n')
+
   return {
     id: 'welcome',
     role: 'assistant' as const,
-    content:
-      "I'm Kova — built like an executive assistant: inbox, calendar, files, docs, Notion, Photos. Tell me what needs doing; I'll prepare concrete actions in your connected apps (approval when it matters).",
+    content,
   }
 }
 
