@@ -1516,6 +1516,119 @@ export function buildFallbackResponseWithContactsAndProfile(
   const appDataIntent = /(appdata|app data|configuration interne|config interne|fichier de config|config file)/.test(intentText)
   const notionPropertiesIntent = /(status|statut|priority|priorite|priorité|property|properties|propriete|proprietes)/.test(intentText)
   const notionArchiveIntent = /(archive|archiver|supprime|supprimer|retire|retirer)/.test(intentText)
+  const explicitGmailThreadIntent =
+    (archiveIntent ||
+      unarchiveIntent ||
+      labelIntent ||
+      removeLabelIntent ||
+      markReadIntent ||
+      markUnreadIntent ||
+      starIntent ||
+      unstarIntent ||
+      trashIntent ||
+      permanentDeleteIntent ||
+      sendDraftIntent) &&
+    /(gmail|email|e-mail|mail|message|messages|thread|inbox|draft|brouillon)/.test(intentText)
+
+  if (explicitGmailThreadIntent) {
+    if (sendDraftIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Draft send is ready for review.'
+            : 'Envoi du brouillon prêt à valider.',
+        proposals: [buildSendGmailDraftProposal(assistantProfile)],
+      }
+    }
+
+    if (unarchiveIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Inbox restore ready.'
+            : 'Restauration inbox prête.',
+        proposals: [buildUnarchiveEmailProposal(assistantProfile)],
+      }
+    }
+
+    if (trashIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Trash action ready.'
+            : 'Mise en corbeille prête.',
+        proposals: [buildTrashGmailProposal(assistantProfile)],
+      }
+    }
+
+    if (permanentDeleteIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Permanent delete ready for review.'
+            : 'Suppression définitive prête à valider.',
+        proposals: [buildDeleteGmailProposal(assistantProfile)],
+      }
+    }
+
+    if (unstarIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Unstar action ready.'
+            : 'Retrait de l’étoile prêt.',
+        proposals: [buildStarGmailProposal(false, assistantProfile)],
+      }
+    }
+
+    if (starIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Star action ready.'
+            : 'Ajout d’étoile prêt.',
+        proposals: [buildStarGmailProposal(true, assistantProfile)],
+      }
+    }
+
+    if (archiveIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Archive action ready.'
+            : 'Archivage prêt.',
+        proposals: [buildArchiveEmailProposal(assistantProfile)],
+      }
+    }
+
+    if (removeLabelIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Label removal is ready.'
+            : 'Retrait du label prêt.',
+        proposals: [buildRemoveLabelEmailProposal(input, assistantProfile)],
+      }
+    }
+
+    if (labelIntent) {
+      return {
+        response:
+          language === 'en'
+            ? 'Labelling action ready.'
+            : 'Labellisation prête.',
+        proposals: [buildLabelEmailProposal(input, assistantProfile)],
+      }
+    }
+
+    return {
+      response:
+        language === 'en'
+          ? 'Inbox status update ready.'
+          : 'Mise à jour de statut inbox prête.',
+      proposals: [buildMarkReadStateProposal(markUnreadIntent, assistantProfile)],
+    }
+  }
 
   if (
     isMeetingRequest &&

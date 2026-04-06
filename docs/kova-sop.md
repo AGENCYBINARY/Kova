@@ -721,3 +721,8 @@ Remaining honest gap after this slice:
 
 - This closes the concrete “wrong Massarelli + literal prompt in outgoing email” regression, but it does not mean every long ambiguous follow-up is now perfect.
 - The AI path is much safer again, but the deepest remaining product work is still around richer multi-step reasoning and broader live execution coverage across more complex user conversations.
+
+Addendum after live prod verification:
+
+- The first prod rerun exposed another classifier bug: Gmail thread actions such as archive / unarchive / label / star could still be hijacked by the calendar branch when the quoted Gmail subject itself contained meeting words.
+- That ordering bug is now fixed by prioritizing explicit Gmail thread intents before meeting/calendar branches in the deterministic router.
