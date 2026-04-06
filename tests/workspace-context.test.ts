@@ -40,6 +40,12 @@ test('gmail typo questions still resolve to mailbox read mode', () => {
   })
 })
 
+test('help drafting an email with rediger (infinitive) is action mode, not default gmail read', () => {
+  const parsed = parseConnectedContextRequest('aide moi a rediger un mail a mon collegue tristan massarelli')
+  assert.equal(parsed?.mode, 'action')
+  assert.ok(parsed?.sources.includes('gmail'))
+})
+
 test('explicit send requests still stay in the email action path', () => {
   assert.equal(isEmailSendIntent('envoie un mail a paul pour confirmer le rendez-vous'), true)
   assert.equal(isReadOnlyWorkspaceQuestion('envoie un mail a paul pour confirmer le rendez-vous'), false)

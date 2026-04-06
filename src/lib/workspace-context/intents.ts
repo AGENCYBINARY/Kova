@@ -39,9 +39,9 @@ const notionPattern =
 const readVerbPattern =
   /\b(resum(?:e|er)?|summary|summarize|summarise|liste|list|montre|show|check|review|analyse|analyze|consulte|read|voir|vois|donne|what|quels|which|cherche|search|find|retrouve|trouve|explique|prepare moi|prepare-moi)\b/
 const explicitActionPattern =
-  /\b(send|draft|reply|write|compose|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|rename|mark|star|unstar|trash|copy|duplicate|revoke|unshare|folder|open|ouvrir|ouvre|select|selectionne|selectionner|choisir|choisis|envoie|envoyer|redige|ecris|cree|creer|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|deconnecte|actualise|rafraichis|range|ranger|move|moved|deplace|deplacer|archiver|restaure|restaurer|labelliser|transfere|transferer|renomme|renommer|marque|corbeille|brouillon|duplique|dupliquer|retire|retirer|dossier)\b/
+  /\b(send|draft|reply|write|compose|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|rename|mark|star|unstar|trash|copy|duplicate|revoke|unshare|folder|open|ouvrir|ouvre|select|selectionne|selectionner|choisir|choisis|envoie|envoyer|redige|rediger|formuler|ecrire|ecris|cree|creer|mets|mettre|ajoute|ajouter|planifie|programme|partage|enregistre|stocke|sauvegarde|connecte|deconnecte|actualise|rafraichis|range|ranger|move|moved|deplace|deplacer|archiver|restaure|restaurer|labelliser|transfere|transferer|renomme|renommer|marque|corbeille|brouillon|duplique|dupliquer|retire|retirer|dossier)\b/
 const emailActionPattern =
-  /\b(send|draft|reply|write|compose|update|edit|rewrite|refresh|envoie|envoyer|redige|ecris|reponds|repondre|transmets|forward|modifie|modifier|mets|mettre|complete|complete)\b/
+  /\b(send|draft|reply|write|compose|update|edit|rewrite|refresh|envoie|envoyer|redige|rediger|formuler|ecrire|ecris|reponds|repondre|transmets|forward|modifie|modifier|mets|mettre|complete|complete)\b/
 const emailDraftPattern =
   /\b(draft|brouillon|drafting|preparer un brouillon|prepare un brouillon|prepare le brouillon|prépare le brouillon|preparer le brouillon)\b/
 const todayPattern =

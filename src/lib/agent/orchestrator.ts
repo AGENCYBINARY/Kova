@@ -9,6 +9,7 @@ import {
 } from '@/lib/audit/service'
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
+import { isEmailCompositionAssistanceRequest } from '@/lib/agent/v1-deterministic'
 import { buildCalendarRedoFollowUp } from '@/lib/agent/follow-up'
 import {
   type ChatContext,
@@ -86,7 +87,7 @@ export async function orchestrateChatTurn(params: {
     contextSeed: connectedContextSeed,
   })
 
-  if (connectedContextResult?.request.mode === 'read') {
+  if (connectedContextResult?.request.mode === 'read' && !isEmailCompositionAssistanceRequest(params.content)) {
     return orchestrateConnectedReadTurn({
       content: params.content,
       context: params.context,
