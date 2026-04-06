@@ -44,7 +44,7 @@ export const translations = {
     chat: {
       eyebrow: "Console Opérateur",
       title: "Chat",
-      subtitle: "Rédige des actions Gmail, crée des invitations Google Calendar avec Meet, et décide quand Kova doit demander ou agir.",
+      subtitle: "Gmail, Agenda, Docs, Drive, Google Photos, Notion : Kova prépare les actions comme dans tes outils connectés. Tu choisis quand il doit demander ou agir.",
       loading: "Chargement de ton espace de travail...",
       error: "Je n'ai pas pu compléter cette action. Vérifie la connexion au serveur et réessaie.",
     },
@@ -198,7 +198,7 @@ export const translations = {
     chat: {
       eyebrow: "Operator Console",
       title: "Chat",
-      subtitle: "Draft Gmail actions, create Google Calendar invites with Meet, and decide when Kova should ask or act.",
+      subtitle: "Gmail, Calendar, Docs, Drive, Google Photos, Notion—Kova prepares actions across your connected stack. You choose when it asks or acts.",
       loading: "Loading your operator workspace...",
       error: "I could not complete that turn. Check the server or database connection and try again.",
     },

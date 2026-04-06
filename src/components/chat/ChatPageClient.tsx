@@ -33,8 +33,10 @@ interface ChatPageClientProps {
   initialProposals: ActionProposal[]
 }
 
-const WELCOME_FR = "Je suis Kova. Donne-moi le sujet et je prépare l’action utile dans Gmail, Agenda, Drive, Docs, Notion ou Google Photos, avec validation quand elle est nécessaire."
-const WELCOME_EN = "I'm Kova. Give me the task and I’ll prepare the right action across Gmail, Calendar, Drive, Docs, Notion, or Google Photos, with approval when needed."
+const WELCOME_FR =
+  "Je suis Kova. Dis-moi ce que tu veux faire : je m’appuie sur tes connexions (Gmail, Agenda, Docs, Drive, Google Photos, Notion) pour préparer les bonnes actions, comme si j’étais dans tes outils — avec validation quand c’est sensible."
+const WELCOME_EN =
+  "I'm Kova. Tell me what you need: I use your connected apps (Gmail, Calendar, Docs, Drive, Google Photos, Notion) to prepare the right actions—as if I were inside your stack—with approval when it matters."
 
 function buildDisambiguationReply(
   item: ChatDisambiguation,
