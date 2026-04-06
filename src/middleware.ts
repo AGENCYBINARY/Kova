@@ -14,6 +14,10 @@ const isProtectedRoute = createRouteMatcher([
   '/api/mcp(.*)',
   '/api/integrations(.*)',
   '/api/settings(.*)',
+  '/api/subscription(.*)',
+  '/api/workspaces(.*)',
+  '/api/stripe/checkout(.*)',
+  '/api/stripe/portal(.*)',
 ])
 
 // auth().protect() in Clerk v5 uses local JWT verification — no network call.

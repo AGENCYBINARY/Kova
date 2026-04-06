@@ -326,7 +326,11 @@ export function AssistantSettingsForm() {
 
       <div className={styles.actions}>
         <span className={styles.status}>{status}</span>
-        <Button onClick={save} loading={isPending} disabled={!hasLoaded || profile.enabledSkills.length === 0}>
+        <Button
+          onClick={save}
+          loading={isPending}
+          disabled={!hasLoaded || profile.enabledSkills.length === 0 || !!error}
+        >
           Save assistant profile
         </Button>
       </div>

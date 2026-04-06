@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server'
 import { getActionsPageData } from '@/lib/dashboard/server'
+import { getErrorStatus } from '@/lib/http/errors'
 
 export async function GET() {
-  const data = await getActionsPageData()
-  return NextResponse.json({
-    source: data.source,
-    items: data.pendingActions,
-  })
+  try {
+    const data = await getActionsPageData()
+    return NextResponse.json({
+      source: data.source,
+      items: data.pendingActions,
+    })
+  } catch (error) {
+    const { status, message } = getErrorStatus(error)
+    return NextResponse.json({ error: message }, { status })
+  }
 }
