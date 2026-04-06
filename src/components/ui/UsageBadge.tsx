@@ -22,12 +22,26 @@ function isQuotaData(value: unknown): value is QuotaData {
   )
 }
 
-export function UsageBadge() {
-  const [quota, setQuota] = useState<QuotaData | null>(null)
+type UsageBadgeProps = {
+  /** Quota from parent (e.g. bundled sidebar API). */
+  quota?: QuotaData | null
+  /** When true, parent is still loading bundled data — no duplicate /api/subscription fetch. */
+  loading?: boolean
+}
+
+export function UsageBadge({ quota: quotaProp, loading = false }: UsageBadgeProps) {
+  const [quota, setQuota] = useState<QuotaData | null>(quotaProp ?? null)
   const [upgrading, setUpgrading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
 
   useEffect(() => {
+    setQuota(quotaProp ?? null)
+  }, [quotaProp])
+
+  useEffect(() => {
+    if (loading || quotaProp !== undefined) {
+      return
+    }
     fetch("/api/subscription")
       .then(async (response) => {
         if (!response.ok) {
@@ -39,7 +53,11 @@ export function UsageBadge() {
       })
       .then(setQuota)
       .catch(() => null)
-  }, [])
+  }, [loading, quotaProp])
+
+  if (loading) {
+    return null
+  }
 
   if (!quota || quota.limit <= 0) return null
 

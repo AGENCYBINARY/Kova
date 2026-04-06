@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
+import { checkQuota } from '@/lib/subscription'
 import { inferRiskLevel } from '@/lib/agent/execution-governance'
 import { dashboardIntegrations, type DashboardAction, type DashboardIntegration } from '@/lib/dashboard-data'
 import { buildDashboardScopeWhere } from '@/lib/dashboard/query'
@@ -292,6 +293,45 @@ export interface HistoryPageData {
 export interface IntegrationsPageData {
   integrations: DashboardIntegration[]
   source: 'database'
+}
+
+/** Single round-trip for sidebar: integrations strip + quota (one getAppContext). */
+export interface SidebarBundle {
+  integrations: DashboardIntegration[]
+  quota: {
+    plan: string
+    used: number
+    limit: number
+    allowed: boolean
+  }
+  source: 'database'
+}
+
+export async function getSidebarBundle(): Promise<SidebarBundle> {
+  const { dbUserId, workspaceId } = await getAppContext()
+  const scopeWhere = buildDashboardScopeWhere({
+    workspaceId,
+    userId: dbUserId,
+  })
+  const [integrationRows, quotaCheck] = await Promise.all([
+    prisma.integration.findMany({
+      where: scopeWhere,
+      orderBy: [{ updatedAt: 'desc' }],
+      take: 20,
+    }),
+    checkQuota(dbUserId),
+  ])
+
+  return {
+    integrations: mergeIntegrations(integrationRows),
+    quota: {
+      plan: quotaCheck.plan,
+      used: quotaCheck.used,
+      limit: quotaCheck.limit,
+      allowed: quotaCheck.allowed,
+    },
+    source: 'database',
+  }
 }
 
 async function getDashboardScope() {

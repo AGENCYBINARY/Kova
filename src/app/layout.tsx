@@ -6,6 +6,9 @@ import './globals.css'
 const manrope = Manrope({
   subsets: ['latin'],
   display: 'swap',
+  preload: true,
+  adjustFontFallback: true,
+  variable: '--font-manrope',
 })
 
 export const metadata: Metadata = {
@@ -20,7 +23,7 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en" className={manrope.className}>
+      <html lang="en" className={`${manrope.className} ${manrope.variable}`}>
         <body>{children}</body>
       </html>
     </ClerkProvider>

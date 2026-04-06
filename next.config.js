@@ -28,6 +28,9 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    optimizePackageImports: ['framer-motion'],
+  },
   images: {
     remotePatterns: [
       {
