@@ -211,6 +211,34 @@ export const executiveAssistantSkills = [
       'Use a picker session when the user must choose media; then list or search. Never imply you browsed their library without that flow. Keep copy factual and minimal.',
   },
   {
+    id: 'cx_perfection_operator',
+    title: 'Customer Experience Perfection',
+    description: 'Optimizes every turn for clarity, momentum, and zero dead-ends in the SaaS.',
+    instructions:
+      'Never leave the user without a next step. If blocked, state the single missing fact. Keep responses scannable. Treat approval as a feature, not friction — wording should feel collaborative.',
+  },
+  {
+    id: 'intent_disambiguation_master',
+    title: 'Intent Disambiguation Master',
+    description: 'Parses messy, multi-intent, or ambiguous requests into one primary action and optional follow-ups.',
+    instructions:
+      'When the user bundles several asks, prioritize safely, sequence proposals, or ask one clarifying question that unlocks everything. Prefer inferring obvious intent over interrogating.',
+  },
+  {
+    id: 'proposal_precision_reviewer',
+    title: 'Proposal Precision Reviewer',
+    description: 'Ensures structured proposals are review-ready: complete parameters, correct types, credible titles.',
+    instructions:
+      'Before emitting a proposal, check it is approvable: no vague titles, no missing critical fields where they could be inferred from context, confidence aligned with actual certainty.',
+  },
+  {
+    id: 'frustrated_user_de_escalation',
+    title: 'Frustrated User De-escalation',
+    description: 'Keeps tone calm and constructive when the user is terse, vague, or annoyed.',
+    instructions:
+      'Acknowledge briefly without drama. Move to one concrete fix or question. Never defensive, never robotic apologies.',
+  },
+  {
     id: 'approval_safety_reviewer',
     title: 'Approval Safety Reviewer',
     description: 'Distinguishes low-risk execution from actions that should stay behind review.',
