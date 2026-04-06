@@ -168,8 +168,45 @@ function extractSearchQuery(normalized: string) {
   return tokens.slice(0, 6).join(' ')
 }
 
+/**
+ * User is adjusting an existing calendar+email / Meet workflow (add link, fix invite),
+ * not asking for a brand-new email whose body should be their instruction text.
+ */
+export function isMeetingDeliveryRefinementIntent(input: string) {
+  const normalized = normalizeInput(input)
+  const mentionsTarget = /\b(mail|email|courriel|calendrier|agenda|evenement|invitation|invite)\b/.test(normalized)
+  const mentionsLinkish = /\b(liens?|google meet|\bmeet\b|visio|visioconf|zoom|teams)\b/.test(normalized)
+  const refinementVerb =
+    /\b(mets|met|mettre|rajoute|ajoute|ajouter|modifie|modifier|corrige|corriger|compl[eè]te|complete|active|activer)\b/.test(
+      normalized
+    ) ||
+    /\b(tu peux|peux[- ]tu|pourrais[- ]tu|stp|s'il te pla[iî]t|sil te pla[iî]t)\b/.test(normalized)
+  const incrementalAsk =
+    /\b(je te demande|comme prevu|comme prévu|deja prepare|déjà préparé|la proposition|les actions en attente)\b/.test(
+      normalized
+    )
+
+  if (!mentionsTarget) {
+    return false
+  }
+
+  if (mentionsLinkish && (refinementVerb || incrementalAsk)) {
+    return true
+  }
+
+  if (incrementalAsk && mentionsLinkish) {
+    return true
+  }
+
+  return false
+}
+
 export function isEmailSendIntent(input: string) {
   const normalized = normalizeInput(input)
+
+  if (isMeetingDeliveryRefinementIntent(input)) {
+    return false
+  }
 
   if (!gmailPattern.test(normalized) && !emailActionPattern.test(normalized)) {
     return false

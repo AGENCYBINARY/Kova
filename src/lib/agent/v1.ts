@@ -364,8 +364,29 @@ export async function runAgentTurn(
         }
       })
 
+      const hasMeetPlaceholderEmail = enrichedProposals.some(
+        (p) =>
+          (p.type === 'send_email' || p.type === 'create_gmail_draft') &&
+          typeof p.parameters.body === 'string' &&
+          /\{\{\s*meet_?link\s*\}\}/i.test(p.parameters.body)
+      )
+
+      const enrichedWithMeet = hasMeetPlaceholderEmail
+        ? enrichedProposals.map((p) =>
+            p.type === 'create_calendar_event'
+              ? {
+                  ...p,
+                  parameters: {
+                    ...p.parameters,
+                    createMeetLink: true,
+                  },
+                }
+              : p
+          )
+        : enrichedProposals
+
       const defaultMeetingDuration = assistantProfile?.meetingDefaultDurationMinutes || 30
-      const safeProposals = enrichedProposals.map((proposal) => {
+      const safeProposals = enrichedWithMeet.map((proposal) => {
         if (
           proposal.type === 'create_calendar_event' &&
           !hasConcreteCalendarSchedule(input) &&

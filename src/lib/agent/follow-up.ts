@@ -1,4 +1,9 @@
+import type { AssistantProfile } from '@/lib/assistant/profile'
+import type { PendingActionRecord } from '@/lib/agent/chat-state'
 import type { AgentProposal } from '@/lib/agent/v1'
+import { buildMeetingEmailFollowupProposal } from '@/lib/agent/v1-deterministic'
+import { deriveNameFromEmail, type KnownContact } from '@/lib/contacts'
+import { isMeetingDeliveryRefinementIntent } from '@/lib/workspace-context/intents'
 
 interface RecentActionCandidate {
   type: string
@@ -149,4 +154,191 @@ export function buildCalendarRedoFollowUp(params: {
       },
     ],
   }
+}
+
+const MEET_PLACEHOLDER_RE = /\{\{\s*meet_?link\s*\}\}/i
+
+function looksLikeMetaInstructionEmailBody(body: string) {
+  const n = normalizeInput(body)
+  if (body.length > 1600) {
+    return false
+  }
+  return /\b(je te demande|tu peux mettre|mettre un liens?|mets un liens?|dans le mail que je vais envoyer)\b/.test(n)
+}
+
+function looksCorruptedEmailSubject(subject: string) {
+  const n = normalizeInput(subject)
+  return /\b(je te demande|tu peux mettre|mettre un liens?)\b/.test(n)
+}
+
+function contactFromPendingEmail(mail: PendingActionRecord): KnownContact | null {
+  const to = mail.parameters.to
+  if (!Array.isArray(to) || typeof to[0] !== 'string' || !to[0].includes('@')) {
+    return null
+  }
+  const email = to[0].trim().toLowerCase()
+  const resolved =
+    typeof mail.parameters.resolvedContactName === 'string' && mail.parameters.resolvedContactName.trim()
+      ? mail.parameters.resolvedContactName.trim()
+      : deriveNameFromEmail(email) || email.split('@')[0] || 'there'
+  return { name: resolved, email, aliases: [] }
+}
+
+function findAnchorMeetingUserContent(history: Array<{ role: string; content: string }>) {
+  const userLines = history
+    .filter((m) => m.role === 'user')
+    .map((m) => m.content.trim())
+    .filter(Boolean)
+  const scored = userLines.filter((c) =>
+    /reunion|réunion|calendrier|rdv|meet|mardi|mercredi|objectif|agence|invite|evenement|visio|19h|18h|15h/i.test(c)
+  )
+  if (scored.length === 0) {
+    return userLines[userLines.length - 1] || ''
+  }
+  return scored.sort((a, b) => b.length - a.length)[0]
+}
+
+function pickCalendarAndMailFromPending(pending: PendingActionRecord[]) {
+  const cals = pending.filter((a) => a.type === 'create_calendar_event')
+  const mails = pending.filter((a) => a.type === 'send_email' || a.type === 'create_gmail_draft')
+
+  for (const cal of cals) {
+    const gid = cal.parameters.requestGroupId
+    if (typeof gid === 'string') {
+      const mail = mails.find((m) => m.parameters.requestGroupId === gid)
+      if (mail) {
+        return { calendar: cal, mail }
+      }
+    }
+  }
+
+  const calendar = cals[0]
+  const mail = mails[0]
+  if (calendar && mail) {
+    return { calendar, mail }
+  }
+  if (calendar) {
+    return { calendar, mail: undefined }
+  }
+  if (mail) {
+    return { calendar: undefined, mail }
+  }
+  return null
+}
+
+function stripPersistOnlyParameterKeys(params: Record<string, unknown>) {
+  const next = { ...params }
+  delete next.confidenceScore
+  delete next.proposalIndex
+  delete next.requestGroupId
+  return next
+}
+
+/**
+ * When the user refines "add Meet / put the link in the mail" on an existing pending bundle,
+ * rebuild calendar+email coherently instead of treating the message as a new literal email body.
+ */
+export function buildMeetingBundleRefinementFollowUp(params: {
+  input: string
+  pendingActions: PendingActionRecord[]
+  conversationHistory: Array<{ role: string; content: string }>
+  assistantProfile?: AssistantProfile
+}): { response: string; proposals: AgentProposal[]; supersedeActionIds: string[] } | null {
+  if (!isMeetingDeliveryRefinementIntent(params.input)) {
+    return null
+  }
+
+  const picked = pickCalendarAndMailFromPending(params.pendingActions)
+  if (!picked || (!picked.calendar && !picked.mail)) {
+    return null
+  }
+
+  const lang = params.assistantProfile?.defaultLanguage === 'en' ? 'en' : 'fr'
+  const supersedeActionIds: string[] = []
+  const anchor = findAnchorMeetingUserContent(params.conversationHistory)
+
+  if (picked.calendar && picked.mail) {
+    supersedeActionIds.push(picked.calendar.id, picked.mail.id)
+    const contact = contactFromPendingEmail(picked.mail)
+    const calParams = stripPersistOnlyParameterKeys(picked.calendar.parameters)
+    calParams.createMeetLink = true
+
+    const body = typeof picked.mail.parameters.body === 'string' ? picked.mail.parameters.body : ''
+    const subject = typeof picked.mail.parameters.subject === 'string' ? picked.mail.parameters.subject : ''
+    const rebuiltTemplate = buildMeetingEmailFollowupProposal(anchor || params.input, contact, params.assistantProfile)
+    const rebuiltSubject =
+      typeof rebuiltTemplate.parameters.subject === 'string' ? rebuiltTemplate.parameters.subject : undefined
+
+    const shouldRebuildEmail =
+      looksLikeMetaInstructionEmailBody(body) ||
+      looksCorruptedEmailSubject(subject) ||
+      (!MEET_PLACEHOLDER_RE.test(body) && /meet|visio|lien/i.test(normalizeInput(params.input)))
+
+    const mailType = picked.mail.type as AgentProposal['type']
+    let emailProposal: AgentProposal
+
+    if (shouldRebuildEmail) {
+      emailProposal = {
+        ...rebuiltTemplate,
+        type: mailType,
+        title: picked.mail.title,
+        description: picked.mail.description,
+      }
+    } else {
+      emailProposal = {
+        type: mailType,
+        title: picked.mail.title,
+        description: picked.mail.description,
+        parameters: {
+          ...stripPersistOnlyParameterKeys(picked.mail.parameters),
+          body: MEET_PLACEHOLDER_RE.test(body)
+            ? body
+            : [body.trim(), '', lang === 'en' ? 'Google Meet link:' : 'Lien Google Meet :', '{{meet_link}}'].join('\n'),
+          subject: looksCorruptedEmailSubject(subject) && rebuiltSubject ? rebuiltSubject : subject,
+        },
+        confidenceScore: 0.94,
+      }
+    }
+
+    const calendarProposal: AgentProposal = {
+      type: 'create_calendar_event',
+      title: picked.calendar.title,
+      description: picked.calendar.description,
+      parameters: calParams,
+      confidenceScore: 0.92,
+    }
+
+    return {
+      response:
+        lang === 'en'
+          ? 'Updated the calendar invite with Google Meet on, and fixed the email so the real Meet URL is injected automatically right after the event is created ({{meet_link}} is replaced at execution). Approve in order: calendar first, then email.'
+          : 'J’ai mis à jour l’invitation agenda avec Google Meet activé, et corrigé le mail : le vrai lien sera inséré automatiquement juste après la création de l’événement (le {{meet_link}} est remplacé à l’exécution). Valide dans l’ordre : agenda d’abord, puis email.',
+      proposals: [calendarProposal, emailProposal],
+      supersedeActionIds,
+    }
+  }
+
+  if (picked.calendar) {
+    supersedeActionIds.push(picked.calendar.id)
+    const calParams = stripPersistOnlyParameterKeys(picked.calendar.parameters)
+    calParams.createMeetLink = true
+    return {
+      response:
+        lang === 'en'
+          ? 'Turned on Google Meet for this pending invite. Approve when ready.'
+          : 'J’ai activé Google Meet sur l’invitation en attente. Tu peux valider.',
+      proposals: [
+        {
+          type: 'create_calendar_event',
+          title: picked.calendar.title,
+          description: picked.calendar.description,
+          parameters: calParams,
+          confidenceScore: 0.92,
+        },
+      ],
+      supersedeActionIds,
+    }
+  }
+
+  return null
 }

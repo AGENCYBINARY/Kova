@@ -10,7 +10,8 @@ import {
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
 import { isEmailCompositionAssistanceRequest } from '@/lib/agent/v1-deterministic'
-import { buildCalendarRedoFollowUp } from '@/lib/agent/follow-up'
+import { buildCalendarRedoFollowUp, buildMeetingBundleRefinementFollowUp } from '@/lib/agent/follow-up'
+import { expirePendingActionsAsSuperseded } from '@/lib/actions/supersede-pending'
 import { augmentContentForMeetingInviteRepeat } from '@/lib/agent/meeting-invite-repeat'
 import {
   type ChatContext,
@@ -198,19 +199,41 @@ export async function orchestrateChatTurn(params: {
       ]
     : contactsAfterCorrection
 
+  const meetingBundleRefinement = buildMeetingBundleRefinementFollowUp({
+    input: params.content,
+    pendingActions,
+    conversationHistory,
+    assistantProfile,
+  })
+
   const calendarRedoFollowUp = buildCalendarRedoFollowUp({
     input: params.content,
     recentActions,
     language: assistantProfile.defaultLanguage,
   })
 
-  const agentResult = calendarRedoFollowUp
+  if (meetingBundleRefinement) {
+    await expirePendingActionsAsSuperseded({
+      workspaceId,
+      userId,
+      actionIds: meetingBundleRefinement.supersedeActionIds,
+      reason: 'meeting_bundle_refinement',
+    })
+  }
+
+  const agentResult = meetingBundleRefinement
     ? {
-        response: calendarRedoFollowUp.response,
-        proposals: calendarRedoFollowUp.proposals,
+        response: meetingBundleRefinement.response,
+        proposals: meetingBundleRefinement.proposals,
         disambiguations: [],
       }
-    : await runAgentTurn(
+    : calendarRedoFollowUp
+      ? {
+          response: calendarRedoFollowUp.response,
+          proposals: calendarRedoFollowUp.proposals,
+          disambiguations: [],
+        }
+      : await runAgentTurn(
         agentRoutingContent,
         conversationHistory,
         effectiveKnownContacts,

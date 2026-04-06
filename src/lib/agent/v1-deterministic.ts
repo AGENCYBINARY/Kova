@@ -703,7 +703,7 @@ function summarizeMeetingReminderFromInput(input: string, language: 'fr' | 'en')
   return `Petit rappel${when ? ` pour ${when}` : ''} concernant ${topic}.`
 }
 
-function buildMeetingEmailFollowupProposal(
+export function buildMeetingEmailFollowupProposal(
   input: string,
   contact: KnownContact | null,
   profile?: AssistantProfile
