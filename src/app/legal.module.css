@@ -21,6 +21,12 @@
   font-size: 13px;
 }
 
+.inlineLink {
+  color: var(--accent-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .hero {
   padding: 28px;
   border: 1px solid var(--border);
@@ -51,6 +57,10 @@
   max-width: 60ch;
 }
 
+.metaDate {
+  margin-top: 12px;
+}
+
 .section {
   padding: 24px 28px;
   border: 1px solid var(--border);
@@ -77,4 +87,14 @@
 .section li + li,
 .section p + p {
   margin-top: 8px;
+}
+
+.section a {
+  color: var(--accent-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.section a:hover {
+  opacity: 0.9;
 }
