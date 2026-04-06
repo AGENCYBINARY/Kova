@@ -80,14 +80,20 @@ export async function orchestrateChatTurn(params: {
   }))
 
   const connectedContextSeed = extractConnectedContextSeed(previousMessages)
-  const connectedContextResult = await resolveConnectedWorkspaceContext({
-    content: params.content,
-    userId,
-    workspaceId,
-    contextSeed: connectedContextSeed,
-  })
+  const emailCompositionHelp = isEmailCompositionAssistanceRequest(params.content)
+  // Skip connected-workspace resolution for drafting help: avoids mistaken read-only
+  // summaries ("Résumé connecté…") and unnecessary Gmail/Calendar prefetch; the agent
+  // still sees the full user text and can use tools when the user asks to search Gmail.
+  const connectedContextResult = emailCompositionHelp
+    ? null
+    : await resolveConnectedWorkspaceContext({
+        content: params.content,
+        userId,
+        workspaceId,
+        contextSeed: connectedContextSeed,
+      })
 
-  if (connectedContextResult?.request.mode === 'read' && !isEmailCompositionAssistanceRequest(params.content)) {
+  if (connectedContextResult?.request.mode === 'read') {
     return orchestrateConnectedReadTurn({
       content: params.content,
       context: params.context,
