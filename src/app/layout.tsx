@@ -10,6 +10,7 @@ const manrope = Manrope({
   preload: true,
   adjustFontFallback: true,
   variable: '--font-manrope',
+  weight: ['400', '500', '600', '700'],
 })
 
 export const metadata: Metadata = {

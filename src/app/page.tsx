@@ -1,10 +1,8 @@
-import { auth } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
+import nextDynamic from 'next/dynamic'
 import styles from './page.module.css'
 
-const KovaDemoVideo = dynamic(() => import('@/components/landing/KovaDemoVideo'), {
+const KovaDemoVideo = nextDynamic(() => import('@/components/landing/KovaDemoVideo'), {
   ssr: false,
   loading: () => (
     <div className={styles.demoPlaceholder} aria-hidden>
@@ -53,10 +51,10 @@ const features = [
   },
 ]
 
-export default function HomePage() {
-  const { userId } = auth()
-  if (userId) redirect('/dashboard')
+/** Served from the edge cache; auth users are redirected in `middleware.ts`. */
+export const dynamic = 'force-static'
 
+export default function HomePage() {
   return (
     <div className={styles.root}>
       {/* Ambient background orbs */}

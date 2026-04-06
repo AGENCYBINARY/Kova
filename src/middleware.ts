@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
@@ -21,8 +22,12 @@ const isProtectedRoute = createRouteMatcher([
 ])
 
 // auth().protect() in Clerk v5 uses local JWT verification — no network call.
-// Removing async/await removes the unnecessary async overhead.
+// Logged-in users hitting `/` go straight to the app so the marketing page can be fully static (CDN + better TTFB/LCP).
 export default clerkMiddleware((auth, req) => {
+  const { userId } = auth()
+  if (userId && req.nextUrl.pathname === '/') {
+    return NextResponse.redirect(new URL('/dashboard', req.url))
+  }
   if (isProtectedRoute(req)) {
     auth().protect()
   }
