@@ -1,9 +1,9 @@
 .next
 node_modules
+# Secrets — do not commit real keys (only `.env.example` is a safe template)
 .env
-.env.local
-.env.vercel.local
-.env.vercel.prod.local
+.env.*
+!.env.example
 dist
 coverage
 .test-dist
