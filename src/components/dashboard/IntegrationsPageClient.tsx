@@ -71,11 +71,6 @@ export function IntegrationsPageClient({ data }: { data: IntegrationsPageData })
   const errorParam = searchParams?.get('error')
   const connectedCount = data.integrations.filter((integration) => integration.status === 'connected').length
 
-  const appOrigin =
-    (typeof process.env.NEXT_PUBLIC_APP_URL === 'string' ? process.env.NEXT_PUBLIC_APP_URL : '').replace(/\/+$/, '') ||
-    (typeof window !== 'undefined' ? window.location.origin : '')
-  const googleAdminHint = t.integrations.googleOAuthAdminHint.replace('{origin}', appOrigin || 'https://…')
-
   const successMessage = connectedParam ? `${t.integrations.connectedMsg} ${connectedParam}` : null
   const errorMessage = errorParam ? formatIntegrationError(errorParam, lang) : null
 
@@ -86,10 +81,6 @@ export function IntegrationsPageClient({ data }: { data: IntegrationsPageData })
           {successMessage ?? errorMessage}
         </div>
       ) : null}
-      <p className={styles.adminHint} role="note">
-        <strong>{lang === 'fr' ? 'Pour les admins Google Cloud' : 'For Google Cloud admins'} — </strong>
-        {googleAdminHint}
-      </p>
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>{t.integrations.eyebrow}</p>
