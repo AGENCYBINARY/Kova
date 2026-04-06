@@ -153,6 +153,15 @@ export async function runAgentTurn(
   }
 
   const deterministicFallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
+
+  if (deterministicFallback.disambiguations && deterministicFallback.disambiguations.length > 0) {
+    return {
+      response: buildDisambiguationResponse(deterministicFallback.disambiguations, assistantProfile),
+      proposals: [],
+      disambiguations: deterministicFallback.disambiguations,
+    }
+  }
+
   const deterministicResolution = resolveActionReferencesDetailed({
     proposals: deterministicFallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type)),
     userInput: input,

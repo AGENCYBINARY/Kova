@@ -1,7 +1,13 @@
 import { z } from 'zod'
 import type { AssistantProfile } from '@/lib/assistant/profile'
 import type { ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
-import { deriveNameFromEmail, extractEmailAddresses, extractRecipientName, findContactByName, type KnownContact } from '@/lib/contacts'
+import {
+  deriveNameFromEmail,
+  extractEmailAddresses,
+  extractRecipientName,
+  findContactCandidatesByName,
+  type KnownContact,
+} from '@/lib/contacts'
 import { isEmailSendIntent, isReadOnlyWorkspaceQuestion } from '@/lib/workspace-context/intents'
 
 export const agentActionTypeSchema = z.enum([
@@ -75,6 +81,58 @@ const conversationalPattern =
   /^(bonjour|salut|hello|hey|coucou|bonsoir|hi|parle moi|parle-moi|on peut parler|tu peux m'aider|tu peux m’aider|j'ai une question|j’ai une question|comment ca va|comment ça va|qui es tu|qui es-tu|explique moi|explique-moi|ça va|ca va)\b/i
 const capabilityQuestionPattern =
   /^(est ce que tu peux|est-ce que tu peux|est ce que vous pouvez|est-ce que vous pouvez|tu peux|peux tu|peux-tu|vous pouvez|est ce que tu sais|est-ce que tu sais|tu sais|est ce que vous savez|est-ce que vous savez|vous savez|est ce possible|est-ce possible|possible de|possible d'|can you|could you|would you)\b/i
+
+function isPlaceholderRecipientEmail(value: string) {
+  const normalized = value.trim().toLowerCase()
+  return normalized === 'recipient@example.com' || normalized.endsWith('@example.com')
+}
+
+function firstRealRecipientEmailFromInput(input: string): string | null {
+  const fromPattern = input.match(emailPattern)?.[1]?.trim()
+  if (fromPattern && !isPlaceholderRecipientEmail(fromPattern)) {
+    return fromPattern.toLowerCase()
+  }
+  for (const email of extractEmailAddresses(input)) {
+    if (!isPlaceholderRecipientEmail(email)) return email
+  }
+  return null
+}
+
+function pickContactFromCandidates(candidates: Array<{ contact: KnownContact; score: number }>): KnownContact | null {
+  if (candidates.length === 0) return null
+  if (candidates.length === 1) return candidates[0].contact
+  const [a, b] = candidates
+  if (b && b.score >= 40 && a.score - b.score <= 20) return null
+  return a.contact
+}
+
+function contactMatchIsAmbiguous(candidates: Array<{ contact: KnownContact; score: number }>) {
+  return (
+    candidates.length >= 2 &&
+    candidates[1].score >= 40 &&
+    candidates[0].score - candidates[1].score <= 20
+  )
+}
+
+function buildContactRecipientDisambiguation(
+  candidates: Array<{ contact: KnownContact; score: number }>,
+  actionType: 'send_email' | 'create_gmail_draft',
+  language: string
+): ReferenceDisambiguation {
+  return {
+    actionType,
+    source: 'contacts',
+    field: 'email',
+    question:
+      language === 'en'
+        ? 'Which contact should receive this email?'
+        : 'À quelle adresse doit partir ce mail ?',
+    options: candidates.slice(0, 5).map((entry) => ({
+      id: entry.contact.email,
+      label: `${entry.contact.name} · ${entry.contact.email}`,
+    })),
+  }
+}
 
 function hasPlaceholderRecipient(parameters: Record<string, unknown>) {
   const recipients = Array.isArray(parameters.to) ? parameters.to : []
@@ -602,19 +660,23 @@ function buildMeetingEmailFollowupProposal(
   }
 }
 
-function buildEmailProposal(input: string, profile?: AssistantProfile): AgentProposal {
-  const matchedEmail = input.match(emailPattern)?.[1]
-
+function buildEmailProposal(
+  input: string,
+  profile: AssistantProfile | undefined,
+  to: string[],
+  resolvedContactName?: string
+): AgentProposal {
   return {
     type: 'send_email',
-    title: 'Send email draft',
+    title: resolvedContactName ? `Send email to ${resolvedContactName}` : 'Send email draft',
     description: 'Prepare a polished Gmail message for approval and sending.',
     parameters: {
-      to: matchedEmail ? [matchedEmail] : ['recipient@example.com'],
+      to,
       subject: buildEmailSubject(input, profile),
       body: buildExecutiveEmailBody(input, profile),
+      ...(resolvedContactName ? { resolvedContactName } : {}),
     },
-    confidenceScore: 0.87,
+    confidenceScore: resolvedContactName ? 0.93 : 0.87,
   }
 }
 
@@ -639,22 +701,33 @@ function buildEmailReplyProposal(input: string, profile?: AssistantProfile): Age
   }
 }
 
-function buildGmailDraftProposal(input: string, profile?: AssistantProfile): AgentProposal {
-  const matchedEmail = input.match(emailPattern)?.[1]
-
+function buildGmailDraftProposal(
+  input: string,
+  profile: AssistantProfile | undefined,
+  to: string[],
+  resolvedContactName?: string
+): AgentProposal {
   return {
     type: 'create_gmail_draft',
-    title: profile?.defaultLanguage === 'en' ? 'Create Gmail draft' : 'Créer un brouillon Gmail',
+    title:
+      resolvedContactName
+        ? profile?.defaultLanguage === 'en'
+          ? `Create draft for ${resolvedContactName}`
+          : `Brouillon pour ${resolvedContactName}`
+        : profile?.defaultLanguage === 'en'
+          ? 'Create Gmail draft'
+          : 'Créer un brouillon Gmail',
     description:
       profile?.defaultLanguage === 'en'
         ? 'Prepare a Gmail draft without sending it.'
         : 'Préparer un brouillon Gmail sans l’envoyer.',
     parameters: {
-      to: matchedEmail ? [matchedEmail] : ['recipient@example.com'],
+      to,
       subject: buildEmailSubject(input, profile),
       body: buildExecutiveEmailBody(input, profile),
+      ...(resolvedContactName ? { resolvedContactName } : {}),
     },
-    confidenceScore: 0.84,
+    confidenceScore: resolvedContactName ? 0.9 : 0.84,
   }
 }
 
@@ -1236,7 +1309,8 @@ export function buildFallbackResponseWithContactsAndProfile(
     .trim()
   const language = assistantProfile?.defaultLanguage || 'fr'
   const maybeRecipient = extractRecipientName(input)
-  const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
+  const contactCandidates = maybeRecipient ? findContactCandidatesByName(maybeRecipient, knownContacts) : []
+  const knownContact = pickContactFromCandidates(contactCandidates)
   const isExplicitNotionRequest = /(notion|wiki|database|base de donnees|base de données|workspace|page)/.test(intentText)
   const isMeetingRequest =
     !isExplicitNotionRequest &&
@@ -1645,6 +1719,9 @@ export function buildFallbackResponseWithContactsAndProfile(
   }
 
   if (isEmailSendIntent(intentText)) {
+    const matchedEmail = firstRealRecipientEmailFromInput(input)
+    const ambiguousRecipients = contactMatchIsAmbiguous(contactCandidates)
+
     if (updateIntent && draftIntent) {
       return {
         response:
@@ -1669,17 +1746,92 @@ export function buildFallbackResponseWithContactsAndProfile(
     }
 
     if (draftIntent) {
+      if (!matchedEmail && ambiguousRecipients) {
+        return {
+          response:
+            language === 'en'
+              ? 'Several contacts match that name. Pick the right recipient.'
+              : 'Plusieurs contacts correspondent à ce nom. Choisis le bon destinataire.',
+          proposals: [],
+          disambiguations: [buildContactRecipientDisambiguation(contactCandidates, 'create_gmail_draft', language)],
+        }
+      }
+
+      if (!matchedEmail && maybeRecipient && !knownContact) {
+        return {
+          response:
+            language === 'en'
+              ? `I don't have an email for "${maybeRecipient}" in your workspace contacts. Paste their address.`
+              : `Je n’ai pas d’adresse pour « ${maybeRecipient} » dans tes contacts workspace. Colle son email.`,
+          proposals: [],
+        }
+      }
+
+      if (matchedEmail) {
+        const resolvedName =
+          knownContact && knownContact.email.toLowerCase() === matchedEmail ? knownContact.name : undefined
+        return {
+          response:
+            language === 'en'
+              ? 'Draft ready. Review and confirm.'
+              : 'Brouillon prêt. Vérifie et confirme.',
+          proposals: [buildGmailDraftProposal(input, assistantProfile, [matchedEmail], resolvedName)],
+        }
+      }
+
+      if (knownContact) {
+        return {
+          response:
+            language === 'en'
+              ? `Draft ready for ${knownContact.name}. Review and confirm.`
+              : `Brouillon prêt pour ${knownContact.name}. Vérifie et confirme.`,
+          proposals: [buildGmailDraftProposal(input, assistantProfile, [knownContact.email], knownContact.name)],
+        }
+      }
+
       return {
         response:
           language === 'en'
-            ? 'Draft ready. Review and confirm.'
-            : 'Brouillon prêt. Vérifie et confirme.',
-        proposals: [buildGmailDraftProposal(input, assistantProfile)],
+            ? 'Who should the draft be sent to? Give me an email address or a name from your workspace contacts.'
+            : 'À qui dois-je adresser le brouillon ? Donne un email ou un nom présent dans tes contacts workspace.',
+        proposals: [],
       }
     }
 
-    const matchedEmail = input.match(emailPattern)?.[1]
-    if (!matchedEmail && maybeRecipient && knownContact) {
+    if (!matchedEmail && ambiguousRecipients) {
+      return {
+        response:
+          language === 'en'
+            ? 'Several contacts match that name. Pick the right recipient.'
+            : 'Plusieurs contacts correspondent à ce nom. Choisis le bon destinataire.',
+        proposals: [],
+        disambiguations: [buildContactRecipientDisambiguation(contactCandidates, 'send_email', language)],
+      }
+    }
+
+    if (!matchedEmail && maybeRecipient && !knownContact) {
+      return {
+        response:
+          language === 'en'
+            ? `I don't have an email for "${maybeRecipient}" in your workspace contacts. Paste their address.`
+            : `Je n’ai pas d’adresse pour « ${maybeRecipient} » dans tes contacts workspace. Colle son email.`,
+        proposals: [],
+      }
+    }
+
+    if (matchedEmail) {
+      const resolvedName =
+        knownContact && knownContact.email.toLowerCase() === matchedEmail ? knownContact.name : undefined
+      return {
+        response:
+          language === 'en'
+            ? 'Email ready. Check the details and confirm.'
+            : 'Email prêt. Vérifie les détails et confirme.',
+        proposals: [buildEmailProposal(input, assistantProfile, [matchedEmail], resolvedName)],
+      }
+    }
+
+    if (knownContact) {
       return {
         response:
           language === 'en'
@@ -1692,9 +1844,9 @@ export function buildFallbackResponseWithContactsAndProfile(
     return {
       response:
         language === 'en'
-          ? 'Email ready. Check the details and confirm.'
-          : 'Email prêt. Vérifie les détails et confirme.',
-      proposals: [buildEmailProposal(input, assistantProfile)],
+          ? 'Who should receive this email? Give me their email or a name from your workspace contacts.'
+          : 'À qui veux-tu envoyer ce mail ? Donne l’email ou un nom présent dans tes contacts workspace.',
+      proposals: [],
     }
   }
 

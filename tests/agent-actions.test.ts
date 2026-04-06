@@ -166,9 +166,9 @@ test('gmail draft requests create a real draft proposal instead of a conversatio
   delete process.env.OPENAI_API_KEY
 
   try {
-    const result = await runAgentTurn('Prépare un brouillon Gmail pour maxime@example.com à propos de "Votre solde est bas"', [], [])
+    const result = await runAgentTurn('Prépare un brouillon Gmail pour maxime@client.com à propos de "Votre solde est bas"', [], [])
     assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_gmail_draft'])
-    assert.deepEqual(result.proposals[0]?.parameters.to, ['maxime@example.com'])
+    assert.deepEqual(result.proposals[0]?.parameters.to, ['maxime@client.com'])
   } finally {
     if (previousKey) {
       process.env.OPENAI_API_KEY = previousKey

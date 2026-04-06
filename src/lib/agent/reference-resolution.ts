@@ -78,7 +78,7 @@ interface ExplicitSelection {
 
 export interface ReferenceDisambiguation {
   actionType: AgentProposal['type']
-  source: 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'notion'
+  source: 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'notion' | 'contacts'
   field: string
   question: string
   options: Array<{
@@ -131,7 +131,12 @@ function extractExplicitSelections(value: string) {
     const field = match[2]
     const id = match[3]
     if (
-      (source === 'gmail' || source === 'calendar' || source === 'google_drive' || source === 'google_docs' || source === 'notion') &&
+      (source === 'gmail' ||
+        source === 'calendar' ||
+        source === 'google_drive' ||
+        source === 'google_docs' ||
+        source === 'notion' ||
+        source === 'contacts') &&
       field &&
       id
     ) {
@@ -857,6 +862,41 @@ function resolveNotionDatabaseParentProposal(
   }
 }
 
+function isPlaceholderRecipientEmail(email: string) {
+  const normalized = email.trim().toLowerCase()
+  return normalized === 'recipient@example.com' || normalized.endsWith('@example.com')
+}
+
+function resolveSendEmailRecipientProposal(proposal: AgentProposal, userInput: string): AgentProposal {
+  if (proposal.type !== 'send_email' && proposal.type !== 'create_gmail_draft') {
+    return proposal
+  }
+
+  const to = proposal.parameters.to
+  if (!Array.isArray(to) || to.length === 0) {
+    return proposal
+  }
+
+  const hasPlaceholder = to.some((value) => typeof value === 'string' && isPlaceholderRecipientEmail(value))
+  if (!hasPlaceholder) {
+    return proposal
+  }
+
+  const explicit = findExplicitSelection(userInput, 'contacts', 'email')
+  if (explicit?.id && explicit.id.includes('@')) {
+    return {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        to: [explicit.id.trim().toLowerCase()],
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, 0.92),
+    }
+  }
+
+  return proposal
+}
+
 export function resolveActionReferencesDetailed(params: {
   proposals: AgentProposal[]
   userInput: string
@@ -865,25 +905,27 @@ export function resolveActionReferencesDetailed(params: {
   const disambiguations: ReferenceDisambiguation[] = []
 
   const proposals = params.proposals.map((proposal) => {
-    if (proposal.type === 'reply_to_email') {
-      const result = resolveReplyProposal(proposal, params.userInput, params.connectedContextMetadata)
+    const withRecipient = resolveSendEmailRecipientProposal(proposal, params.userInput)
+
+    if (withRecipient.type === 'reply_to_email') {
+      const result = resolveReplyProposal(withRecipient, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
       return result.proposal
     }
 
     if (
-      proposal.type === 'archive_gmail_thread' ||
-      proposal.type === 'unarchive_gmail_thread' ||
-      proposal.type === 'label_gmail_thread' ||
-      proposal.type === 'remove_gmail_thread_labels' ||
-      proposal.type === 'mark_gmail_thread_read' ||
-      proposal.type === 'mark_gmail_thread_unread' ||
-      proposal.type === 'star_gmail_thread' ||
-      proposal.type === 'unstar_gmail_thread' ||
-      proposal.type === 'trash_gmail_thread' ||
-      proposal.type === 'delete_gmail_thread_permanently'
+      withRecipient.type === 'archive_gmail_thread' ||
+      withRecipient.type === 'unarchive_gmail_thread' ||
+      withRecipient.type === 'label_gmail_thread' ||
+      withRecipient.type === 'remove_gmail_thread_labels' ||
+      withRecipient.type === 'mark_gmail_thread_read' ||
+      withRecipient.type === 'mark_gmail_thread_unread' ||
+      withRecipient.type === 'star_gmail_thread' ||
+      withRecipient.type === 'unstar_gmail_thread' ||
+      withRecipient.type === 'trash_gmail_thread' ||
+      withRecipient.type === 'delete_gmail_thread_permanently'
     ) {
-      const result = resolveGmailMessageProposal(proposal, params.userInput, params.connectedContextMetadata, {
+      const result = resolveGmailMessageProposal(withRecipient, params.userInput, params.connectedContextMetadata, {
         field: 'threadId',
         question: 'Plusieurs threads Gmail correspondent. Lequel veux-tu utiliser ?',
       })
@@ -891,8 +933,8 @@ export function resolveActionReferencesDetailed(params: {
       return result.proposal
     }
 
-    if (proposal.type === 'forward_email') {
-      const result = resolveGmailMessageProposal(proposal, params.userInput, params.connectedContextMetadata, {
+    if (withRecipient.type === 'forward_email') {
+      const result = resolveGmailMessageProposal(withRecipient, params.userInput, params.connectedContextMetadata, {
         field: 'messageId',
         question: 'Plusieurs emails Gmail correspondent. Lequel veux-tu transférer ?',
       })
@@ -900,64 +942,64 @@ export function resolveActionReferencesDetailed(params: {
       return result.proposal
     }
 
-    if (proposal.type === 'update_calendar_event' || proposal.type === 'delete_calendar_event') {
-      const result = resolveCalendarProposal(proposal, params.userInput, params.connectedContextMetadata)
+    if (withRecipient.type === 'update_calendar_event' || withRecipient.type === 'delete_calendar_event') {
+      const result = resolveCalendarProposal(withRecipient, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
       return result.proposal
     }
 
-    if (proposal.type === 'update_google_doc') {
-      const result = resolveDocProposal(proposal, params.userInput, params.connectedContextMetadata)
-      if (result.disambiguation) disambiguations.push(result.disambiguation)
-      return result.proposal
-    }
-
-    if (
-      proposal.type === 'delete_google_drive_file' ||
-      proposal.type === 'move_google_drive_file' ||
-      proposal.type === 'rename_google_drive_file' ||
-      proposal.type === 'share_google_drive_file' ||
-      proposal.type === 'copy_google_drive_file' ||
-      proposal.type === 'unshare_google_drive_file' ||
-      proposal.type === 'delete_google_drive_appdata_file'
-    ) {
-      const result = resolveDriveProposal(proposal, params.userInput, params.connectedContextMetadata)
-      if (result.disambiguation) disambiguations.push(result.disambiguation)
-      return result.proposal
-    }
-
-    if (proposal.type === 'create_google_drive_folder' && includesPlaceholder(proposal.parameters.parentFolderId)) {
-      const result = resolveDriveParentFolderProposal(proposal, params.userInput, params.connectedContextMetadata)
+    if (withRecipient.type === 'update_google_doc') {
+      const result = resolveDocProposal(withRecipient, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
       return result.proposal
     }
 
     if (
-      proposal.type === 'update_google_drive_appdata_file' &&
-      includesPlaceholder(proposal.parameters.fileId)
+      withRecipient.type === 'delete_google_drive_file' ||
+      withRecipient.type === 'move_google_drive_file' ||
+      withRecipient.type === 'rename_google_drive_file' ||
+      withRecipient.type === 'share_google_drive_file' ||
+      withRecipient.type === 'copy_google_drive_file' ||
+      withRecipient.type === 'unshare_google_drive_file' ||
+      withRecipient.type === 'delete_google_drive_appdata_file'
     ) {
-      const result = resolveDriveProposal(proposal, params.userInput, params.connectedContextMetadata)
+      const result = resolveDriveProposal(withRecipient, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    if (withRecipient.type === 'create_google_drive_folder' && includesPlaceholder(withRecipient.parameters.parentFolderId)) {
+      const result = resolveDriveParentFolderProposal(withRecipient, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
       return result.proposal
     }
 
     if (
-      proposal.type === 'update_notion_page' ||
-      proposal.type === 'update_notion_page_properties' ||
-      proposal.type === 'archive_notion_page'
+      withRecipient.type === 'update_google_drive_appdata_file' &&
+      includesPlaceholder(withRecipient.parameters.fileId)
     ) {
-      const result = resolveNotionPageProposal(proposal, params.userInput, params.connectedContextMetadata)
+      const result = resolveDriveProposal(withRecipient, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
       return result.proposal
     }
 
-    if (proposal.type === 'create_notion_page' && includesPlaceholder(proposal.parameters.parentDatabaseId)) {
-      const result = resolveNotionDatabaseParentProposal(proposal, params.userInput, params.connectedContextMetadata)
+    if (
+      withRecipient.type === 'update_notion_page' ||
+      withRecipient.type === 'update_notion_page_properties' ||
+      withRecipient.type === 'archive_notion_page'
+    ) {
+      const result = resolveNotionPageProposal(withRecipient, params.userInput, params.connectedContextMetadata)
       if (result.disambiguation) disambiguations.push(result.disambiguation)
       return result.proposal
     }
 
-    return proposal
+    if (withRecipient.type === 'create_notion_page' && includesPlaceholder(withRecipient.parameters.parentDatabaseId)) {
+      const result = resolveNotionDatabaseParentProposal(withRecipient, params.userInput, params.connectedContextMetadata)
+      if (result.disambiguation) disambiguations.push(result.disambiguation)
+      return result.proposal
+    }
+
+    return withRecipient
   })
 
   return {

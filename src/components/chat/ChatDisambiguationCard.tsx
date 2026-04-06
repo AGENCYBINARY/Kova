@@ -5,7 +5,7 @@ import styles from './ChatDisambiguationCard.module.css'
 
 export interface ChatDisambiguation {
   actionType: string
-  source: 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'notion'
+  source: 'gmail' | 'calendar' | 'google_drive' | 'google_docs' | 'notion' | 'contacts'
   field: string
   question: string
   options: Array<{
@@ -31,7 +31,9 @@ export function ChatDisambiguationCard({ item, disabled, onSelect }: ChatDisambi
           ? 'Drive'
           : item.source === 'google_docs'
             ? 'Docs'
-            : 'Notion'
+            : item.source === 'contacts'
+              ? 'Contacts'
+              : 'Notion'
 
   return (
     <div className={styles.wrapper}>

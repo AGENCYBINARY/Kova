@@ -126,12 +126,71 @@ export function findContactByName(input: string, contacts: KnownContact[]) {
   return bestScore >= 40 ? bestMatch : null
 }
 
-export function extractRecipientName(input: string) {
-  const match = input.match(
-    /(?:to|for|a|à|avec|with)\s+([A-Za-zÀ-ÿ' -]{2,80}?)(?:\s+(?:about|subject|with|saying|regarding|concernant|au sujet de|pour|pour dire|et tu lui dis|et dis lui)\b|[,.!?]|$)/i
-  )
+/**
+ * All workspace contacts that match the name query, best first (deduped by email).
+ */
+export function findContactCandidatesByName(input: string, contacts: KnownContact[]) {
+  const normalizedInput = normalizeContactValue(input)
+  if (!normalizedInput) return []
 
-  return match?.[1]?.trim() || null
+  const scored: Array<{ contact: KnownContact; score: number }> = []
+
+  for (const contact of contacts) {
+    const nameCandidates = [contact.name, ...contact.aliases].map(normalizeContactValue)
+    let best = 0
+    for (const candidate of nameCandidates) {
+      if (!candidate) continue
+      let score = 0
+      if (candidate === normalizedInput) {
+        score = 100
+      } else if (normalizedInput.includes(candidate) || candidate.includes(normalizedInput)) {
+        score = 85
+      } else {
+        const inputParts = normalizedInput.split(' ')
+        const candidateParts = candidate.split(' ')
+        const overlap = inputParts.filter((part) => candidateParts.includes(part)).length
+        score = overlap * 20
+      }
+      if (score > best) best = score
+    }
+    if (best >= 40) scored.push({ contact, score: best })
+  }
+
+  const byEmail = new Map<string, { contact: KnownContact; score: number }>()
+  for (const entry of scored) {
+    const key = entry.contact.email.toLowerCase()
+    const existing = byEmail.get(key)
+    if (!existing || entry.score > existing.score) byEmail.set(key, entry)
+  }
+
+  return Array.from(byEmail.values()).sort((a, b) => b.score - a.score)
+}
+
+export function extractRecipientName(input: string) {
+  const normalized = input.replace(/\s+/g, ' ').trim()
+
+  const nameWords = '([A-Za-zÀ-ÿ\'-]+(?:\\s+[A-Za-zÀ-ÿ\'-]+)*?)'
+  const patterns: RegExp[] = [
+    new RegExp(`(?:mail|email|courriel|message)\\s+(?:à|a)\\s+${nameWords}(?=\\s+(?:et|avec|pour|pour la|pour le)\\b|[,.!?]|$)`, 'i'),
+    new RegExp(
+      `(?:envoyer|envoie|rédiger|rédige|rediger|redige)\\s+(?:un\\s+)?(?:mail|email|courriel)\\s+(?:à|a)\\s+${nameWords}(?=\\s+(?:et|avec|pour)\\b|[,.!?]|$)`,
+      'i'
+    ),
+    new RegExp(
+      `(?:to|for|a|à|avec|with)\\s+${nameWords}(?=\\s+(?:about|subject|with|saying|regarding|concernant|au sujet de|pour|pour dire|et tu lui dis|et dis lui)\\b|[,.!?]|$)`,
+      'i'
+    ),
+  ]
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern)
+    if (match?.[1]) {
+      const sanitized = sanitizeContactNameCandidate(match[1].trim())
+      if (sanitized) return sanitized
+    }
+  }
+
+  return null
 }
 
 export function extractNameBeforeEmail(input: string, email: string) {

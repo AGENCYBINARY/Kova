@@ -5,6 +5,7 @@ import {
   extractNameNearEmail,
   extractRecipientName,
   findContactByName,
+  findContactCandidatesByName,
   looksLikeContactCorrection,
 } from '../src/lib/contacts-utils'
 
@@ -24,6 +25,22 @@ test('extractNameNearEmail and extractRecipientName capture likely recipient nam
   assert.equal(extractNameNearEmail('utilise Marie Dupont marie@client.com', 'marie@client.com'), 'Marie Dupont')
   assert.equal(extractNameNearEmail("non c'est pas ce mail, utilise marie@client.com", 'marie@client.com'), null)
   assert.equal(extractRecipientName('Envoie un mail à Marie Dupont pour le point de demain'), 'Marie Dupont')
+  assert.equal(
+    extractRecipientName(
+      'je veux que tu me redige un mail a tristan massarelli et que tu lui envoie le mail avec une invite google meet'
+    ),
+    'Tristan Massarelli'
+  )
+})
+
+test('findContactCandidatesByName returns ranked matches', () => {
+  const contacts = [
+    { name: 'Tristan Massarelli', email: 'tristan@corp.com', aliases: ['Tristan'] },
+    { name: 'Tristan Martin', email: 't.martin@corp.com', aliases: ['Tristan'] },
+  ]
+  const ranked = findContactCandidatesByName('Tristan', contacts)
+  assert.equal(ranked.length, 2)
+  assert.equal(ranked[0].score, ranked[1].score)
 })
 
 test('findContactByName resolves aliases and partial names', () => {

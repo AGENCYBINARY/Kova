@@ -14,6 +14,7 @@ export {
   extractNameNearEmail,
   extractRecipientName,
   findContactByName,
+  findContactCandidatesByName,
   looksLikeContactCorrection,
 } from '@/lib/contacts-utils'
 
