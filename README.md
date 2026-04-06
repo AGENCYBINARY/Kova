@@ -108,9 +108,10 @@ This project relies on local `.env` / `.env.local` files for:
 
 Recommended AI defaults:
 
+Kova **locks** the chat / structured-analysis model to **`gpt-4.1`** in code (`KOVA_CHAT_MODEL` in `src/lib/ai/client.ts`). `OPENAI_MODEL` does not override it.
+
 ```env
-OPENAI_MODEL="gpt-5.4"
-OPENAI_REASONING_EFFORT="minimal"
+OPENAI_REASONING_EFFORT="low"
 OPENAI_TEXT_VERBOSITY="medium"
 ```
 

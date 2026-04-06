@@ -15,7 +15,7 @@ description: Maintain and improve Kova SaaS AI quality (chat, tools, CX). Use wh
 ## Environment (production)
 
 - `OPENAI_API_KEY` — required for LLM turns.
-- `OPENAI_MODEL` — optional; defaults favor capable models in code.
+- Chat uses **`gpt-4.1`** via `KOVA_CHAT_MODEL` in `src/lib/ai/client.ts` — not overridden by `OPENAI_MODEL`.
 - `OPENAI_REASONING_EFFORT` / `OPENAI_TEXT_VERBOSITY` — optional for GPT-5 family.
 
 ## When adding “skills” for users

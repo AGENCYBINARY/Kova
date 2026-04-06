@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+/** Locked model for Kova chat + structured analysis (`analyzeUserRequest`). Ignores `OPENAI_MODEL`. */
+export const KOVA_CHAT_MODEL = 'gpt-4.1' as const
+
 type ConversationMessage = {
   role: 'user' | 'assistant'
   content: string
@@ -503,37 +506,16 @@ export function isLowValueAssistantResponse(value: string) {
   return lowValueResponsePatterns.some((pattern) => pattern.test(normalized))
 }
 
-function isLegacyModel(value: string) {
-  return value === 'gpt-4o-mini'
-}
-
 function resolvePreferredModel() {
-  const configuredModel = process.env.OPENAI_MODEL?.trim()
-
-  if (!configuredModel || isLegacyModel(configuredModel)) {
-    return {
-      selected: 'gpt-4.1',
-      configured: configuredModel || null,
-      upgraded: true,
-    }
-  }
-
   return {
-    selected: configuredModel,
-    configured: configuredModel,
-    upgraded: false,
+    selected: KOVA_CHAT_MODEL,
+    configured: KOVA_CHAT_MODEL,
   }
 }
 
 function buildModelCandidates() {
   const preferred = resolvePreferredModel()
-  const candidates = [
-    preferred.selected,
-    'gpt-4o',
-    preferred.configured,
-    'gpt-4.1',
-  ].filter((value): value is string => Boolean(value))
-
+  const candidates = [preferred.selected, 'gpt-4o', 'gpt-4o-mini'].filter((value): value is string => Boolean(value))
   return Array.from(new Set(candidates))
 }
 
