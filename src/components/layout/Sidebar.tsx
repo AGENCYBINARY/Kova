@@ -1,14 +1,22 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
+import useSWR from 'swr'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { UserButton, useUser } from '@clerk/nextjs'
+import { useUser } from '@clerk/nextjs'
 import { useLang } from '@/lib/lang-context'
 import { UsageBadge } from '@/components/ui/UsageBadge'
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
+import { dashboardSWRConfig, jsonFetcher } from '@/lib/swr-fetch'
 import type { SidebarBundle } from '@/lib/dashboard/server'
 import styles from './Sidebar.module.css'
+
+const SidebarUserFooter = dynamic(() => import('./SidebarUserFooter').then((m) => m.SidebarUserFooter), {
+  ssr: false,
+  loading: () => <div className={styles.footerSkeleton} aria-hidden />,
+})
 
 function getNavigation(t: ReturnType<typeof useLang>['t']) {
   return [
@@ -152,40 +160,26 @@ export function Sidebar() {
   const pathname = usePathname()
   const { user } = useUser()
   const { t } = useLang()
-  const [integrations, setIntegrations] = useState(defaultIntegrations)
-  const [sidebarBundle, setSidebarBundle] = useState<SidebarBundle | null | 'loading'>('loading')
   const [mobileOpen, setMobileOpen] = useState(false)
   const userName = typeof user?.fullName === 'string' && user.fullName.trim() ? user.fullName : 'User'
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
+
+  const { data, isLoading } = useSWR<SidebarBundle>(
+    '/api/dashboard/sidebar',
+    jsonFetcher,
+    dashboardSWRConfig
+  )
+
+  const integrations = useMemo(
+    () => (data ? mapBundleToSidebarIntegrations(data.integrations) : defaultIntegrations),
+    [data]
+  )
 
   const navigation = getNavigation(t)
 
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
-
-  useEffect(() => {
-    let active = true
-    async function loadSidebar() {
-      try {
-        const response = await fetch('/api/dashboard/sidebar', { cache: 'no-store' })
-        if (!response.ok) {
-          if (active) setSidebarBundle(null)
-          return
-        }
-        const data = (await response.json()) as SidebarBundle
-        if (!active) return
-        setSidebarBundle(data)
-        setIntegrations(mapBundleToSidebarIntegrations(data.integrations))
-      } catch {
-        if (active) setSidebarBundle(null)
-      }
-    }
-    void loadSidebar()
-    return () => {
-      active = false
-    }
-  }, [])
 
   return (
     <>
@@ -255,29 +249,14 @@ export function Sidebar() {
       </div>
       <div className={styles.usageBadgeWrapper}>
         <UsageBadge
-          loading={sidebarBundle === 'loading'}
-          quota={sidebarBundle !== 'loading' && sidebarBundle !== null ? sidebarBundle.quota : undefined}
+          loading={isLoading}
+          quota={data?.quota}
         />
         <div className={styles.languageRow}>
           <LanguageSwitcher />
         </div>
       </div>
-      <div className={styles.footer}>
-        <div className={styles.user}>
-          <UserButton
-            afterSignOutUrl="/"
-            appearance={{
-              elements: {
-                avatarBox: styles.userAvatar,
-              },
-            }}
-          />
-          <div className={styles.userInfo}>
-            <span className={styles.userName}>{userName}</span>
-            <span className={styles.userEmail}>{userEmail}</span>
-          </div>
-        </div>
-      </div>
+      <SidebarUserFooter userName={userName} userEmail={userEmail} />
       </aside>
     </>
   )

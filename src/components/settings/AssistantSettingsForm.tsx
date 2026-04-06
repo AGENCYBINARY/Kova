@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
+import useSWR from 'swr'
 import { Button, Card } from '@/components/ui'
+import { jsonFetcher, settingsSWRConfig } from '@/lib/swr-fetch'
 import styles from './AssistantSettingsForm.module.css'
 
 interface Skill {
@@ -44,14 +46,26 @@ const defaultProfile: Profile = {
   enabledSkills: [],
 }
 
+type AssistantApiPayload = {
+  profile?: Profile
+  skills?: Skill[]
+}
+
 export function AssistantSettingsForm() {
   const [profile, setProfile] = useState<Profile>(defaultProfile)
   const [skills, setSkills] = useState<Skill[]>([])
   const [expandedSkillId, setExpandedSkillId] = useState<string | null>(null)
   const [status, setStatus] = useState('Loading executive assistant settings...')
   const [toast, setToast] = useState<string | null>(null)
-  const [hasLoaded, setHasLoaded] = useState(false)
   const [isPending, startTransition] = useTransition()
+
+  const { data, error, isLoading, mutate } = useSWR<AssistantApiPayload>(
+    '/api/settings/assistant',
+    jsonFetcher,
+    settingsSWRConfig
+  )
+
+  const hasLoaded = !isLoading && (data !== undefined || error !== undefined)
 
   useEffect(() => {
     if (!toast) return
@@ -64,56 +78,36 @@ export function AssistantSettingsForm() {
   }, [toast])
 
   useEffect(() => {
-    let active = true
-
-    async function load() {
-      try {
-        const response = await fetch('/api/settings/assistant', { cache: 'no-store' })
-        const data = await response.json()
-        if (!active) return
-
-        if (!response.ok) {
-          throw new Error(typeof data.error === 'string' ? data.error : 'Failed to load assistant settings.')
-        }
-
-        const nextSkills = Array.isArray(data.skills) ? data.skills : []
-        const nextProfile =
-          data.profile && typeof data.profile === 'object'
-            ? {
-                ...defaultProfile,
-                ...(data.profile as Profile),
-                enabledSkills:
-                  Array.isArray((data.profile as Profile).enabledSkills) &&
-                  (data.profile as Profile).enabledSkills.length > 0
-                    ? (data.profile as Profile).enabledSkills
-                    : nextSkills.map((skill: Skill) => skill.id),
-              }
-            : {
-                ...defaultProfile,
-                enabledSkills: nextSkills.map((skill: Skill) => skill.id),
-              }
-
-        setProfile(nextProfile)
-        setSkills(nextSkills)
-        setExpandedSkillId((current) => current || nextSkills[0]?.id || null)
-        setStatus('Executive assistant profile active.')
-      } catch (error) {
-        if (!active) return
-        const message = error instanceof Error ? error.message : 'Failed to load assistant settings.'
-        setStatus(message)
-      } finally {
-        if (active) {
-          setHasLoaded(true)
-        }
-      }
+    if (error) {
+      setStatus(error instanceof Error ? error.message : 'Failed to load assistant settings.')
+      return
+    }
+    if (!data) {
+      return
     }
 
-    void load()
+    const nextSkills = Array.isArray(data.skills) ? data.skills : []
+    const nextProfile =
+      data.profile && typeof data.profile === 'object'
+        ? {
+            ...defaultProfile,
+            ...(data.profile as Profile),
+            enabledSkills:
+              Array.isArray((data.profile as Profile).enabledSkills) &&
+              (data.profile as Profile).enabledSkills.length > 0
+                ? (data.profile as Profile).enabledSkills
+                : nextSkills.map((skill: Skill) => skill.id),
+          }
+        : {
+            ...defaultProfile,
+            enabledSkills: nextSkills.map((skill: Skill) => skill.id),
+          }
 
-    return () => {
-      active = false
-    }
-  }, [])
+    setProfile(nextProfile)
+    setSkills(nextSkills)
+    setExpandedSkillId((current) => current || nextSkills[0]?.id || null)
+    setStatus('Executive assistant profile active.')
+  }, [data, error])
 
   const updateField = <K extends keyof Profile>(key: K, value: Profile[K]) => {
     setProfile((prev) => ({ ...prev, [key]: value }))
@@ -150,6 +144,13 @@ export function AssistantSettingsForm() {
         }
 
         setProfile(data.profile)
+        await mutate(
+          {
+            profile: data.profile as Profile,
+            skills: Array.isArray(data.skills) ? data.skills : skills,
+          },
+          { revalidate: false }
+        )
         setStatus('Executive assistant settings saved.')
         setToast('Assistant settings saved.')
       } catch (error) {

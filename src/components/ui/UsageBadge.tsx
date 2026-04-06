@@ -1,5 +1,7 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import useSWR from "swr"
+import { dashboardSWRConfig } from "@/lib/swr-fetch"
 
 type QuotaData = {
   plan: string
@@ -29,33 +31,29 @@ type UsageBadgeProps = {
   loading?: boolean
 }
 
+async function subscriptionFetcher(url: string): Promise<QuotaData | null> {
+  const response = await fetch(url, { cache: "no-store", credentials: "same-origin" })
+  if (!response.ok) {
+    return null
+  }
+  const payload = await response.json()
+  return isQuotaData(payload) ? payload : null
+}
+
 export function UsageBadge({ quota: quotaProp, loading = false }: UsageBadgeProps) {
-  const [quota, setQuota] = useState<QuotaData | null>(quotaProp ?? null)
   const [upgrading, setUpgrading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
 
-  useEffect(() => {
-    setQuota(quotaProp ?? null)
-  }, [quotaProp])
+  const fetchSubscription = !loading && quotaProp === undefined
+  const { data: swrQuota, isLoading: subLoading } = useSWR<QuotaData | null>(
+    fetchSubscription ? "/api/subscription" : null,
+    subscriptionFetcher,
+    dashboardSWRConfig
+  )
 
-  useEffect(() => {
-    if (loading || quotaProp !== undefined) {
-      return
-    }
-    fetch("/api/subscription")
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error('Subscription endpoint failed.')
-        }
+  const quota = quotaProp !== undefined ? quotaProp : swrQuota
 
-        const payload = await response.json()
-        return isQuotaData(payload) ? payload : null
-      })
-      .then(setQuota)
-      .catch(() => null)
-  }, [loading, quotaProp])
-
-  if (loading) {
+  if (loading || (fetchSubscription && subLoading)) {
     return null
   }
 

@@ -1,11 +1,23 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
-import { AssistantSettingsForm } from '@/components/settings/AssistantSettingsForm'
 import { Avatar, Button, Card } from '@/components/ui'
 import { useLang } from '@/lib/lang-context'
 import styles from './page.module.css'
+
+const AssistantSettingsForm = dynamic(
+  () => import('@/components/settings/AssistantSettingsForm').then((m) => m.AssistantSettingsForm),
+  {
+    ssr: false,
+    loading: () => (
+      <p className={styles.formLoading} role="status">
+        Loading assistant settings…
+      </p>
+    ),
+  }
+)
 
 export default function SettingsPage() {
   const { user } = useUser()

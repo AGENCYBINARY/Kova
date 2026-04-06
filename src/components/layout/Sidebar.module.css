@@ -172,6 +172,21 @@
   padding: 10px 12px 12px;
 }
 
+.footerSkeleton {
+  padding: 10px 12px 12px;
+  min-height: 58px;
+  margin: 0 4px 4px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  animation: footerSkeletonPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes footerSkeletonPulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .user {
   display: flex;
   align-items: center;

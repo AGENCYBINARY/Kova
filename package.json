@@ -24,7 +24,8 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "vercel-build": "prisma generate && next build"
+    "vercel-build": "prisma generate && next build",
+    "perf:lighthouse": "node scripts/lighthouse-sample.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

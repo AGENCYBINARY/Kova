@@ -17,3 +17,4 @@ prisma/dev.db
 .playwright-cli
 output/playwright
 .vercel
+.lighthouse

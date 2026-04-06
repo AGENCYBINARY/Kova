@@ -5,6 +5,12 @@
   padding: 12px 0 28px;
 }
 
+.formLoading {
+  padding: 16px 4px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
 .toast {
   position: fixed;
   top: 20px;
