@@ -1,5 +1,6 @@
 .next
 node_modules
+tsconfig.tsbuildinfo
 # Secrets — do not commit real keys (only `.env.example` is a safe template)
 .env
 .env.*
