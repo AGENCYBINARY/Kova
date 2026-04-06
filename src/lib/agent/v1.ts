@@ -1,4 +1,4 @@
-import { analyzeUserRequest, isOpenAiConfigured } from '@/lib/ai/client'
+import { analyzeUserRequest, isLowValueAssistantResponse, isOpenAiConfigured } from '@/lib/ai/client'
 import { synthesizeDeterministicAssistantNarration } from '@/lib/ai/narration'
 import {
   executiveAssistantSkills,
@@ -479,6 +479,35 @@ export async function runAgentTurn(
         safeProposals.length === 0 &&
         (fallbackForMissingOrInvalidModelProposal.length > 0 || responseClaimsActionReady(aiResult.response))
 
+      const weakCalendarProposal = safeProposals.some(
+        (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
+      )
+
+      /** Prefer the model’s wording whenever it said something substantive — deterministic text is only a safety net. */
+      const keepModelVoice =
+        typeof aiResult.response === 'string' &&
+        aiResult.response.trim().length > 0 &&
+        !isLowValueAssistantResponse(aiResult.response)
+
+      const pickVisibleResponse = () => {
+        if (shouldUseFallbackResponse && keepModelVoice) {
+          return aiResult.response
+        }
+        if (shouldUseFallbackResponse) {
+          return deterministicFallbackResponse.response
+        }
+        if (weakCalendarProposal && keepModelVoice) {
+          return aiResult.response
+        }
+        if (weakCalendarProposal) {
+          return deterministicFallbackResponse.response
+        }
+        if (!allowProposals && safeProposals.length > 0) {
+          return buildConversationalResponse(input, assistantProfile)
+        }
+        return aiResult.response
+      }
+
       return {
         response:
           hasDisambiguation
@@ -487,13 +516,7 @@ export async function runAgentTurn(
               ? assistantProfile?.defaultLanguage === 'en'
                 ? 'I understood the request, but your workspace role is not allowed to use that tool.'
                 : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
-              : shouldUseFallbackResponse
-                ? deterministicFallbackResponse.response
-                : safeProposals.some((proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
-                  ? deterministicFallbackResponse.response
-                  : !allowProposals && safeProposals.length > 0
-                    ? buildConversationalResponse(input, assistantProfile)
-                    : aiResult.response,
+              : pickVisibleResponse(),
         proposals:
           hasDisambiguation
             ? []
