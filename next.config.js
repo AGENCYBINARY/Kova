@@ -14,7 +14,10 @@ const securityHeaders = [
   },
   {
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=(), browsing-topics=()',
+    // microphone=(self) is required for chat dictation (Web Speech API / Chrome & Edge).
+    // camera stays off; geolocation unused.
+    value:
+      'camera=(), microphone=(self), geolocation=(), browsing-topics=()',
   },
   {
     key: 'Cross-Origin-Opener-Policy',

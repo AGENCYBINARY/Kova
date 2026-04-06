@@ -96,8 +96,11 @@ export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: Cha
     }
 
     Recognition.onerror = (ev: { error?: string }) => {
-      if (process.env.NODE_ENV === 'development' && ev?.error) {
-        console.warn('[Kova dictation]', ev.error)
+      const code = ev?.error
+      // Expected when the user stops dictation or we call abort(); onend clears state.
+      if (code === 'aborted') return
+      if (process.env.NODE_ENV === 'development' && code) {
+        console.warn('[Kova dictation]', code)
       }
       stopDictation()
     }
