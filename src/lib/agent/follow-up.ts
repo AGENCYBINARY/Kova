@@ -338,8 +338,8 @@ export function buildMeetingBundleRefinementFollowUp(params: {
     return {
       response:
         lang === 'en'
-          ? 'Updated the calendar invite with Google Meet on, and fixed the email so the real Meet URL is injected automatically right after the event is created ({{meet_link}} is replaced at execution). Approve in order: calendar first, then email.'
-          : 'J’ai mis à jour l’invitation agenda avec Google Meet activé, et corrigé le mail : le vrai lien sera inséré automatiquement juste après la création de l’événement (le {{meet_link}} est remplacé à l’exécution). Valide dans l’ordre : agenda d’abord, puis email.',
+          ? 'I refreshed both steps: calendar now has Google Meet, and the message keeps {{meet_link}} — at send time the runtime drops in the real URL right after the event exists. Approve **calendar first**, then the email, so the chain stays clean.'
+          : 'J’ai tout remis au carré : l’agenda a Google Meet, et le mail garde {{meet_link}} — à l’exécution le vrai lien est injecté juste après la création de l’événement. Valide **d’abord l’agenda**, puis le mail, pour que la chaîne reste propre.',
       proposals: [calendarProposal, emailProposal],
       supersedeActionIds,
     }

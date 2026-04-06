@@ -501,10 +501,11 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
 export function shouldPreferDeterministicAction(input: string, proposals: AgentProposal[]) {
   if (proposals.length === 0) return false
 
-  const explicitlyOff =
-    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === 'false' ||
-    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === '0'
-  if (explicitlyOff) {
+  /** Default product mode: LLM-first. Enable with KOVA_PREFER_DETERMINISTIC_ACTIONS=true to skip the model on matching shortcuts (cost / latency). */
+  const useShortcuts =
+    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === 'true' ||
+    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS === '1'
+  if (!useShortcuts) {
     return false
   }
 
@@ -555,7 +556,9 @@ export function buildConversationalResponse(input: string, profile?: AssistantPr
   const normalized = normalizeInput(input)
 
   if (isGreetingOnly(input)) {
-    return language === 'en' ? 'Hello. I’m ready. What do you want me to handle first?' : 'Bonjour. Je suis prêt. Qu’est-ce que tu veux que je prenne en charge en premier ?'
+    return language === 'en'
+      ? 'Hey — I’m here. What should we knock out first?'
+      : 'Salut — je suis là. On attaque quoi en premier ?'
   }
 
   if (/parle moi|parle-moi/.test(normalized)) {

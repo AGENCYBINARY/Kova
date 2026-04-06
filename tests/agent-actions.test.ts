@@ -313,7 +313,7 @@ test('calendar fallback respects explicit requests without Google Meet', async (
   }
 })
 
-test('deterministic shortcuts run first by default; KOVA_PREFER_DETERMINISTIC_ACTIONS=false forces LLM path', () => {
+test('LLM-first by default; KOVA_PREFER_DETERMINISTIC_ACTIONS=true enables shortcut routing', () => {
   const prevDet = process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS
   delete process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS
   try {
@@ -324,10 +324,10 @@ test('deterministic shortcuts run first by default; KOVA_PREFER_DETERMINISTIC_AC
       parameters: { threadId: '' },
       confidenceScore: 0.82,
     }
-    assert.equal(shouldPreferDeterministicAction('Archive le thread Gmail "Test"', [proposal]), true)
-
-    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS = 'false'
     assert.equal(shouldPreferDeterministicAction('Archive le thread Gmail "Test"', [proposal]), false)
+
+    process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS = 'true'
+    assert.equal(shouldPreferDeterministicAction('Archive le thread Gmail "Test"', [proposal]), true)
   } finally {
     if (prevDet !== undefined) process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS = prevDet
     else delete process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS

@@ -153,7 +153,7 @@ export async function resolveCorrectedContactFromChatInput(params: {
         parameters: asRecord(updatedAction.parameters),
         createdAt: updatedAction.createdAt.toISOString(),
       },
-      assistantResponse: `Adresse corrigée pour ${name}. Vérifie puis confirme.`,
+      assistantResponse: `C’est mis à jour pour **${name}** — la carte d’action pointe bien vers cette adresse. Tu peux relire et valider quand tu veux.`,
     }
   }
 
