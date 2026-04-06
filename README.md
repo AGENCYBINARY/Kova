@@ -173,6 +173,24 @@ CLI deploy (optional, same project must be linked with `vercel link`):
 npx vercel deploy --prod
 ```
 
+## Performance (load time)
+
+These are implemented in the codebase:
+
+- **Single sidebar request:** `GET /api/dashboard/sidebar` returns integrations + subscription quota in one round trip (`getSidebarBundle` in `src/lib/dashboard/server.ts`).
+- **SWR:** sidebar, subscription fallback, and assistant settings use shared fetch helpers in `src/lib/swr-fetch.ts` to dedupe requests and revalidate sensibly when returning to the tab.
+- **Smaller initial JS:** dynamic imports for chat shell, settings assistant form, and the Clerk `UserButton` footer (`SidebarUserFooter`) so heavy chunks load after first paint.
+- **Font:** Manrope uses `preload`, `adjustFontFallback`, and a CSS variable in `src/app/layout.tsx`.
+- **Framer Motion:** `experimental.optimizePackageImports: ['framer-motion']` in `next.config.js`.
+
+Optional local Lighthouse (dev server must be running on port 3000):
+
+```bash
+npm run perf:lighthouse
+```
+
+Reports are written to `.lighthouse/` (gitignored).
+
 ## Current Behavior
 
 - Gmail send flow works
