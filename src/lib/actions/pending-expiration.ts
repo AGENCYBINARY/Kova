@@ -51,13 +51,20 @@ export async function expirePendingActions(params: {
   workspaceId: string
   userId: string
   now?: Date
+  /** When set, skips an extra workspace read (e.g. dashboard bundle already loaded preferences). */
+  workspacePreferences?: unknown
 }) {
   const now = params.now || new Date()
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: params.workspaceId },
-    select: { preferences: true },
-  })
-  const timeoutSeconds = resolvePendingActionTimeoutSeconds(workspace?.preferences)
+  const preferences =
+    params.workspacePreferences !== undefined
+      ? params.workspacePreferences
+      : (
+          await prisma.workspace.findUnique({
+            where: { id: params.workspaceId },
+            select: { preferences: true },
+          })
+        )?.preferences
+  const timeoutSeconds = resolvePendingActionTimeoutSeconds(preferences)
   const cutoff = getPendingActionExpiryCutoff(now, timeoutSeconds)
 
   const expiredActionIds: string[] = []

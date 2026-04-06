@@ -344,17 +344,42 @@ async function getDashboardScope() {
 
 export async function getDashboardBundle(): Promise<DashboardBundle> {
   const scopeWhere = await getDashboardScope()
-  await expirePendingActions(scopeWhere)
+  const workspaceRow = await prisma.workspace.findUnique({
+    where: { id: scopeWhere.workspaceId },
+    select: { preferences: true },
+  })
+  await expirePendingActions({
+    ...scopeWhere,
+    workspacePreferences: workspaceRow?.preferences,
+  })
   const [actions, integrations] = await Promise.all([
     prisma.action.findMany({
       where: scopeWhere,
       orderBy: [{ createdAt: 'desc' }],
       take: 50,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        parameters: true,
+        status: true,
+        createdAt: true,
+        executedAt: true,
+        result: true,
+      },
     }),
     prisma.integration.findMany({
       where: scopeWhere,
       orderBy: [{ updatedAt: 'desc' }],
       take: 20,
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        metadata: true,
+        lastSyncAt: true,
+      },
     }),
   ])
 

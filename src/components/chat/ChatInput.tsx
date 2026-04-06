@@ -21,6 +21,8 @@ export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: Cha
   const { t, lang } = useLang()
   const [message, setMessage] = useState('')
   const [isListening, setIsListening] = useState(false)
+  /** false on SSR + first paint — set in useEffect to avoid hydration mismatch; enables mic after mount. */
+  const [speechSupported, setSpeechSupported] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messageRef = useRef('')
   const dictationSnapshotRef = useRef('')
@@ -28,7 +30,9 @@ export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: Cha
 
   messageRef.current = message
 
-  const speechSupported = typeof window !== 'undefined' && isSpeechRecognitionSupported()
+  useEffect(() => {
+    setSpeechSupported(isSpeechRecognitionSupported())
+  }, [])
 
   const stopDictation = useCallback(() => {
     const r = recognitionRef.current
@@ -91,7 +95,10 @@ export function ChatInput({ onSend, onModeChange, disabled, preferredMode }: Cha
       setMessage(snap + spacer + trimmed)
     }
 
-    Recognition.onerror = () => {
+    Recognition.onerror = (ev: { error?: string }) => {
+      if (process.env.NODE_ENV === 'development' && ev?.error) {
+        console.warn('[Kova dictation]', ev.error)
+      }
       stopDictation()
     }
 

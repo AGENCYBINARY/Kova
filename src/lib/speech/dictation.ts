@@ -10,7 +10,7 @@ export type BrowserSpeechRecognition = {
   abort: () => void
   onstart: (() => void) | null
   onend: (() => void) | null
-  onerror: ((ev: { error: string }) => void) | null
+  onerror: ((ev: { error?: string }) => void) | null
   onresult: ((ev: SpeechRecognitionResultListEvent) => void) | null
 }
 
