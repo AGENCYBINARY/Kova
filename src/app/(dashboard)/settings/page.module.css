@@ -1,8 +1,10 @@
 .container {
   min-height: 100vh;
   width: min(980px, 100%);
+  max-width: 100%;
   margin: 0 auto;
   padding: 12px 0 28px;
+  box-sizing: border-box;
 }
 
 .formLoading {
@@ -13,8 +15,10 @@
 
 .toast {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: max(20px, env(safe-area-inset-top, 0px));
+  right: max(20px, env(safe-area-inset-right, 0px));
+  left: auto;
+  max-width: calc(100vw - max(40px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px)));
   z-index: 50;
   min-width: 240px;
   max-width: 360px;
@@ -211,6 +215,16 @@
   color: var(--accent-red);
 }
 
+@media (max-width: 1024px) {
+  .container {
+    padding: 8px 0 24px;
+  }
+
+  .header {
+    padding: 18px 16px;
+  }
+}
+
 @media (max-width: 768px) {
   .profile,
   .setting,
@@ -221,6 +235,12 @@
 
   .select {
     width: 100%;
+  }
+
+  .toast {
+    left: max(16px, env(safe-area-inset-left, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
+    max-width: none;
   }
 }
 

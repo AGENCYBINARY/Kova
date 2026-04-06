@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Manrope } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
@@ -14,6 +14,13 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: 'Kova - AI Execution Agent',
   description: 'AI-powered execution agent for professionals and teams',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

@@ -1,7 +1,9 @@
 .container {
   width: min(1180px, 100%);
+  max-width: 100%;
   margin: 0 auto;
   padding: 12px 0 30px;
+  box-sizing: border-box;
 }
 
 .alert {
@@ -197,9 +199,9 @@
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1024px) {
   .container {
-    padding: 0 0 28px;
+    padding: 8px 0 28px;
   }
 
   .header,
@@ -208,11 +210,16 @@
     grid-template-columns: 1fr;
     display: grid;
   }
+
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 @media (max-width: 720px) {
   .container {
-    padding: 0 0 24px;
+    padding: 4px 0 24px;
   }
 
   .header {

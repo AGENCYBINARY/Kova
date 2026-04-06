@@ -1,8 +1,10 @@
 .container {
   min-height: 100vh;
   width: min(1180px, 100%);
+  max-width: 100%;
   margin: 0 auto;
   padding: 8px 0 28px;
+  box-sizing: border-box;
 }
 
 .toast {
@@ -237,7 +239,11 @@
   gap: var(--space-sm);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
+  .container {
+    padding: 4px 0 24px;
+  }
+
   .bulkActions {
     justify-content: stretch;
     flex-direction: column-reverse;
@@ -249,6 +255,7 @@
 
   .header {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .cardHeader {
@@ -258,5 +265,15 @@
   .badges {
     align-items: flex-start;
     justify-content: flex-start;
+  }
+
+  .cardActions {
+    flex-wrap: wrap;
+    justify-content: stretch;
+  }
+
+  .cardActions button {
+    flex: 1;
+    min-width: 120px;
   }
 }

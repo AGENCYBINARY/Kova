@@ -12,7 +12,16 @@
 
 .page {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 24px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1024px) {
+  .page {
+    padding: max(88px, calc(env(safe-area-inset-top, 0px) + 72px)) max(14px, env(safe-area-inset-right, 0px)) 20px max(14px, env(safe-area-inset-left, 0px));
+  }
 }
 
 .header {

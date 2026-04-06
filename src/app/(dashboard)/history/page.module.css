@@ -1,8 +1,10 @@
 .container {
   min-height: 100vh;
   width: min(1180px, 100%);
+  max-width: 100%;
   margin: 0 auto;
   padding: 8px 0 28px;
+  box-sizing: border-box;
 }
 
 .header {
@@ -212,9 +214,9 @@
   color: rgba(255, 255, 255, 0.34);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1024px) {
   .container {
-    padding: 0 0 24px;
+    padding: 4px 0 24px;
   }
 
   .header,
@@ -224,14 +226,19 @@
   }
 
   .header {
-    padding: 22px 20px;
+    padding: 18px 16px;
   }
 
   .searchInput {
     width: 100%;
+    min-width: 0;
   }
 
   .stats {
     grid-template-columns: 1fr;
+  }
+
+  .headerBadges {
+    width: 100%;
   }
 }

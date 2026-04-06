@@ -13,11 +13,12 @@
   min-width: 0;
   margin-left: calc(var(--sidebar-width) + 28px);
   min-height: 100vh;
+  min-height: 100dvh;
   background: transparent;
   padding: 18px 22px 24px 0;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1024px) {
   .container {
     display: block;
   }
@@ -25,6 +26,10 @@
   .main {
     margin-left: 0;
     min-height: auto;
-    padding: 82px 14px 20px;
+    /* Hamburger (~44px) + safe area (notch) + breathing room */
+    padding-top: max(88px, calc(env(safe-area-inset-top, 0px) + 76px));
+    padding-right: max(14px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(14px, env(safe-area-inset-left, 0px));
   }
 }
