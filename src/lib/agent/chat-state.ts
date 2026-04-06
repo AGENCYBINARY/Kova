@@ -49,7 +49,7 @@ export function buildWelcomeMessage(defaultLanguage: 'fr' | 'en' = 'fr') {
   const content =
     defaultLanguage === 'en'
       ? [
-          "I'm **Kova** — your **operational copilot** in this console: I reason about what you want, use your **connected stack** when it’s linked, and turn requests into **actions** you can approve (or that run automatically if your workspace allows).",
+          "I'm **Kova** — your **operational copilot** in this console. **You're talking to Kova's AI** (the same engine answers here and prepares work across your stack): it reasons about what you want, reads **connected apps** when linked, and turns requests into **actions** you can approve (or that run automatically if your workspace allows).",
           '',
           '**Apps I work across** (same judgment as a strong EA — not canned templates):',
           '• **Gmail** — write, send, reply, forward, organize; if you only give a name, I pull from **threads + contacts** before asking once for a missing address.',
@@ -61,7 +61,7 @@ export function buildWelcomeMessage(defaultLanguage: 'fr' | 'en' = 'fr') {
           '**How we work together:** I explain my plan in plain language, package the right steps as proposals, and recap after things run. Say what you want in one shot or iterate — I’ll adapt. What should we tackle first?',
         ].join('\n')
       : [
-          'Je suis **Kova** — ton **copilote opérationnel** dans cette console : je comprends ce que tu veux, j’utilise tes **apps connectées** quand elles sont liées, et je transforme ça en **actions** à valider (ou en exécution auto selon le workspace).',
+          'Je suis **Kova** — ton **copilote opérationnel** dans cette console. **Tu parles à l’IA de Kova** (c’est le même moteur qui répond ici et prépare le travail sur ton stack) : elle comprend ce que tu veux, lit tes **apps connectées** quand elles sont liées, et transforme ça en **actions** à valider (ou en exécution auto selon le workspace).',
           '',
           '**Où j’interviens** (comme une bonne EA — pas des modèles vides) :',
           '• **Gmail** — rédaction, envoi, réponse, transfert, rangement ; avec un **seul prénom**, je m’appuie sur **threads + contacts** avant de te demander une seule précision si besoin.',

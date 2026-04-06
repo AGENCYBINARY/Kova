@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import nextDynamic from 'next/dynamic'
+import { KovaAppIcon } from '@/components/brand/KovaAppIcon'
 import styles from './page.module.css'
 
 const KovaDemoVideo = nextDynamic(() => import('@/components/landing/KovaDemoVideo'), {
@@ -66,11 +67,7 @@ export default function HomePage() {
       <header className={styles.nav}>
         <div className={styles.navInner}>
           <Link href="/" className={styles.brand}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#6a8cff" />
-              <path d="M2 17L12 22L22 17" stroke="#6a8cff" strokeWidth="2" strokeLinecap="round" />
-              <path d="M2 12L12 17L22 12" stroke="#6a8cff" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
-            </svg>
+            <KovaAppIcon size={26} gradientIdSuffix="landing-nav" />
             <span>Kova</span>
           </Link>
           <div className={styles.navLinks}>
@@ -167,11 +164,7 @@ export default function HomePage() {
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           <Link href="/" className={styles.brand} style={{ opacity: 0.5 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" />
-              <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
-            </svg>
+            <KovaAppIcon size={20} gradientIdSuffix="landing-footer" />
             <span>Kova</span>
           </Link>
           <div className={styles.footerLinks}>

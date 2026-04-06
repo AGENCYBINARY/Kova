@@ -1,5 +1,6 @@
 import { SignUp } from '@clerk/nextjs'
 import Link from 'next/link'
+import { KovaAppIcon } from '@/components/brand/KovaAppIcon'
 import styles from '../../auth.module.css'
 
 const features = [
@@ -15,11 +16,7 @@ export default function SignUpPage() {
       {/* Left — branding */}
       <div className={styles.left}>
         <Link href="/" className={styles.leftBrand}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#6a8cff" />
-            <path d="M2 17L12 22L22 17" stroke="#6a8cff" strokeWidth="2" strokeLinecap="round" />
-            <path d="M2 12L12 17L22 12" stroke="#6a8cff" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
-          </svg>
+          <KovaAppIcon size={26} gradientIdSuffix="sign-up" />
           Kova
         </Link>
 

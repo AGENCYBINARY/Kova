@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useUser } from '@clerk/nextjs'
 import { useLang } from '@/lib/lang-context'
+import { KovaAppIcon } from '@/components/brand/KovaAppIcon'
 import { UsageBadge } from '@/components/ui/UsageBadge'
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
 import { dashboardSWRConfig, jsonFetcher } from '@/lib/swr-fetch'
@@ -198,11 +199,7 @@ export function Sidebar() {
         <div className={styles.headerRow}>
         <Link href="/dashboard" className={styles.logo}>
           <div className={styles.logoIcon}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#6a8cff" />
-              <path d="M2 17L12 22L22 17" stroke="#6a8cff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 12L12 17L22 12" stroke="#6a8cff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.78" />
-            </svg>
+            <KovaAppIcon size={26} gradientIdSuffix="sidebar" />
           </div>
           <span className={styles.logoText}>Kova</span>
         </Link>

@@ -35,9 +35,9 @@ interface ChatPageClientProps {
 }
 
 const WELCOME_FR =
-  "Je suis Kova — pensé comme un assistant exécutif : courrier, agenda, fichiers, docs, Notion, Photos. Dis-moi ce qu’il faut faire ; je prépare les actions concrètes dans tes apps (validation quand c’est sensible)."
+  "Je suis Kova — l’IA de ce produit, pensée comme une assistante administrative / exécutive : courrier, agenda, fichiers, docs, Notion, Photos. Je réponds ici et je prépare les actions dans tes apps (validation quand c’est sensible)."
 const WELCOME_EN =
-  "I'm Kova — built like an executive assistant: inbox, calendar, files, docs, Notion, Photos. Tell me what needs doing; I'll prepare concrete actions in your connected apps (approval when it matters)."
+  "I'm Kova — this product's AI, built like an admin / executive assistant: inbox, calendar, files, docs, Notion, Photos. I answer here and prepare actions in your apps (approval when it matters)."
 
 function buildDisambiguationReply(
   item: ChatDisambiguation,

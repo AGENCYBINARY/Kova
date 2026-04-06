@@ -56,6 +56,9 @@ export const translations = {
       addAttachment: "Ajouter une pièce jointe",
       removeAttachment: "Retirer la pièce jointe",
       send: "Envoyer",
+      dictation: "Dicter un message",
+      dictationStop: "Arrêter la dictée",
+      dictationUnsupported: "Dictée non supportée par ce navigateur (essayez Chrome ou Edge).",
     },
     actions: {
       eyebrow: "Flux d'approbation",
@@ -99,6 +102,8 @@ export const translations = {
       connected: "connectées",
       connectedMsg: "connecté",
       errorMsg: "Une erreur est survenue lors de",
+      googleOAuthAdminHint:
+        "Connexion Google refusée (« application en test », erreur 403) ? Côté Google Cloud Console : APIs et services → Écran de consentement OAuth → ajoutez l’adresse Google de chaque utilisateur dans Utilisateurs test, ou passez l’app en production (Gmail / Drive / Agenda exigent souvent une vérification Google pour le grand public). URI de redirection autorisée : {origin}/api/integrations/callback/google (voir NEXT_PUBLIC_APP_URL).",
     },
     settings: {
       eyebrow: "Préférences",
@@ -210,6 +215,9 @@ export const translations = {
       addAttachment: "Add attachment",
       removeAttachment: "Remove attachment",
       send: "Send",
+      dictation: "Dictate message",
+      dictationStop: "Stop dictation",
+      dictationUnsupported: "Dictation isn’t supported in this browser (try Chrome or Edge).",
     },
     actions: {
       eyebrow: "Approval Workflow",
@@ -253,6 +261,8 @@ export const translations = {
       connected: "connected",
       connectedMsg: "Connected",
       errorMsg: "An error occurred during",
+      googleOAuthAdminHint:
+        "Google sign-in blocked (“app is in testing”, error 403)? In Google Cloud Console: APIs & Services → OAuth consent screen → add each user’s Google account under Test users, or publish the app to production (Gmail / Drive / Calendar usually need Google verification for external users). Authorized redirect URI: {origin}/api/integrations/callback/google (must match NEXT_PUBLIC_APP_URL).",
     },
     settings: {
       eyebrow: "Workspace Preferences",
