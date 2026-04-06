@@ -127,6 +127,14 @@ const normalizedPlanStepSchema = z.object({
   title: z.string().min(1),
   detail: z.string().min(1),
   app: z.string().min(1).optional(),
+  kind: z.enum(['action', 'wait']).optional(),
+  waitUntil: z.string().min(1).optional(),
+  retryLimit: z.number().int().min(0).max(5).optional(),
+  retryBackoffSeconds: z.number().int().min(30).max(86_400).optional(),
+  condition: z.object({
+    type: z.enum(['always', 'if_previous_step_succeeded', 'if_previous_output_exists']),
+    key: z.string().min(1).optional(),
+  }).optional(),
 })
 
 const normalizedActionProposalSchema = z.object({
@@ -155,6 +163,14 @@ const rawPlanStepSchema = z.object({
   title: z.string().min(1),
   detail: z.string().min(1),
   app: z.string().min(1).optional(),
+  kind: z.enum(['action', 'wait']).optional(),
+  waitUntil: z.string().min(1).optional(),
+  retryLimit: z.number().int().min(0).max(5).optional(),
+  retryBackoffSeconds: z.number().int().min(30).max(86_400).optional(),
+  condition: z.object({
+    type: z.enum(['always', 'if_previous_step_succeeded', 'if_previous_output_exists']),
+    key: z.string().min(1).optional(),
+  }).optional(),
 })
 
 const rawAnalysisResponseSchema = z.object({
@@ -217,6 +233,36 @@ const responseFormatJsonSchema = {
           },
           app: {
             type: 'string',
+          },
+          kind: {
+            type: 'string',
+            enum: ['action', 'wait'],
+          },
+          waitUntil: {
+            type: 'string',
+            description: 'Optional ISO datetime. Use this when the workflow should pause until a specific time before continuing.',
+          },
+          retryLimit: {
+            type: 'integer',
+            description: 'Optional retry budget for this step when a provider error is transient.',
+          },
+          retryBackoffSeconds: {
+            type: 'integer',
+            description: 'Optional delay before retrying a transient provider failure on this step.',
+          },
+          condition: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['type'],
+            properties: {
+              type: {
+                type: 'string',
+                enum: ['always', 'if_previous_step_succeeded', 'if_previous_output_exists'],
+              },
+              key: {
+                type: 'string',
+              },
+            },
           },
         },
       },
@@ -283,6 +329,11 @@ In normal operation **this request is yours**: you interpret nuance, use any **i
 - Keep the plan **coherent and minimal**: only the steps required to get the job done well.
 - Use the visible **response** to explain the ordered plan in plain language: what happens first, what happens next, and where you still need confirmation.
 - Prefer **model judgment for planning and reformulation**. Deterministic tooling exists to execute safely, not to replace your reasoning.
+- If a workflow genuinely needs to pause, retry later, or branch after a prior step, encode it in the **plan** using optional step controls:
+  - kind "wait" for a deliberate wait step
+  - waitUntil for resume-after-time behavior
+  - retryLimit and retryBackoffSeconds for transient provider failures
+  - condition when a later step should only run if the previous step succeeded or produced a required output key
 
 ## UNIFIED AGENT — ONE BRAIN
 

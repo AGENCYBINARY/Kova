@@ -376,6 +376,12 @@ async function main() {
     return
   }
 
+  for (const provider of SUPPORTED_INTEGRATIONS) {
+    if (!byType.has(provider)) {
+      console.log(`SKIP provider-${provider}: integration not connected on target workspace`)
+    }
+  }
+
   for (const scenario of scenarios) {
     try {
       const preview = await previewPrompt({

@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { createAuditLog } from '@/lib/audit/service'
 import { claimPendingActionIds } from '@/lib/actions/claim-pending'
-import { createActionPlanForTurn } from '@/lib/actions/action-plans'
+import { createActionPlanForTurn, planUsesWorkflowControls } from '@/lib/actions/action-plans'
 import { executePersistedActionBatch } from '@/lib/actions/execute-persisted-batch'
 import { isOpenAiConfigured } from '@/lib/ai/client'
 import { synthesizePostExecutionOutcome } from '@/lib/ai/narration'
@@ -53,6 +53,7 @@ export async function persistAndExecuteAgentProposals(params: {
 }) {
   const lang = params.defaultLanguage === 'en' ? 'en' : 'fr'
   const requestGroupId = params.proposals.length > 1 ? `group_${Date.now()}_${params.userId.slice(0, 6)}` : null
+  const usesWorkflowControls = planUsesWorkflowControls(params.plan || [])
 
   const { actionPlan, createdActions } = await prisma.$transaction(async (tx) => {
     const actionPlan = await createActionPlanForTurn(tx, {
@@ -63,6 +64,7 @@ export async function persistAndExecuteAgentProposals(params: {
       plan: params.plan || [],
       assistantPlanContent: params.assistantPlanContent,
       language: lang,
+      executionMode: params.executionMode,
     })
 
     const createdActions =
@@ -80,7 +82,7 @@ export async function persistAndExecuteAgentProposals(params: {
                     proposalIndex: index,
                     ...(requestGroupId ? { requestGroupId } : {}),
                   },
-                  status: 'pending',
+                  status: usesWorkflowControls && index > 0 ? 'waiting' : 'pending',
                   userId: params.userId,
                   workspaceId: params.workspaceId,
                   planId: actionPlan?.id || null,

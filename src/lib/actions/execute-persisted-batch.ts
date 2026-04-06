@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma'
 import { executeBatch, type BatchAction } from '@/lib/actions/batch-execution'
 import { syncActionPlansForActionIds } from '@/lib/actions/action-plans'
 import { compensateCompletedActions } from '@/lib/actions/compensation'
+import { scheduleRetryForFailedAction, syncActionPlanWorkflowsForActionIds } from '@/lib/actions/workflow-state'
 import { sortBatchActionsForExecution } from '@/lib/actions/batch-order'
 import { asActionParameters, injectExecutionOutputsIntoParameters } from '@/lib/actions/parameter-resolution'
 import { createAuditLog } from '@/lib/audit/service'
@@ -247,7 +248,16 @@ export async function executePersistedActionBatch(params: {
     )
   }
 
+  if (batchResult.failed) {
+    await scheduleRetryForFailedAction({
+      actionId: batchResult.failed.action.id,
+      error: batchResult.failed.error,
+    })
+  }
   await syncActionPlansForActionIds({
+    actionIds: params.actions.map((action) => action.id),
+  })
+  await syncActionPlanWorkflowsForActionIds({
     actionIds: params.actions.map((action) => action.id),
   })
 

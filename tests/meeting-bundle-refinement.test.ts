@@ -232,3 +232,50 @@ test('mail-only pending: adds calendar when schedule inferable from history', ()
   assert.equal(out!.proposals[1].type, 'create_gmail_draft')
   assert.match(String(out!.proposals[1].parameters.body), /\{\{\s*meet_?link\s*\}\}/i)
 })
+
+test('recent executed bundle can still anchor a refinement when pending actions disappeared', () => {
+  const out = buildMeetingBundleRefinementFollowUp({
+    input: 'remets le lien meet dans le mail et l’invitation stp',
+    pendingActions: [],
+    recentActions: [
+      {
+        id: 'recent-cal',
+        type: 'create_calendar_event',
+        title: 'Recent calendar',
+        description: '',
+        createdAt: '2026-04-06T15:00:00.000Z',
+        planId: 'recent-plan',
+        status: 'completed',
+        parameters: {
+          title: 'Réunion avec Paula Massarelli',
+          startTime: '2026-04-07T17:00:00.000Z',
+          endTime: '2026-04-07T17:30:00.000Z',
+          attendees: ['paula@example.com'],
+          createMeetLink: false,
+        },
+      },
+      {
+        id: 'recent-mail',
+        type: 'send_email',
+        title: 'Recent mail',
+        description: '',
+        createdAt: '2026-04-06T15:00:01.000Z',
+        planId: 'recent-plan',
+        status: 'completed',
+        parameters: {
+          to: ['paula@example.com'],
+          resolvedContactName: 'Paula Massarelli',
+          subject: 'Réunion Paula',
+          body: 'Bonjour,\n\nSans lien.\n\nMerci,',
+        },
+      },
+    ],
+    conversationHistory: [{ role: 'user', content: 'réunion mardi 19h avec Paula Massarelli' }],
+    assistantProfile: { defaultLanguage: 'fr', signatureName: 'Kova' } as import('@/lib/assistant/profile').AssistantProfile,
+  })
+
+  assert.ok(out)
+  assert.equal(out!.proposals.length, 2)
+  assert.equal(out!.proposals[0].type, 'create_calendar_event')
+  assert.equal(out!.proposals[1].type, 'send_email')
+})

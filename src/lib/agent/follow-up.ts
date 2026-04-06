@@ -11,6 +11,10 @@ interface RecentActionCandidate {
   title: string
   description: string
   parameters: Record<string, unknown>
+  status?: string
+  planId?: string | null
+  planStepIndex?: number | null
+  createdAt?: string
 }
 
 function normalizeInput(input: string) {
@@ -204,13 +208,13 @@ function actionCreatedAt(a: PendingActionRecord): number {
   return Number.isFinite(t) ? t : 0
 }
 
-function pickCalendarAndMailFromPending(pending: PendingActionRecord[]) {
+function pickCalendarAndMailFromRecords(records: PendingActionRecord[]) {
   type Pair = { calendar: PendingActionRecord; mail: PendingActionRecord; ts: number }
   const pairs: Pair[] = []
   const byPlanId = new Map<string, PendingActionRecord[]>()
   const byGid = new Map<string, PendingActionRecord[]>()
 
-  for (const a of pending) {
+  for (const a of records) {
     const planId = a.planId
     if (typeof planId === 'string' && planId.length > 0) {
       const list = byPlanId.get(planId) || []
@@ -236,7 +240,7 @@ function pickCalendarAndMailFromPending(pending: PendingActionRecord[]) {
     return { calendar: pairs[0].calendar, mail: pairs[0].mail }
   }
 
-  for (const a of pending) {
+  for (const a of records) {
     const gid = a.parameters.requestGroupId
     if (typeof gid === 'string' && gid.length > 0) {
       const list = byGid.get(gid) || []
@@ -262,8 +266,8 @@ function pickCalendarAndMailFromPending(pending: PendingActionRecord[]) {
     return { calendar: pairs[0].calendar, mail: pairs[0].mail }
   }
 
-  const cals = pending.filter((a) => a.type === 'create_calendar_event')
-  const mails = pending.filter((a) => a.type === 'send_email' || a.type === 'create_gmail_draft')
+  const cals = records.filter((a) => a.type === 'create_calendar_event')
+  const mails = records.filter((a) => a.type === 'send_email' || a.type === 'create_gmail_draft')
   cals.sort((a, b) => actionCreatedAt(b) - actionCreatedAt(a))
   mails.sort((a, b) => actionCreatedAt(b) - actionCreatedAt(a))
   const calendar = cals[0]
@@ -295,6 +299,7 @@ function stripPersistOnlyParameterKeys(params: Record<string, unknown>) {
 export function buildMeetingBundleRefinementFollowUp(params: {
   input: string
   pendingActions: PendingActionRecord[]
+  recentActions?: PendingActionRecord[]
   conversationHistory: Array<{ role: string; content: string }>
   assistantProfile?: AssistantProfile
 }): { response: string; proposals: AgentProposal[]; supersedeActionIds: string[] } | null {
@@ -302,7 +307,8 @@ export function buildMeetingBundleRefinementFollowUp(params: {
     return null
   }
 
-  const picked = pickCalendarAndMailFromPending(params.pendingActions)
+  const picked = pickCalendarAndMailFromRecords(params.pendingActions)
+    || (params.recentActions?.length ? pickCalendarAndMailFromRecords(params.recentActions) : null)
   if (!picked || (!picked.calendar && !picked.mail)) {
     return null
   }

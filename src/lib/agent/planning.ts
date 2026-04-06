@@ -1,7 +1,17 @@
+export interface AgentPlanStepCondition {
+  type: 'always' | 'if_previous_step_succeeded' | 'if_previous_output_exists'
+  key?: string
+}
+
 export interface AgentPlanStep {
   title: string
   detail: string
   app?: string
+  kind?: 'action' | 'wait'
+  waitUntil?: string
+  retryLimit?: number
+  retryBackoffSeconds?: number
+  condition?: AgentPlanStepCondition
 }
 
 export function buildPlanBackedNarration(params: {

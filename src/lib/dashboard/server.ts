@@ -19,6 +19,8 @@ function asRecord(value: unknown): Record<string, unknown> {
 function mapActionStatus(status: string): DashboardAction['status'] {
   if (
     status === 'pending' ||
+    status === 'waiting' ||
+    status === 'retry_scheduled' ||
     status === 'approved' ||
     status === 'rejected' ||
     status === 'expired' ||
@@ -256,6 +258,10 @@ function mapAction(record: {
         ? result.details
         : record.status === 'compensated'
           ? compensationReason || 'Action executed, then automatically compensated after a later batch failure.'
+          : record.status === 'waiting'
+            ? 'Action staged in a multi-step workflow and waiting for its next execution window.'
+            : record.status === 'retry_scheduled'
+              ? 'Action hit a transient provider issue and has an automatic retry scheduled.'
           : undefined,
     error: typeof result.error === 'string' ? result.error : undefined,
   }
@@ -389,8 +395,8 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
 
   const mappedActions = actions.map(mapAction)
   const mappedIntegrations = mergeIntegrations(integrations)
-  const pendingActions = mappedActions.filter((action) => action.status === 'pending')
-  const executionHistory = mappedActions.filter((action) => action.status !== 'pending')
+  const pendingActions = mappedActions.filter((action) => action.status === 'pending' || action.status === 'retry_scheduled')
+  const executionHistory = mappedActions.filter((action) => action.status !== 'pending' && action.status !== 'retry_scheduled')
   const completedToday = mappedActions.filter((action) => {
     if (action.status !== 'completed' || !action.executedAt) return false
     const executed = new Date(action.executedAt)
@@ -402,7 +408,10 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
     ...pendingActions.slice(0, 2).map((action) => ({
       id: `pending-${action.id}`,
       label: 'Approval queue updated',
-      description: `${action.title} is waiting for review.`,
+      description:
+        action.status === 'retry_scheduled'
+          ? `${action.title} is scheduled to retry automatically.`
+          : `${action.title} is waiting for review.`,
       at: action.createdAt,
     })),
     ...executionHistory.slice(0, 3).map((action) => ({
@@ -446,7 +455,9 @@ export async function getActionsPageData(): Promise<ActionsPageData> {
   const actions = await prisma.action.findMany({
     where: {
       ...scopeWhere,
-      status: 'pending',
+      status: {
+        in: ['pending', 'retry_scheduled'],
+      },
     },
     orderBy: [{ createdAt: 'desc' }],
     take: 50,
@@ -480,7 +491,7 @@ export async function getHistoryPageData(query = ''): Promise<HistoryPageData> {
     where: {
       ...scopeWhere,
       status: {
-        not: 'pending',
+        notIn: ['pending', 'waiting', 'retry_scheduled'],
       },
       ...buildHistorySearchWhere(query),
     },

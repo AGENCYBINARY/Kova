@@ -153,6 +153,11 @@ model ActionPlan {
   summary     String
   status      String           @default("pending_review")
   metadata    Json?
+  currentStepIndex Int         @default(0)
+  nextResumeAt DateTime?
+  lastResumedAt DateTime?
+  lastError   String?
+  executionMode String         @default("ask")
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   workspaceId String
@@ -166,6 +171,7 @@ model ActionPlan {
 
   @@index([workspaceId, userId, updatedAt])
   @@index([status, updatedAt])
+  @@index([nextResumeAt, status])
 }
 
 model ActionPlanStep {
@@ -173,8 +179,16 @@ model ActionPlanStep {
   title     String
   detail    String
   app       String?
+  kind      String     @default("action")
   status    String     @default("pending")
   metadata  Json?
+  waitUntil DateTime?
+  retryCount Int       @default(0)
+  retryLimit Int       @default(2)
+  retryBackoffSeconds Int @default(300)
+  lastError String?
+  startedAt DateTime?
+  completedAt DateTime?
   stepIndex Int
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt

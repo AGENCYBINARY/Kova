@@ -726,3 +726,65 @@ Addendum after live prod verification:
 
 - The first prod rerun exposed another classifier bug: Gmail thread actions such as archive / unarchive / label / star could still be hijacked by the calendar branch when the quoted Gmail subject itself contained meeting words.
 - That ordering bug is now fixed by prioritizing explicit Gmail thread intents before meeting/calendar branches in the deterministic router.
+
+## Continuity Update — 2026-04-06 (durable workflow spine + Neon sync + broader prod validation)
+
+This slice moves Kova from “persistent plan summary” toward a real durable workflow runtime.
+
+What changed:
+
+- `ActionPlan` now persists workflow execution state:
+  - `currentStepIndex`
+  - `nextResumeAt`
+  - `lastResumedAt`
+  - `lastError`
+  - `executionMode`
+- `ActionPlanStep` now persists workflow controls and telemetry:
+  - `kind`
+  - `waitUntil`
+  - `retryCount`
+  - `retryLimit`
+  - `retryBackoffSeconds`
+  - `lastError`
+  - `startedAt`
+  - `completedAt`
+- The agent plan contract now supports optional workflow hints from the model:
+  - `kind`
+  - `waitUntil`
+  - `retryLimit`
+  - `retryBackoffSeconds`
+  - `condition`
+- A new workflow runtime layer exists in:
+  - [src/lib/actions/workflow-state.ts](/Users/agencybinary/Documents/CODEX/src/lib/actions/workflow-state.ts)
+  - [src/lib/actions/workflow-resume.ts](/Users/agencybinary/Documents/CODEX/src/lib/actions/workflow-resume.ts)
+- New cron-backed maintenance endpoint for due workflow resumes:
+  - [src/app/api/internal/maintenance/workflows/route.ts](/Users/agencybinary/Documents/CODEX/src/app/api/internal/maintenance/workflows/route.ts)
+  - [vercel.json](/Users/agencybinary/Documents/CODEX/vercel.json)
+- Retryable provider failures are now classified explicitly:
+  - transient provider failures schedule a retry
+  - token/scope failures are classified as reconnect-required instead of being silently retried
+- Follow-up anchoring is less heuristic:
+  - meeting-bundle refinements can now anchor to recent executed bundles, not only pending actions
+  - runtime chat context now keeps `waiting`, `retry_scheduled`, and `failed` actions in recent state
+- Live runner now logs missing providers explicitly instead of leaving silent coverage gaps.
+
+Neon / production sync completed in this slice:
+
+- `prisma generate` -> pass
+- `DATABASE_URL_UNPOOLED` prod path used for schema push
+- `prisma db push --accept-data-loss` on Neon prod -> pass
+- `npm run db:reconcile` on Neon prod -> pass
+
+Validation baseline for this tranche:
+
+- `npm test` -> pass (`137/137`)
+- `npm run lint` -> pass
+- `npm run build` -> pass
+- `npm run integration:smoke:prod` -> pass
+- `npm run integration:live:prod` -> pass (`LIVE_RUNNER_OK 20`)
+- `npm run integration:live:execute:prod` -> pass on the configured prod target
+
+Important honest note:
+
+- The configured production live target for this run still has no connected `notion` integration in Neon (`[]` on direct prod query), so Notion execute coverage remains a target-data limitation, not a code-path failure.
+- The workflow spine is now durable enough for resume / wait / retry scheduling, but it is still not yet a fully general long-lived state machine with arbitrary branching or human-in-the-loop pause/resume UX.

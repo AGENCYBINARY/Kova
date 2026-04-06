@@ -1,5 +1,7 @@
 export type ActionStatus =
   | 'pending'
+  | 'waiting'
+  | 'retry_scheduled'
   | 'approved'
   | 'rejected'
   | 'expired'

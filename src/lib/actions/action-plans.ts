@@ -8,6 +8,8 @@ type PlanWriter = PrismaClient | Prisma.TransactionClient
 export type ActionPlanLifecycleStatus =
   | 'pending_review'
   | 'executing'
+  | 'waiting'
+  | 'retry_scheduled'
   | 'completed'
   | 'failed'
   | 'partial_failure'
@@ -20,6 +22,20 @@ function deriveStepFromProposal(proposal: AgentProposal): AgentPlanStep {
     detail: proposal.description,
     app: proposal.type,
   }
+}
+
+export function planStepHasWorkflowControls(step: Pick<AgentPlanStep, 'kind' | 'waitUntil' | 'retryLimit' | 'retryBackoffSeconds' | 'condition'>) {
+  return Boolean(
+    step.kind === 'wait' ||
+    step.waitUntil ||
+    typeof step.retryLimit === 'number' ||
+    typeof step.retryBackoffSeconds === 'number' ||
+    step.condition
+  )
+}
+
+export function planUsesWorkflowControls(plan: Array<Pick<AgentPlanStep, 'kind' | 'waitUntil' | 'retryLimit' | 'retryBackoffSeconds' | 'condition'>>) {
+  return plan.some((step) => planStepHasWorkflowControls(step))
 }
 
 function normalizePlanSteps(plan: AgentPlanStep[], proposals: AgentProposal[]) {
@@ -93,6 +109,14 @@ export function deriveActionPlanStepStatus(actionStatuses: string[]): ActionPlan
     return 'executing'
   }
 
+  if (actionStatuses.some((status) => status === 'pending')) {
+    return 'pending_review'
+  }
+
+  if (actionStatuses.some((status) => status === 'waiting')) {
+    return 'waiting'
+  }
+
   if (actionStatuses.every((status) => status === 'completed' || status === 'compensated')) {
     return 'completed'
   }
@@ -109,10 +133,6 @@ export function deriveActionPlanStepStatus(actionStatuses: string[]): ActionPlan
     return actionStatuses.some((status) => status === 'completed' || status === 'compensated')
       ? 'partial_failure'
       : 'failed'
-  }
-
-  if (actionStatuses.some((status) => status === 'pending')) {
-    return 'pending_review'
   }
 
   return 'partial_failure'
@@ -127,6 +147,14 @@ export function deriveActionPlanStatus(actionStatuses: string[]): ActionPlanLife
     return 'executing'
   }
 
+  if (actionStatuses.some((status) => status === 'pending')) {
+    return 'pending_review'
+  }
+
+  if (actionStatuses.some((status) => status === 'waiting')) {
+    return 'waiting'
+  }
+
   if (actionStatuses.every((status) => status === 'completed' || status === 'compensated')) {
     return 'completed'
   }
@@ -143,10 +171,6 @@ export function deriveActionPlanStatus(actionStatuses: string[]): ActionPlanLife
     return actionStatuses.some((status) => status === 'completed' || status === 'compensated')
       ? 'partial_failure'
       : 'failed'
-  }
-
-  if (actionStatuses.some((status) => status === 'pending')) {
-    return 'pending_review'
   }
 
   return 'partial_failure'
@@ -162,6 +186,7 @@ export async function createActionPlanForTurn(
     plan: AgentPlanStep[]
     assistantPlanContent?: string
     language: 'fr' | 'en'
+    executionMode?: 'ask' | 'auto'
   }
 ) {
   if (params.proposals.length === 0) {
@@ -186,6 +211,11 @@ export async function createActionPlanForTurn(
         language: params.language,
       }),
       status: 'pending_review',
+      currentStepIndex: 0,
+      nextResumeAt: null,
+      lastResumedAt: null,
+      lastError: null,
+      executionMode: params.executionMode || 'ask',
       metadata: {
         source: 'agent_turn',
         proposalTypes: params.proposals.map((proposal) => proposal.type),
@@ -198,6 +228,23 @@ export async function createActionPlanForTurn(
           title: step.title,
           detail: step.detail,
           app: step.app || null,
+          kind: step.kind || 'action',
+          waitUntil: step.waitUntil ? new Date(step.waitUntil) : null,
+          retryLimit: typeof step.retryLimit === 'number' ? Math.max(0, Math.min(5, step.retryLimit)) : 2,
+          retryBackoffSeconds:
+            typeof step.retryBackoffSeconds === 'number'
+              ? Math.max(30, Math.min(86_400, step.retryBackoffSeconds))
+              : 300,
+          ...(step.condition
+            ? {
+                metadata: {
+                  condition: {
+                    type: step.condition.type,
+                    ...(step.condition.key ? { key: step.condition.key } : {}),
+                  },
+                } satisfies Prisma.InputJsonObject,
+              }
+            : {}),
           stepIndex,
           status: 'pending',
         })),

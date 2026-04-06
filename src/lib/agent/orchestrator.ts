@@ -208,6 +208,7 @@ export async function orchestrateChatTurn(params: {
   const meetingBundleRefinement = buildMeetingBundleRefinementFollowUp({
     input: params.content,
     pendingActions,
+    recentActions,
     conversationHistory,
     assistantProfile,
   })

@@ -13,6 +13,8 @@ const statusColors = {
   rejected: 'warning',
   expired: 'warning',
   pending: 'info',
+  waiting: 'info',
+  retry_scheduled: 'warning',
 } as const
 
 const actionIcons: Record<string, JSX.Element> = {
