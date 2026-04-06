@@ -289,16 +289,23 @@ function proposalNeedsClarification(proposal: AgentProposal, input: string) {
 /**
  * User is asking for help wording an email (meta-request), not providing the literal email to send.
  * Deterministic email builders must not treat the whole sentence as the message body.
+ * Covers FR: "redige un mail" / "me redige un mail" / "j'aimerais... aider à rédiger" (word order varies).
  */
 export function isEmailCompositionAssistanceRequest(input: string): boolean {
   const n = normalizeInput(input)
   if (!/\b(mail|email|courriel|gmail|message)\b/.test(n)) {
     return false
   }
+  const draftingVerb =
+    /\b(formuler|rediger|redige|ecrire|ecris)\b/.test(n) ||
+    /\b(write|draft|compose|formulate)\b/.test(n)
   return (
     /\b(aide|aider)\b.*\b(mail|email|courriel|message)\b/.test(n) ||
-    /\b(mail|email|courriel)\b.*\b(formuler|rédiger|rediger|ecrire|écrire|rédige|redige)\b/.test(n) ||
-    /\b(je veux que tu|peux-tu|pourrais-tu|tu peux)\b.*\b(formuler|rédiger|rediger|ecrire|écrire|aider)\b/.test(n) ||
+    /\b(mail|email|courriel)\b.*\b(formuler|rediger|redige|ecrire|ecris)\b/.test(n) ||
+    /\b(formuler|rediger|redige|ecrire|ecris)\b.*\b(mail|email|courriel)\b/.test(n) ||
+    /\b(je veux que tu|peux-tu|pourrais-tu|tu peux)\b.*\b(formuler|rediger|redige|ecrire|aider)\b/.test(n) ||
+    /\b(me redige|m redige|me rediger)\b/.test(n) ||
+    (/\b(aimerai|aimerais)\b/.test(n) && draftingVerb) ||
     /\b(help me (to )?(write|draft|word|formulate))\b/.test(n) ||
     /\b(can you help (me )?(write|draft))\b/.test(n) ||
     /\b(formulate|draft) (a |an |the )?(email|mail)\b/.test(n) ||
@@ -461,6 +468,13 @@ export function buildConversationalResponse(input: string, profile?: AssistantPr
 }
 
 function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
+  if (isEmailCompositionAssistanceRequest(input)) {
+    const signature = profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova'
+    return profile?.defaultLanguage === 'en'
+      ? ['Hello,', '', '[Message body will be drafted after you confirm recipient and purpose.]', '', 'Best regards,', signature].join('\n')
+      : ['Bonjour,', '', '[Le corps du mail sera rédigé après confirmation du destinataire et de l’objectif.]', '', 'Merci,', signature].join('\n')
+  }
+
   const signature = profile?.signatureBlock?.trim()
   const body = [
     'Bonjour,',
@@ -484,6 +498,10 @@ function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
 }
 
 function buildEmailSubject(input: string, profile?: AssistantProfile) {
+  if (isEmailCompositionAssistanceRequest(input)) {
+    return profile?.defaultLanguage === 'en' ? 'Follow-up' : 'Suivi'
+  }
+
   const cleaned = input.trim().replace(/\s+/g, ' ')
   if (!cleaned) {
     return profile?.defaultLanguage === 'en' ? 'Follow-up' : 'Suivi'

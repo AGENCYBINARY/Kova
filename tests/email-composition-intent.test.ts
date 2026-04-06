@@ -21,3 +21,19 @@ test('literal send request is not composition assistance', () => {
     false
   )
 })
+
+test('detects je veux que tu me redige un mail (verb before mail)', () => {
+  assert.equal(
+    isEmailCompositionAssistanceRequest(
+      'je veux que tu me redige un mail a tristan massarelli et que tu lui envoie le mail avec une invite google meet'
+    ),
+    true
+  )
+})
+
+test('detects j aimerais bien que tu m aide a rediger un mail', () => {
+  assert.equal(
+    isEmailCompositionAssistanceRequest("j'aimerai bien que tu m'aide a rediger un mail a un collègue"),
+    true
+  )
+})
