@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   extractEmailAddresses,
+  extractGmailLookupNameQuery,
   extractNameNearEmail,
   extractRecipientName,
   findContactByName,
@@ -31,6 +32,14 @@ test('extractNameNearEmail and extractRecipientName capture likely recipient nam
     ),
     'Tristan Massarelli'
   )
+  assert.equal(
+    extractRecipientName(
+      'Tu peux me rediger un mail a tristan massarelli chercher son adresse mail dans gmail et lui dire reunion mardi 19h'
+    ),
+    'Tristan Massarelli'
+  )
+  assert.equal(extractGmailLookupNameQuery('trouve toi le mail de tristan massarelli regarde mes mails envoyes'), 'Tristan Massarelli')
+  assert.equal(extractGmailLookupNameQuery('cherche le mail de Marie Dupont sur gmail'), 'Marie Dupont')
 })
 
 test('findContactCandidatesByName returns ranked matches', () => {

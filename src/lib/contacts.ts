@@ -10,6 +10,7 @@ export type { KnownContact } from '@/lib/contacts-utils'
 export {
   deriveNameFromEmail,
   extractEmailAddresses,
+  extractGmailLookupNameQuery,
   extractNameBeforeEmail,
   extractNameNearEmail,
   extractRecipientName,

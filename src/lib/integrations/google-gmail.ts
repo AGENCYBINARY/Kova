@@ -66,6 +66,17 @@ function extractEmailAddress(value: string) {
   return directMatch?.[0]?.trim().toLowerCase() || null
 }
 
+/** All addresses in a From/To/Cc header (comma-separated). */
+function extractAllEmailAddressesFromHeader(value: string): string[] {
+  const parts = value.split(',').map((p) => p.trim()).filter(Boolean)
+  const out: string[] = []
+  for (const part of parts) {
+    const email = extractEmailAddress(part)
+    if (email && !email.endsWith('@example.com')) out.push(email)
+  }
+  return out
+}
+
 function decodeMimeWords(value: string) {
   return value.replace(/=\?UTF-8\?B\?([^?]+)\?=/gi, (_, encoded) =>
     Buffer.from(encoded, 'base64').toString('utf8')
@@ -373,7 +384,15 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
     .map((token) => token.trim())
     .filter((token) => token.length >= 3)
 
-  const queries = Array.from(new Set([
+  const sentQueries: string[] = [
+    `in:sent to:"${name}"`,
+    `in:sent "${name}"`,
+  ]
+  for (const token of nameTokens.filter((t) => t.length >= 4)) {
+    sentQueries.push(`in:sent to:${token}`)
+  }
+
+  const generalQueries: string[] = [
     `"${name}"`,
     `to:"${name}"`,
     `from:"${name}"`,
@@ -382,14 +401,17 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
           .filter((token) => token.length >= 4)
           .flatMap((token) => [`from:"${token}"`, `to:"${token}"`])
       : []),
-  ]))
+  ]
+
+  const queries = Array.from(new Set([...sentQueries, ...generalQueries]))
   const candidateScores = new Map<string, number>()
   const inspectedMessageIds = new Set<string>()
   let inspectedCount = 0
+  const maxInspect = 18
 
   for (const query of queries) {
     const listResponse = await googleFetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${encodeURIComponent(query)}`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=15&q=${encodeURIComponent(query)}`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -406,8 +428,10 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
       messages?: Array<{ id: string }>
     }
 
+    const queryIsSent = query.toLowerCase().includes('in:sent')
+
     for (const message of listData.messages || []) {
-      if (inspectedCount >= 8) {
+      if (inspectedCount >= maxInspect) {
         break
       }
       if (inspectedMessageIds.has(message.id)) {
@@ -437,50 +461,69 @@ export async function findGoogleContactEmail(accessToken: string, name: string) 
       }
 
       const headers = detailData.payload?.headers || []
-      const decodedValues = headers
-        .map((header) => decodeMimeWords(header.value || ''))
-        .filter(Boolean)
 
-      for (const value of decodedValues) {
-        const email = extractEmailAddress(value)
-        if (!email || email.endsWith('@example.com')) {
-          continue
-        }
+      const scoreHeaderBlock = (headerName: 'from' | 'to' | 'cc', rawValue: string) => {
+        const decoded = decodeMimeWords(rawValue)
+        if (!decoded) return
 
-        const normalizedValue = value.toLowerCase()
-        let score = 0
+        const isRecipientField = headerName === 'to' || headerName === 'cc'
+        const emails = extractAllEmailAddressesFromHeader(decoded)
+        const normalizedValue = decoded.toLowerCase()
 
-        if (normalizedValue.includes(normalizedName)) {
-          score += 6
-        }
+        for (const email of emails) {
+          let score = 0
 
-        for (const token of nameTokens) {
-          if (normalizedValue.includes(token)) {
+          if (normalizedValue.includes(normalizedName)) {
+            score += 6
+          }
+
+          for (const token of nameTokens) {
+            if (normalizedValue.includes(token)) {
+              score += 2
+            }
+          }
+
+          const local = email.split('@')[0]?.toLowerCase() || ''
+          if (score === 0 && local && normalizedName.includes(local)) {
             score += 2
           }
-        }
+          if (score === 0 && nameTokens.some((t) => local.includes(t) || t.includes(local))) {
+            score += 1
+          }
 
-        if (score === 0 && normalizedValue.includes(email.split('@')[0].toLowerCase())) {
-          score += 1
-        }
+          if (queryIsSent && isRecipientField && score > 0) {
+            score += 5
+          }
 
-        if (score > 0) {
-          candidateScores.set(email, (candidateScores.get(email) || 0) + score)
+          if (queryIsSent && isRecipientField && normalizedValue.includes(normalizedName)) {
+            score += 3
+          }
+
+          if (score > 0) {
+            candidateScores.set(email, (candidateScores.get(email) || 0) + score)
+          }
+        }
+      }
+
+      for (const header of headers) {
+        const hn = (header.name || '').toLowerCase()
+        if (hn === 'from' || hn === 'to' || hn === 'cc') {
+          scoreHeaderBlock(hn, header.value || '')
         }
       }
     }
 
-    if (inspectedCount >= 8) {
+    if (inspectedCount >= maxInspect) {
       break
     }
   }
 
   const ranked = Array.from(candidateScores.entries()).sort((left, right) => right[1] - left[1])
-  if (!ranked[0] || ranked[0][1] < 6) {
+  if (!ranked[0] || ranked[0][1] < 4) {
     return null
   }
 
-  if (ranked[1] && ranked[0][1] - ranked[1][1] < 2) {
+  if (ranked[1] && ranked[0][1] - ranked[1][1] < 1) {
     return null
   }
 

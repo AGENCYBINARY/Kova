@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import {
   extractEmailAddresses,
+  extractGmailLookupNameQuery,
   extractNameBeforeEmail,
   extractNameNearEmail,
   extractRecipientName,
@@ -80,7 +81,8 @@ export async function resolveCorrectedContactFromChatInput(params: {
       for (let index = params.previousMessages.length - 1; index >= 0; index -= 1) {
         const message = params.previousMessages[index]
         if (message.role !== 'user') continue
-        const fromPreviousMessage = extractRecipientName(message.content)
+        const fromPreviousMessage =
+          extractRecipientName(message.content) || extractGmailLookupNameQuery(message.content)
         if (fromPreviousMessage) return fromPreviousMessage
       }
       return null
@@ -175,7 +177,7 @@ export async function resolveEmailContactFromGoogle(params: {
   userId: string
   workspaceId: string
 }) {
-  const requestedName = extractRecipientName(params.content)
+  const requestedName = extractRecipientName(params.content) || extractGmailLookupNameQuery(params.content)
   if (!requestedName) {
     return null
   }

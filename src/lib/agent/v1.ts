@@ -20,7 +20,13 @@ import {
   type AgentTurnResult,
 } from '@/lib/agent/v1-deterministic'
 import { resolveActionReferencesDetailed } from '@/lib/agent/reference-resolution'
-import { extractEmailAddresses, extractRecipientName, findContactByName, type KnownContact } from '@/lib/contacts'
+import {
+  extractEmailAddresses,
+  extractGmailLookupNameQuery,
+  extractRecipientName,
+  findContactByName,
+  type KnownContact,
+} from '@/lib/contacts'
 import { getToolByActionType, listMcpTools } from '@/lib/mcp/registry'
 
 export {
@@ -247,7 +253,7 @@ export async function runAgentTurn(
             ? proposal.parameters.attendees.filter((value): value is string => typeof value === 'string' && value.includes('@'))
             : []
           const explicitInputEmails = extractEmailAddresses(input)
-          const maybeRecipient = extractRecipientName(input)
+          const maybeRecipient = extractRecipientName(input) || extractGmailLookupNameQuery(input)
           const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
 
           const forceMeetOff = requestForcesMeetLinkOff(input)
@@ -295,7 +301,7 @@ export async function runAgentTurn(
           return proposal
         }
 
-        const maybeRecipient = extractRecipientName(input)
+        const maybeRecipient = extractRecipientName(input) || extractGmailLookupNameQuery(input)
         const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
         if (!knownContact) {
           return proposal
@@ -374,9 +380,15 @@ export async function runAgentTurn(
                 (proposal) => allowedActionTypes.includes(proposal.type)
               )
               if (isEmailCompositionAssistanceRequest(input)) {
-                return raw.filter(
-                  (proposal) => proposal.type !== 'send_email' && proposal.type !== 'create_gmail_draft' && proposal.type !== 'update_gmail_draft'
-                )
+                const hasCalendarProposal = raw.some((proposal) => proposal.type === 'create_calendar_event')
+                if (!hasCalendarProposal) {
+                  return raw.filter(
+                    (proposal) =>
+                      proposal.type !== 'send_email' &&
+                      proposal.type !== 'create_gmail_draft' &&
+                      proposal.type !== 'update_gmail_draft'
+                  )
+                }
               }
               return raw
             })(),

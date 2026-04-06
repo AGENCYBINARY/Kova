@@ -470,6 +470,15 @@ export function shouldPreferDeterministicAction(input: string, proposals: AgentP
   const normalized = normalizeInput(input)
 
   if (
+    proposals.some((p) => p.type === 'create_calendar_event' || p.type === 'send_email') &&
+    hasConcreteCalendarSchedule(input) &&
+    /(calendar|calendrier|rdv|réunion|reunion|meet|evenement|événement|visio|google meet)/.test(normalized) &&
+    /(mail|email|courriel|envoyer|envoie|send|redige|rédige|rediger)/.test(normalized)
+  ) {
+    return true
+  }
+
+  if (
     /(gmail|email|e-mail|mail|message|thread|inbox)/.test(normalized) &&
     /(archive|archiver|unarchive|restore|restaure|restaurer|label|labels|etiquette|etiquettes|marque|mark|star|etoile|étoile|trash|corbeille|forward|transfere|transferer|draft|brouillon|reply|repond|supprime definitivement|delete permanently|send draft|envoie le brouillon)/.test(normalized)
   ) {
@@ -614,32 +623,78 @@ function buildCalendarProposal(input: string, profile?: AssistantProfile, contac
   }
 }
 
+function summarizeMeetingReminderFromInput(input: string, language: 'fr' | 'en'): string {
+  const n = normalizeInput(input)
+  const dayMatch = n.match(
+    /\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain|tomorrow|today|aujourd[' ]?hui)\b/
+  )
+  let timeStr = ''
+  const hm = n.match(/\b(\d{1,2})\s*h(?:eures?)?\b/)
+  const colon = n.match(/\b(\d{1,2}):(\d{2})\b/)
+  if (hm) {
+    timeStr = `${hm[1]}h`
+  } else if (colon) {
+    timeStr = `${colon[1]}h${colon[2]}`
+  }
+
+  if (language === 'en') {
+    const topic =
+      /objectif.*agence|agency objective|agency objectives/.test(n)
+        ? 'the agency objectives'
+        : /meeting|call|sync|touchpoint|réunion|reunion/.test(n)
+          ? 'our meeting'
+          : 'our discussion'
+    const whenParts: string[] = []
+    if (dayMatch) whenParts.push(`on ${dayMatch[1]}`)
+    if (timeStr) whenParts.push(`at ${timeStr}`)
+    const when = whenParts.join(' ')
+    return `Just a reminder ${when ? `${when} ` : ''}about ${topic}.`
+  }
+
+  const topic = /objectif.*agence|agence.*objectif/.test(n)
+    ? "les objectifs de l'agence"
+    : /réunion|reunion|point|rdv|meet|visio/.test(n)
+      ? 'notre rendez-vous'
+      : 'notre échange'
+  const whenParts: string[] = []
+  if (dayMatch) whenParts.push(dayMatch[1])
+  if (timeStr) whenParts.push(`à ${timeStr}`)
+  const when = whenParts.filter(Boolean).join(' ')
+  return `Petit rappel${when ? ` pour ${when}` : ''} concernant ${topic}.`
+}
+
 function buildMeetingEmailFollowupProposal(
   input: string,
   contact: KnownContact | null,
   profile?: AssistantProfile
 ): AgentProposal {
   const language = profile?.defaultLanguage || 'fr'
+  const first = contact?.name?.split(/\s+/).filter(Boolean)[0] || ''
+  const greeting =
+    language === 'en' ? (first ? `Hello ${first},` : 'Hello,') : first ? `Bonjour ${first},` : 'Bonjour,'
+  const reminder = summarizeMeetingReminderFromInput(input, language)
   const body =
     language === 'en'
       ? [
-          'Hello,',
+          greeting,
           '',
-          'Here is the meeting link: {{meet_link}}',
+          reminder,
           '',
-          input.trim(),
+          'Here is the Google Meet link for the call:',
+          '{{meet_link}}',
           '',
-          'Best regards,',
+          'See you then,',
           profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova',
         ].join('\n')
       : [
-          'Bonjour,',
+          greeting,
           '',
-          'Voici le lien de reunion : {{meet_link}}',
+          reminder,
           '',
-          input.trim(),
+          'Voici le lien Google Meet pour la visio :',
+          '{{meet_link}}',
           '',
-          'Merci,',
+          'À tout à l’heure,',
           profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova',
         ].join('\n')
 
@@ -651,8 +706,10 @@ function buildMeetingEmailFollowupProposal(
       to: contact ? [contact.email] : ['recipient@example.com'],
       subject:
         language === 'en'
-          ? 'Meeting link'
-          : 'Lien de reunion',
+          ? 'Meeting reminder'
+          : /objectif/.test(normalizeInput(input)) && /agence/.test(normalizeInput(input))
+            ? "Rappel — objectifs de l'agence"
+            : 'Rappel — réunion',
       body,
       ...(contact ? { resolvedContactName: contact.name } : {}),
     },
@@ -1318,7 +1375,9 @@ export function buildFallbackResponseWithContactsAndProfile(
   const wantsMeetingConfirmation =
     /(confirmation|confirm|confirmer|lien|link|visio|meet|invite)/.test(intentText)
   const explicitlyWantsSeparateEmail =
-    /(send an email|send email|email recap|mail recap|follow-up email|envoie un mail|envoyer un mail|envoie un email|envoyer un email|courriel distinct)/.test(intentText)
+    /(send an email|send email|email recap|mail recap|follow-up email|envoie un mail|envoyer un mail|envoie un email|envoyer un email|courriel distinct|rediger un mail|rédiger un mail|redige un mail|rédige un mail|me redige|me rediger|lui envoyer|lui envoie|envoyer.*mail|envoie.*mail)/.test(
+      intentText
+    )
   const explicitEmailIntent = isEmailSendIntent(intentText)
   const explicitReplyIntent =
     /(reply|reponds|repondre|reponse|réponds|répondre|réponse|answer this email|reply to|reponds-lui|reponds lui)/.test(

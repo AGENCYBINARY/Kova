@@ -3,6 +3,7 @@
 import { useUser } from '@clerk/nextjs'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageBubble } from '@/components/chat/MessageBubble'
+import { ChatThinkingStatus } from '@/components/chat/ChatThinkingStatus'
 import { ChatDisambiguationCard, type ChatDisambiguation } from '@/components/chat/ChatDisambiguationCard'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { ActionProposalCard } from '@/components/actions/ActionProposalCard'
@@ -277,7 +278,7 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
               : null}
           </div>
         ))}
-        {isLoading ? <MessageBubble role="assistant" content="" thinking userFallback={userFallback} /> : null}
+        {isLoading ? <ChatThinkingStatus lang={lang} /> : null}
         {proposals.map((proposal) => (
           <ActionProposalCard
             key={proposal.id}

@@ -1,0 +1,36 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 13px;
+  border-radius: 15px;
+  border-bottom-left-radius: 8px;
+  background: rgba(79, 169, 205, 0.06);
+  border: 1px solid rgba(79, 169, 205, 0.12);
+  min-height: 48px;
+  justify-content: center;
+}
+
+.line {
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  animation: fadeThinking 0.45s ease-out;
+}
+
+.sub {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted, rgba(255, 255, 255, 0.45));
+}
+
+@keyframes fadeThinking {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

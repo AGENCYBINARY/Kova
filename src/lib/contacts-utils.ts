@@ -166,14 +166,25 @@ export function findContactCandidatesByName(input: string, contacts: KnownContac
   return Array.from(byEmail.values()).sort((a, b) => b.score - a.score)
 }
 
+/** Text often follows a person name in long French requests (not only "et/avec/pour"). */
+const recipientNameFollowPattern =
+  String.raw`(?=\s+(?:et|avec|pour|pour la|pour le|chercher|cherche|trouve|trouver|retrouve|retrouver|regarde|regarder|dans|gmail|disant|lui|dis|qui|envoyer|envoie|ne|pas|oublier|la|le|un|une|mardi|lundi|mercredi|jeudi|vendredi|samedi|dimanche|demain|réunion|reunion|objectif|agence|calendar|meet|lien|evenement|événement)\b|[,.:;!?]|$)`
+
 export function extractRecipientName(input: string) {
   const normalized = input.replace(/\s+/g, ' ').trim()
 
   const nameWords = '([A-Za-zÀ-ÿ\'-]+(?:\\s+[A-Za-zÀ-ÿ\'-]+)*?)'
   const patterns: RegExp[] = [
-    new RegExp(`(?:mail|email|courriel|message)\\s+(?:à|a)\\s+${nameWords}(?=\\s+(?:et|avec|pour|pour la|pour le)\\b|[,.!?]|$)`, 'i'),
     new RegExp(
-      `(?:envoyer|envoie|rédiger|rédige|rediger|redige)\\s+(?:un\\s+)?(?:mail|email|courriel)\\s+(?:à|a)\\s+${nameWords}(?=\\s+(?:et|avec|pour)\\b|[,.!?]|$)`,
+      `(?:mail|email|courriel|message)\\s+(?:de|du|d'|d’)\s*${nameWords}${recipientNameFollowPattern}`,
+      'i'
+    ),
+    new RegExp(
+      `(?:mail|email|courriel|message)\\s+(?:à|a)\\s+${nameWords}${recipientNameFollowPattern}`,
+      'i'
+    ),
+    new RegExp(
+      `(?:envoyer|envoie|rédiger|rédige|rediger|redige)\\s+(?:un\\s+)?(?:mail|email|courriel)\\s+(?:à|a)\\s+${nameWords}${recipientNameFollowPattern}`,
       'i'
     ),
     new RegExp(
@@ -191,6 +202,40 @@ export function extractRecipientName(input: string) {
   }
 
   return null
+}
+
+/**
+ * Name for Gmail lookup when the user asks to find an address ("trouve le mail de X", etc.).
+ */
+export function extractGmailLookupNameQuery(input: string): string | null {
+  const normalized = input.replace(/\s+/g, ' ').trim()
+  /** Max 4 tokens; non-greedy so "… massarelli regarde …" stops at the name, not at "regarde". */
+  const nameWords = '([A-Za-zÀ-ÿ\'-]+(?:\\s+[A-Za-zÀ-ÿ\'-]+){0,3}?)'
+  const nameEnd = String.raw`(?=\s*$|[,.;!?]|\s+(?:sur|dans|d'|d’|gmail|et|regarde|regarder|mes|le|la|les|pour|avec|qui|dis|dis-moi)\b)`
+  const patterns: RegExp[] = [
+    new RegExp(
+      `(?:trouve|trouver|cherche|chercher|retrouve|retrouver)(?:\\s+toi)?\\s+(?:le\\s+|l['’]\\s*)?(?:mail|email|courriel)\\s+(?:de|d['’]|pour)\\s*${nameWords}${nameEnd}`,
+      'i'
+    ),
+    new RegExp(
+      `(?:trouve|trouver|cherche|chercher)\\s+(?:l['’]\\s*)?adresse\\s+(?:mail|email)?\\s*(?:de|d['’])?\\s*${nameWords}${nameEnd}`,
+      'i'
+    ),
+    new RegExp(
+      `(?:contact|adresse)\\s+(?:mail|email)?\\s*(?:de|d['’])\\s*${nameWords}${nameEnd}`,
+      'i'
+    ),
+  ]
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern)
+    if (match?.[1]) {
+      const sanitized = sanitizeContactNameCandidate(match[1].trim())
+      if (sanitized) return sanitized
+    }
+  }
+
+  return extractRecipientName(input)
 }
 
 export function extractNameBeforeEmail(input: string, email: string) {
