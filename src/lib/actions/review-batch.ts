@@ -109,10 +109,22 @@ export async function approvePendingActionBatch(params: {
   const batchFailures: Array<{ title: string; error: string; blockedCount: number }> = []
 
   for (const groupKey of groupOrder) {
-    const actions = groups.get(groupKey) || []
-    if (actions.length === 0) {
+    const rawGroupActions = groups.get(groupKey) || []
+    if (rawGroupActions.length === 0) {
       continue
     }
+
+    const actions = [...rawGroupActions].sort((left, right) => {
+      const leftIndex =
+        typeof asActionParameters(left.parameters).proposalIndex === 'number'
+          ? (asActionParameters(left.parameters).proposalIndex as number)
+          : 0
+      const rightIndex =
+        typeof asActionParameters(right.parameters).proposalIndex === 'number'
+          ? (asActionParameters(right.parameters).proposalIndex as number)
+          : 0
+      return leftIndex - rightIndex
+    })
 
     await prisma.$transaction(async (tx) => {
       await claimPendingActionIds(tx, {

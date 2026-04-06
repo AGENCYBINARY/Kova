@@ -71,7 +71,7 @@ export async function approvePendingActionById(params: {
     const requestGroupId =
       typeof actionParameters.requestGroupId === 'string' ? actionParameters.requestGroupId : null
 
-    const groupedActions = requestGroupId
+    const groupedActionsRaw = requestGroupId
       ? await tx.action.findMany({
           where: {
             status: 'pending',
@@ -85,6 +85,18 @@ export async function approvePendingActionById(params: {
           orderBy: { createdAt: 'asc' },
         })
       : [action]
+
+    const groupedActions = [...groupedActionsRaw].sort((left, right) => {
+      const leftIndex =
+        typeof asActionParameters(left.parameters).proposalIndex === 'number'
+          ? (asActionParameters(left.parameters).proposalIndex as number)
+          : 0
+      const rightIndex =
+        typeof asActionParameters(right.parameters).proposalIndex === 'number'
+          ? (asActionParameters(right.parameters).proposalIndex as number)
+          : 0
+      return leftIndex - rightIndex
+    })
 
     const claimedActions = groupedActions.length > 0 ? groupedActions : [action]
 

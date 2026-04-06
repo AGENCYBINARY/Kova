@@ -284,8 +284,8 @@ test('calendar fallback keeps explicit attendee emails when schedule details are
     )
     assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event'])
     assert.deepEqual(result.proposals[0]?.parameters.attendees, ['massarelli.tristan@gmail.com'])
-    assert.equal(result.proposals[0]?.parameters.createMeetLink, false)
-    assert.doesNotMatch(result.response, /Google Meet/i)
+    assert.equal(result.proposals[0]?.parameters.createMeetLink, true)
+    assert.match(result.response, /Google Meet|Meet/i)
   } finally {
     if (previousKey) {
       process.env.OPENAI_API_KEY = previousKey

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { executeBatch, type BatchAction } from '@/lib/actions/batch-execution'
 import { compensateCompletedActions } from '@/lib/actions/compensation'
+import { sortBatchActionsForExecution } from '@/lib/actions/batch-order'
 import { asActionParameters, injectExecutionOutputsIntoParameters } from '@/lib/actions/parameter-resolution'
 import { createAuditLog } from '@/lib/audit/service'
 import { extractNameBeforeEmail, rememberContact } from '@/lib/contacts'
@@ -59,7 +60,8 @@ export async function executePersistedActionBatch(params: {
   trigger: 'auto' | 'approval' | 'api'
 }) {
   const persistedActionsById = new Map(params.actions.map((action) => [action.id, action]))
-  const actions = params.actions.map((action) => ({
+  const orderedActions = sortBatchActionsForExecution(params.actions)
+  const actions = orderedActions.map((action) => ({
     id: action.id,
     type: action.type,
     title: action.title,

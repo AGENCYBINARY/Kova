@@ -65,7 +65,9 @@ function requestNeedsMeetLink(input: string) {
     return false
   }
 
-  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams|call)/.test(normalized)
+  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams|call|réunion|reunion|rendez-vous|rendezvous|\brdv\b|\bpoint\b|atelier|workshop|kickoff|\bsync\b)/.test(
+    normalized
+  )
 }
 
 function looksLikeCalendarRedoRequest(input: string) {

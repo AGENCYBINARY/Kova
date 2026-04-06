@@ -9,6 +9,7 @@ import {
   findContactCandidatesByName,
   type KnownContact,
 } from '@/lib/contacts'
+import { inferCalendarRangeFromUserText } from '@/lib/scheduling/user-schedule'
 import { isEmailSendIntent, isReadOnlyWorkspaceQuestion } from '@/lib/workspace-context/intents'
 
 export const agentActionTypeSchema = z.enum([
@@ -171,7 +172,9 @@ function requestNeedsMeetLink(input: string) {
     return false
   }
 
-  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams)/.test(normalized)
+  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams|réunion|reunion|rendez-vous|rendezvous|\brdv\b|\bpoint\b|atelier|workshop|kickoff|\bsync\b)/.test(
+    normalized
+  )
 }
 
 function hasExplicitCalendarDate(input: string) {
@@ -602,11 +605,24 @@ function buildEmailSubject(input: string, profile?: AssistantProfile) {
   return profile?.defaultLanguage === 'en' ? subject : subject
 }
 
+function buildCalendarEventDescriptionFromInput(input: string, meetingTitle: string, profile?: AssistantProfile) {
+  const trimmed = input.trim()
+  const lang = profile?.defaultLanguage === 'en' ? 'en' : 'fr'
+  if (lang === 'en') {
+    return [`Agenda: ${meetingTitle}`, '', 'Context from the request:', trimmed].join('\n').slice(0, 8000)
+  }
+  return [`Ordre du jour : ${meetingTitle}`, '', 'Demande initiale :', trimmed].join('\n').slice(0, 8000)
+}
+
 function buildCalendarProposal(input: string, profile?: AssistantProfile, contact?: KnownContact | null): AgentProposal {
-  const now = Date.now()
-  const start = new Date(now + 1000 * 60 * 60 * 24)
   const durationMinutes = profile?.meetingDefaultDurationMinutes || 30
-  const end = new Date(start.getTime() + durationMinutes * 60 * 1000)
+  const inferredRange = hasConcreteCalendarSchedule(input)
+    ? inferCalendarRangeFromUserText(input, durationMinutes)
+    : null
+  const now = Date.now()
+  const fallbackStart = new Date(now + 1000 * 60 * 60 * 24)
+  const start = inferredRange?.start ?? fallbackStart
+  const end = inferredRange?.end ?? new Date(fallbackStart.getTime() + durationMinutes * 60 * 1000)
   const calendarContactLabel = getCalendarContactLabel(input, contact)
   const attendeeEmails = getCalendarAttendeesFromInput(input, contact)
   const inferredTitle = (() => {
@@ -623,6 +639,7 @@ function buildCalendarProposal(input: string, profile?: AssistantProfile, contac
     return profile?.defaultLanguage === 'en' ? 'Meeting' : 'Rendez-vous'
   })()
   const meetingTitle = inferredTitle
+  const richDescription = buildCalendarEventDescriptionFromInput(input, meetingTitle, profile)
 
   return {
     type: 'create_calendar_event',
@@ -634,14 +651,11 @@ function buildCalendarProposal(input: string, profile?: AssistantProfile, contac
       endTime: end.toISOString(),
       attendees: attendeeEmails,
       createMeetLink: requestNeedsMeetLink(input),
-      description:
-        profile?.defaultLanguage === 'en'
-          ? 'Prepared by Kova from the user request.'
-          : "Préparé par Kova à partir de la demande de l'utilisateur.",
+      description: richDescription,
       notes:
         profile?.defaultLanguage === 'en'
-          ? `Default duration: ${durationMinutes} minutes. Buffer preference: ${profile?.schedulingBufferMinutes || 0} minutes.`
-          : `Duree par defaut : ${durationMinutes} minutes. Buffer prefere : ${profile?.schedulingBufferMinutes || 0} minutes.`,
+          ? `Kova · default duration ${durationMinutes} min · buffer ${profile?.schedulingBufferMinutes || 0} min · Google Meet when applicable`
+          : `Kova · durée ${durationMinutes} min · buffer ${profile?.schedulingBufferMinutes || 0} min · Google Meet si pertinent`,
     },
     confidenceScore: 0.9,
   }
@@ -1468,11 +1482,12 @@ export function buildFallbackResponseWithContactsAndProfile(
     }
 
     const calProp = buildCalendarProposal(input, assistantProfile, knownContact)
+    const durationMinutes = assistantProfile?.meetingDefaultDurationMinutes || 30
     return {
       response:
         language === 'en'
-          ? `Got it. Calendar invite${knownContact ? ` for ${knownContact.name}` : ''} + follow-up email with the meeting link.`
-          : `C'est bon. J'ai préparé le RDV${knownContact ? ` avec ${knownContact.name}` : ''} et l'email avec le lien.`,
+          ? `I used the next matching slot in Europe/Paris (${durationMinutes} min default). Say if the timezone, duration, or exact week should change before you approve. The invite includes Google Meet; the email will carry the same link once the event is created.`
+          : `J’ai pris le prochain créneau qui correspond (Europe/Paris, ${durationMinutes} min par défaut). Dis-moi si le fuseau, la durée ou la semaine doivent changer avant validation. L’invitation inclut Google Meet ; l’email reprendra le même lien après création de l’événement.`,
       proposals: [
         calProp,
         buildMeetingEmailFollowupProposal(input, knownContact, assistantProfile),

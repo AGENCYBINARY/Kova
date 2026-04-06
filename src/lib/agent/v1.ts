@@ -51,7 +51,9 @@ function requestNeedsMeetLink(input: string) {
     return false
   }
 
-  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams)/i.test(input)
+  return /(google meet|meet|visio|visioconference|visioconférence|video|vidéo|remote|zoom|teams|réunion|reunion|rendez-vous|rendezvous|\brdv\b|\bpoint\b|atelier|workshop|kickoff|\bsync\b)/i.test(
+    input
+  )
 }
 
 function requestForcesMeetLinkOff(input: string) {

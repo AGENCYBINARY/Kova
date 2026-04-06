@@ -28,6 +28,50 @@ function buildTokenMap(outputs: Array<Record<string, unknown>>) {
   }, {})
 }
 
+const MEET_LINK_PLACEHOLDER_RE = /\{\{\s*meet_?link\s*\}\}/gi
+
+function pickMeetConferenceUrl(outputs: Array<Record<string, unknown>>): string | null {
+  for (let i = outputs.length - 1; i >= 0; i--) {
+    const output = outputs[i]
+    for (const key of ['meetLink', 'meet_link', 'hangoutLink'] as const) {
+      const candidate = output[key]
+      if (typeof candidate === 'string') {
+        const trimmed = candidate.trim()
+        if (/^https?:\/\//i.test(trimmed)) {
+          return trimmed
+        }
+      }
+    }
+  }
+  return null
+}
+
+function substituteResidualMeetPlaceholdersInString(value: string, outputs: Array<Record<string, unknown>>) {
+  if (!MEET_LINK_PLACEHOLDER_RE.test(value)) {
+    return value
+  }
+  MEET_LINK_PLACEHOLDER_RE.lastIndex = 0
+  const url = pickMeetConferenceUrl(outputs)
+  const fallback =
+    '(Le lien Google Meet sera dans l’invitation agenda une fois l’événement créé. / The Meet link is on the calendar invite once the event exists.)'
+  return value.replace(MEET_LINK_PLACEHOLDER_RE, url || fallback)
+}
+
+function deepSubstituteMeetPlaceholders(value: unknown, outputs: Array<Record<string, unknown>>): unknown {
+  if (typeof value === 'string') {
+    return substituteResidualMeetPlaceholdersInString(value, outputs)
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => deepSubstituteMeetPlaceholders(entry, outputs))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, deepSubstituteMeetPlaceholders(nested, outputs)])
+    )
+  }
+  return value
+}
+
 function resolveValue(value: unknown, tokenMap: Record<string, string>): unknown {
   if (typeof value === 'string') {
     let resolved = value
@@ -62,5 +106,6 @@ export function injectExecutionOutputsIntoParameters(
 ) {
   const record = toRecord(parameters)
   const tokenMap = buildTokenMap(outputs)
-  return resolveValue(record, tokenMap) as Record<string, unknown>
+  const afterTokens = resolveValue(record, tokenMap) as Record<string, unknown>
+  return deepSubstituteMeetPlaceholders(afterTokens, outputs) as Record<string, unknown>
 }
