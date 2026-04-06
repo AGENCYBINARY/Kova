@@ -118,10 +118,22 @@ function looksLikeMeetingEmailBundleRequest(input: string) {
   const mentionsEmail =
     /(gmail|mail|email|courriel|brouillon|draft|message)/.test(normalizedInput)
   const mentionsBundleCue =
-    /(meme modele|meme objectif|meme horaires|mêmes horaires|same objective|same schedule|same as before|lien|link|trouve son adresse|find (her|his|their) address|prepare l invitation|prepare the invite)/.test(
+    /(meme modele|meme objectif|meme horaires|mêmes horaires|same objective|same schedule|same as before|lien|link|trouve son adresse|find (her|his|their) address|prepare l invitation|prepare the invite|mail recap|email recap|mail reca|prepare aussi le mail|prepare aussi l email|prepare the email|prepare the mail|avec le lien|with the link)/.test(
       normalizedInput
     )
-  return mentionsMeeting && mentionsEmail && mentionsBundleCue
+  const asksForMeetLink = /(google meet|meet|visio|lien|link)/.test(normalizedInput)
+  return mentionsMeeting && mentionsEmail && (mentionsBundleCue || asksForMeetLink)
+}
+
+function looksLikeCalendarEmailBundleIntent(input: string) {
+  const normalizedInput = normalizeInput(input)
+  const mentionsCalendarWork =
+    /(calendar|calendrier|agenda|meeting|reunion|réunion|rdv|rendez vous|rendez-vous|invite|invitation|google meet|meet|visio)/.test(
+      normalizedInput
+    )
+  const mentionsMailWork = /(gmail|mail|email|courriel|brouillon|draft|message)/.test(normalizedInput)
+  const mentionsLinkOrMeet = /(google meet|meet|lien|link|visio)/.test(normalizedInput)
+  return mentionsCalendarWork && mentionsMailWork && mentionsLinkOrMeet
 }
 
 function looksLikeLiteralInstructionText(value: unknown) {
@@ -189,6 +201,59 @@ function buildResolvedDeterministicTurn(params: {
     disambiguations: fallbackResolution.disambiguations,
     plan: params.plan ?? [],
   }
+}
+
+function shouldFallbackForModelFailure(params: {
+  allowProposals: boolean
+  aiProposalCount: number
+  safeProposalCount: number
+  modelClaimsActionReadyWithoutProposal: boolean
+  lowValueActionResponse: boolean
+  brokenMeetingBundleDetected: boolean
+  onlyWeakCalendarProposalsRemain: boolean
+}) {
+  if (!params.allowProposals) {
+    return false
+  }
+
+  if (params.brokenMeetingBundleDetected || params.modelClaimsActionReadyWithoutProposal) {
+    return true
+  }
+
+  if (params.lowValueActionResponse && params.safeProposalCount === 0) {
+    return true
+  }
+
+  if (params.aiProposalCount > 0 && params.safeProposalCount === 0) {
+    return true
+  }
+
+  if (params.onlyWeakCalendarProposalsRemain) {
+    return true
+  }
+
+  return false
+}
+
+function shouldUsePlanNarration(params: {
+  modelResponse: string
+  plan: AgentPlanStep[]
+  finalExecutableProposalCount: number
+  usingFallbackExecutableProposals: boolean
+}) {
+  if (params.finalExecutableProposalCount === 0) {
+    return false
+  }
+
+  if (params.usingFallbackExecutableProposals) {
+    return params.plan.length > 0
+  }
+
+  if (isLowValueAssistantResponse(params.modelResponse)) {
+    return params.plan.length > 0 || params.finalExecutableProposalCount > 1
+  }
+
+  return params.plan.length > 0 && params.modelResponse.trim().length < 60
 }
 
 export async function runAgentTurn(
@@ -488,10 +553,18 @@ export async function runAgentTurn(
         allowProposals &&
         safeProposals.length === 0 &&
         isLowValueAssistantResponse(aiResult.response)
-      const weakCalendarProposal = safeProposals.some(
-        (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
-      )
+      const onlyWeakCalendarProposalsRemain =
+        safeProposals.length > 0 &&
+        safeProposals.every(
+          (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
+        )
       const literalInstructionLeakDetected = safeProposals.some(proposalLeaksLiteralUserInstruction)
+      const modelMissedCalendarEmailBundle =
+        looksLikeCalendarEmailBundleIntent(input) &&
+        (!safeProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
+          !safeProposals.some(
+            (proposal) => proposal.type === 'send_email' || proposal.type === 'create_gmail_draft'
+          ))
       const brokenMeetingBundleDetected =
         looksLikeMeetingEmailBundleRequest(input) &&
         (
@@ -501,13 +574,17 @@ export async function runAgentTurn(
           ) ||
           literalInstructionLeakDetected
         )
-      const hadModelProposalButNoneValidated = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
+      const shouldRunFallbackResolution = shouldFallbackForModelFailure({
+        allowProposals,
+        aiProposalCount: aiResult.proposals.length,
+        safeProposalCount: safeProposals.length,
+        modelClaimsActionReadyWithoutProposal,
+        lowValueActionResponse,
+        brokenMeetingBundleDetected: brokenMeetingBundleDetected || modelMissedCalendarEmailBundle,
+        onlyWeakCalendarProposalsRemain,
+      })
       const fallbackResolutionForMissingOrInvalidModel =
-        hadModelProposalButNoneValidated ||
-        modelClaimsActionReadyWithoutProposal ||
-        lowValueActionResponse ||
-        weakCalendarProposal ||
-        brokenMeetingBundleDetected
+        shouldRunFallbackResolution
         ? resolveActionReferencesDetailed({
             proposals: (() => {
               const raw = deterministicFallback.proposals.filter(
@@ -544,18 +621,19 @@ export async function runAgentTurn(
         allowProposals &&
         !hasDisambiguation &&
         ((safeProposals.length === 0 && (fallbackForMissingOrInvalidModelProposal.length > 0 ||
-          responseClaimsActionReady(aiResult.response) ||
-          isLowValueAssistantResponse(aiResult.response))) ||
-          (brokenMeetingBundleDetected && fallbackForMissingOrInvalidModelProposal.length > 0))
+          modelClaimsActionReadyWithoutProposal ||
+          lowValueActionResponse ||
+          onlyWeakCalendarProposalsRemain)) ||
+          ((brokenMeetingBundleDetected || modelMissedCalendarEmailBundle) && fallbackForMissingOrInvalidModelProposal.length > 0))
       const usingFallbackExecutableProposals =
         allowProposals &&
         !hasDisambiguation &&
         fallbackForMissingOrInvalidModelProposal.length > 0 &&
-        (brokenMeetingBundleDetected || safeProposals.length === 0)
+        (brokenMeetingBundleDetected || modelMissedCalendarEmailBundle || safeProposals.length === 0)
 
       const finalExecutableProposals =
         allowProposals && !hasDisambiguation
-          ? brokenMeetingBundleDetected && fallbackForMissingOrInvalidModelProposal.length > 0
+          ? (brokenMeetingBundleDetected || modelMissedCalendarEmailBundle) && fallbackForMissingOrInvalidModelProposal.length > 0
             ? fallbackForMissingOrInvalidModelProposal
             : safeProposals.length > 0
               ? safeProposals.filter(
@@ -570,19 +648,29 @@ export async function runAgentTurn(
         aiResult.response.trim().length > 0 &&
         !isLowValueAssistantResponse(aiResult.response) &&
         !brokenMeetingBundleDetected
+        && !modelMissedCalendarEmailBundle
+      const shouldUsePlanBasedNarration = shouldUsePlanNarration({
+        modelResponse: aiResult.response,
+        plan: aiResult.plan,
+        finalExecutableProposalCount: finalExecutableProposals.length,
+        usingFallbackExecutableProposals,
+      })
 
       const pickVisibleResponse = () => {
-        if (usingFallbackExecutableProposals) {
-          return deterministicFallback.response
-        }
-        if (finalExecutableProposals.length > 0 && !keepModelVoice) {
+        if (finalExecutableProposals.length > 0 && shouldUsePlanBasedNarration) {
           return buildPlanBackedNarration({
             language,
             plan: aiResult.plan,
             proposalCount: finalExecutableProposals.length,
           })
         }
+        if (usingFallbackExecutableProposals) {
+          return deterministicFallback.response
+        }
         if (brokenMeetingBundleDetected && fallbackForMissingOrInvalidModelProposal.length > 0) {
+          return deterministicFallback.response
+        }
+        if (finalExecutableProposals.length > 0 && !keepModelVoice) {
           return deterministicFallback.response
         }
         if (finalExecutableProposals.length > 0) {

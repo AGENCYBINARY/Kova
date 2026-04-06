@@ -503,6 +503,131 @@ test('model-first path can return an ordered multi-step plan across apps', async
   }
 })
 
+test('model-first path keeps valid multi-app proposals even when the model reply is terse', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response: "C'est prêt.",
+    plan: [
+      {
+        title: 'Préparer l’invitation',
+        detail: 'Créer l’événement avec Google Meet pour verrouiller le lien.',
+        app: 'Google Calendar',
+      },
+      {
+        title: 'Envoyer le récapitulatif',
+        detail: 'Préparer le mail avec le lien de visio.',
+        app: 'Gmail',
+      },
+    ],
+    proposals: [
+      {
+        type: 'create_calendar_event',
+        title: 'Create calendar invite',
+        description: 'Create the calendar invite with Google Meet.',
+        confidenceScore: 0.93,
+        parameters_json: JSON.stringify({
+          title: 'Point client',
+          startTime: '2026-04-08T13:00:00.000Z',
+          endTime: '2026-04-08T13:30:00.000Z',
+          attendees: ['client@example.com'],
+          createMeetLink: true,
+        }),
+      },
+      {
+        type: 'create_gmail_draft',
+        title: 'Prepare follow-up draft',
+        description: 'Prepare the email that shares the meeting link.',
+        confidenceScore: 0.9,
+        parameters_json: JSON.stringify({
+          to: ['client@example.com'],
+          subject: 'Point client',
+          body: 'Bonjour,\\n\\nVoici le lien : {{meet_link}}',
+        }),
+      },
+    ],
+  })
+
+  try {
+    const result = await runAgentTurn(
+      'Prépare une invitation agenda demain à 15h avec client@example.com, ajoute Google Meet et prépare aussi le mail avec le lien.',
+      [],
+      []
+    )
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'create_gmail_draft'])
+    assert.match(result.response, /Google Calendar|Gmail|ordre|temps|étapes|ordre/i)
+    assert.doesNotMatch(result.response, /^C'est prêt\.$/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
+test('generic meeting bundle requests still recover to a calendar-plus-email workflow when the model underplans', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response: "C'est prêt.",
+    proposals: [
+      {
+        type: 'update_calendar_event',
+        title: 'Update calendar event',
+        description: 'Update the selected calendar event.',
+        confidenceScore: 0.77,
+        parameters_json: JSON.stringify({
+          eventId: 'event_live_123',
+          description: 'Ajoute Google Meet et prépare aussi le mail récapitulatif.',
+        }),
+      },
+    ],
+  })
+
+  try {
+    const result = await runAgentTurn(
+      'Prépare une invitation agenda demain à 15h avec client@example.com, ajoute Google Meet et prépare aussi le mail récapitulatif avec le lien.',
+      [],
+      []
+    )
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'send_email'])
+    assert.match(result.response, /Google Meet|email|mail/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
+test('model-first path does not discard valid proposals just because the wording is low-value', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response: 'Je peux transformer cela en action pour Google Drive.',
+    proposals: [
+      {
+        type: 'create_google_drive_folder',
+        title: 'Create Board Ops folder',
+        description: 'Create the Drive folder for Board Ops.',
+        confidenceScore: 0.91,
+        parameters_json: JSON.stringify({
+          name: 'Board Ops',
+        }),
+      },
+    ],
+  })
+
+  try {
+    const result = await runAgentTurn('Crée un dossier Google Drive "Board Ops"', [], [])
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_google_drive_folder'])
+    assert.match(result.response, /Drive|Board Ops|action/i)
+    assert.doesNotMatch(result.response, /Je peux transformer cela en action/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
 test('bundled meeting + email requests fall back to the safe paired workflow when the model suggests a corrupted mail', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   process.env.OPENAI_API_KEY = 'test-key'

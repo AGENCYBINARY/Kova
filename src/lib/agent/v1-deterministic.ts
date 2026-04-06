@@ -443,16 +443,16 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
   switch (firstProposal?.type) {
     case 'create_calendar_event':
       return language === 'en'
-        ? 'Yes. I can prepare the event cleanly. I just need the title, date, time, and attendees first.'
-        : 'Oui. Je peux te préparer ça proprement. Il me faut simplement le titre, la date, l’heure et les invités.'
+        ? 'Yes. I can handle that cleanly. I need the title, date, time, and attendees to lock it in properly.'
+        : 'Oui. Je peux te le cadrer proprement. Il me faut le titre, la date, l’heure et les invités pour le verrouiller.'
     case 'send_email':
     case 'create_gmail_draft':
     case 'update_gmail_draft':
     case 'send_gmail_draft':
     case 'forward_email':
       return language === 'en'
-        ? 'Yes. I can handle the email. Give me the recipient and what you want to send, and I’ll prepare it properly.'
-        : 'Oui. Je peux gérer le mail. Donne-moi le destinataire et ce que tu veux envoyer, et je te le prépare proprement.'
+        ? 'Yes. I can take the email from here. Give me the recipient and the objective, and I’ll draft it cleanly.'
+        : 'Oui. Je peux prendre le mail en main. Donne-moi le destinataire et l’objectif, et je te prépare ça proprement.'
     case 'archive_gmail_thread':
     case 'unarchive_gmail_thread':
     case 'label_gmail_thread':
@@ -464,8 +464,8 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
     case 'trash_gmail_thread':
     case 'delete_gmail_thread_permanently':
       return language === 'en'
-        ? 'Yes. I can do that. I just need to know which Gmail thread you want me to use.'
-        : 'Oui. Je peux le faire. Il faut juste que tu me précises quel thread Gmail tu veux que j’utilise.'
+        ? 'Yes. I can do that. I just need the exact Gmail thread you want me to use.'
+        : 'Oui. Je peux le faire. Il me faut juste le thread Gmail exact à utiliser.'
     case 'create_google_drive_folder':
     case 'create_google_drive_file':
     case 'delete_google_drive_file':
@@ -478,25 +478,25 @@ export function buildCapabilityResponse(input: string, proposals: AgentProposal[
     case 'update_google_drive_appdata_file':
     case 'delete_google_drive_appdata_file':
       return language === 'en'
-        ? 'Yes. I can handle Drive. I just need the exact file or folder you want me to use.'
-        : 'Oui. Je peux gérer Drive. Il me faut simplement le fichier ou le dossier exact à utiliser.'
+        ? 'Yes. I can handle it in Drive. I just need the exact file or folder you want me to work on.'
+        : 'Oui. Je peux le gérer dans Drive. Il me faut simplement le fichier ou le dossier exact sur lequel travailler.'
     case 'create_google_photos_picker_session':
     case 'list_google_photos_media':
     case 'search_google_photos_media':
       return language === 'en'
-        ? 'Yes. I can help with Google Photos. I open a secure picker first, then I can work with the media you selected.'
-        : 'Oui. Je peux t’aider avec Google Photos. J’ouvre d’abord un sélecteur sécurisé, puis je travaille sur les médias que tu as choisis.'
+        ? 'Yes. I can handle Google Photos. I open a secure picker first, then I work only on the media you selected.'
+        : 'Oui. Je peux gérer Google Photos. J’ouvre d’abord un sélecteur sécurisé, puis je travaille uniquement sur les médias que tu choisis.'
     case 'update_notion_page':
     case 'update_notion_page_properties':
     case 'archive_notion_page':
     case 'create_notion_page':
       return language === 'en'
         ? 'Yes. I can handle Notion. I just need the exact page or database you want me to use.'
-        : 'Oui. Je peux gérer Notion. Il me faut simplement la page ou la base exacte que tu veux utiliser.'
+        : 'Oui. Je peux gérer Notion. Il me faut la page ou la base exacte que tu veux que j’utilise.'
     default:
       return language === 'en'
-        ? 'Yes. I can handle that. Tell me exactly what you want prepared and I’ll take it from there.'
-        : 'Oui. Je peux m’en charger. Dis-moi exactement ce que tu veux préparer et je prends le relais.'
+        ? 'Yes. I can handle that. Tell me what outcome you want, and I’ll structure the next step.'
+        : 'Oui. Je peux m’en charger. Dis-moi le résultat que tu veux, et je structure la suite.'
   }
 }
 
@@ -559,8 +559,8 @@ export function buildConversationalResponse(input: string, profile?: AssistantPr
 
   if (isGreetingOnly(input)) {
     return language === 'en'
-      ? 'Hey — I’m here. What should we knock out first?'
-      : 'Salut — je suis là. On attaque quoi en premier ?'
+      ? 'Hey — I’m here. What do you want me to take first?'
+      : 'Salut — je suis là. Qu’est-ce que tu veux que je prenne en premier ?'
   }
 
   if (/parle moi|parle-moi/.test(normalized)) {
@@ -572,7 +572,7 @@ export function buildConversationalResponse(input: string, profile?: AssistantPr
   if (/comment ca va|comment ça va|ca va|ça va/.test(normalized)) {
     return language === 'en'
       ? 'All good on my side. What do you want me to take care of?'
-      : 'Ça va bien. Qu’est-ce que tu veux que je gère pour toi ?'
+      : 'Ça va bien. Qu’est-ce que tu veux que je gère ?'
   }
 
   return language === 'en'
@@ -1483,6 +1483,7 @@ export function buildFallbackResponseWithContactsAndProfile(
       intentText
     )
   const explicitEmailIntent = isEmailSendIntent(intentText)
+  const mentionsEmailWork = /(gmail|email|e-mail|mail|courriel|message|brouillon|draft)/.test(intentText)
   const explicitReplyIntent =
     /(reply|reponds|repondre|reponse|réponds|répondre|réponse|answer this email|reply to|reponds-lui|reponds lui)/.test(
       intentText
@@ -1634,7 +1635,8 @@ export function buildFallbackResponseWithContactsAndProfile(
     isMeetingRequest &&
     updateIntent &&
     !deleteIntent &&
-    !explicitEmailIntent
+    !explicitEmailIntent &&
+    !mentionsEmailWork
   ) {
     return {
       response:
@@ -1648,7 +1650,8 @@ export function buildFallbackResponseWithContactsAndProfile(
   if (
     isMeetingRequest &&
     deleteIntent &&
-    !explicitEmailIntent
+    !explicitEmailIntent &&
+    !mentionsEmailWork
   ) {
     return {
       response:
@@ -1663,7 +1666,8 @@ export function buildFallbackResponseWithContactsAndProfile(
     isMeetingRequest &&
     updateIntent &&
     !deleteIntent &&
-    !explicitEmailIntent
+    !explicitEmailIntent &&
+    !mentionsEmailWork
   ) {
     return {
       response:
@@ -1676,7 +1680,7 @@ export function buildFallbackResponseWithContactsAndProfile(
 
   if (
     isMeetingRequest &&
-    /(gmail|email|e-mail|mail|send|envoie|envoyer|courriel|lien|link)/.test(intentText) &&
+    (mentionsEmailWork || /(send|envoie|envoyer|lien|link)/.test(intentText)) &&
     explicitlyWantsSeparateEmail
   ) {
     if (!hasResolvableCalendarSchedule(input, assistantProfile?.meetingDefaultDurationMinutes || 30)) {

@@ -286,7 +286,14 @@ async function main() {
   }
 
   const results: Array<{ name: string; ok: boolean; detail: string }> = []
-  const scenarios: Array<{ name: string; prompt: string; expectedTypes?: string[] }> = []
+  const scenarios: Array<{
+    name: string
+    prompt: string
+    expectedTypes?: string[]
+    expectedAllTypes?: string[]
+    minimumProposalCount?: number
+    allowClarification?: boolean
+  }> = []
   const previewStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
   previewStart.setUTCHours(9, 0, 0, 0)
   const previewEnd = new Date(previewStart.getTime() + 30 * 60 * 1000)
@@ -294,7 +301,7 @@ async function main() {
   if (defaults.gmailQuery) {
     scenarios.push({ name: 'gmail-archive-preview', prompt: withReference(`Archive le thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['archive_gmail_thread'] })
     scenarios.push({ name: 'gmail-unarchive-preview', prompt: withReference(`Remets le thread Gmail "${defaults.gmailQuery}" dans la boîte de réception`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['unarchive_gmail_thread'] })
-    scenarios.push({ name: 'gmail-label-preview', prompt: withReference(`Ajoute le label "${defaults.gmailLabel}" au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['label_gmail_thread'] })
+    scenarios.push({ name: 'gmail-label-preview', prompt: withReference(`Ajoute le label "${defaults.gmailLabel}" au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['label_gmail_thread'], allowClarification: true })
     scenarios.push({ name: 'gmail-unread-preview', prompt: withReference(`Marque le thread Gmail "${defaults.gmailQuery}" comme non lu`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['mark_gmail_thread_unread'] })
     scenarios.push({ name: 'gmail-star-preview', prompt: withReference(`Ajoute une étoile au thread Gmail "${defaults.gmailQuery}"`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['star_gmail_thread'] })
     scenarios.push({ name: 'gmail-trash-preview', prompt: withReference(`Mets le thread Gmail "${defaults.gmailQuery}" dans la corbeille`, { source: 'gmail', field: 'threadId', id: defaults.gmailThreadId }), expectedTypes: ['trash_gmail_thread'] })
@@ -322,6 +329,15 @@ async function main() {
       name: 'calendar-delete-preview',
       prompt: withReference("Supprime l'événement Google Calendar sélectionné", { source: 'calendar', field: 'eventId', id: defaults.calendarEventId }),
       expectedTypes: ['delete_calendar_event'],
+    })
+  }
+
+  if (byType.has('calendar') && byType.has('gmail') && defaults.forwardTo) {
+    scenarios.push({
+      name: 'calendar-email-bundle-preview',
+      prompt: `Prépare une invitation agenda demain à 15h avec ${defaults.forwardTo}, ajoute Google Meet et prépare aussi le mail récapitulatif avec le lien.`,
+      expectedAllTypes: ['create_calendar_event'],
+      minimumProposalCount: 2,
     })
   }
 
@@ -389,17 +405,30 @@ async function main() {
         userId: target.userId,
         prompt: scenario.prompt,
       })
-      const proposalTypes = preview.proposals.map((proposal) => proposal.type)
+      const proposalTypes = preview.proposals.map((proposal) => String(proposal.type))
       const hasActionOrClarification = preview.proposals.length > 0 || (preview.disambiguations || []).length > 0
+      const clarificationOnlyPass =
+        Boolean(scenario.allowClarification) &&
+        preview.proposals.length === 0 &&
+        (preview.disambiguations || []).length > 0
       const matchesExpectedTypes =
         scenario.expectedTypes && scenario.expectedTypes.length > 0
-          ? proposalTypes.length === scenario.expectedTypes.length &&
+          ? clarificationOnlyPass || (proposalTypes.length === scenario.expectedTypes.length &&
             scenario.expectedTypes.every((expectedType, index) => proposalTypes[index] === expectedType)
+          )
+          : true
+      const matchesExpectedAllTypes =
+        scenario.expectedAllTypes && scenario.expectedAllTypes.length > 0
+          ? scenario.expectedAllTypes.every((expectedType) => proposalTypes.includes(expectedType))
+          : true
+      const matchesMinimumProposalCount =
+        typeof scenario.minimumProposalCount === 'number'
+          ? preview.proposals.length >= scenario.minimumProposalCount
           : true
       results.push({
         name: scenario.name,
-        ok: hasActionOrClarification && matchesExpectedTypes,
-        detail: `${preview.proposals.length} proposal(s) | types=${proposalTypes.join(', ') || 'none'} | expected=${scenario.expectedTypes?.join(', ') || 'any'} | ${(preview.disambiguations || []).length} clarification(s) | ${preview.response}`,
+        ok: hasActionOrClarification && matchesExpectedTypes && matchesExpectedAllTypes && matchesMinimumProposalCount,
+        detail: `${preview.proposals.length} proposal(s) | types=${proposalTypes.join(', ') || 'none'} | expected=${scenario.expectedTypes?.join(', ') || 'any'} | expectedAll=${scenario.expectedAllTypes?.join(', ') || 'none'} | min=${scenario.minimumProposalCount ?? 0} | ${(preview.disambiguations || []).length} clarification(s) | ${preview.response}`,
       })
     } catch (error) {
       results.push({

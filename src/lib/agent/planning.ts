@@ -29,22 +29,22 @@ export function buildPlanBackedNarration(params: {
   if (params.language === 'en') {
     if (steps.length === 0) {
       return params.proposalCount > 1
-        ? 'I mapped out the sequence and prepared the linked actions.'
-        : 'I mapped out the action cleanly and prepared it.'
+        ? 'I mapped the sequence cleanly and prepared the linked actions in the right order. Everything is ready for your review.'
+        : 'I mapped the action cleanly and prepared it for your review.'
     }
 
     return params.proposalCount > 1
-      ? `I mapped this in ${steps.length} steps: ${steps.join(' -> ')}. The matching actions are prepared in that order.`
-      : `I mapped the action cleanly: ${steps.join(' -> ')}. The matching action is ready.`
+      ? `I’m handling this in ${steps.length} steps: ${steps.join(' -> ')}. I prepared the matching actions in that order so you can review the whole sequence cleanly.`
+      : `I’m handling this as ${steps.join(' -> ')}. The matching action is ready for your review.`
   }
 
   if (steps.length === 0) {
     return params.proposalCount > 1
-      ? 'J’ai cadré la séquence et préparé les actions liées.'
-      : 'J’ai cadré l’action proprement et je l’ai préparée.'
+      ? 'J’ai cadré la séquence proprement et préparé les actions liées dans le bon ordre. Tout est prêt à relire.'
+      : 'J’ai cadré l’action proprement et je l’ai préparée pour relecture.'
   }
 
   return params.proposalCount > 1
-    ? `J’ai structuré ça en ${steps.length} temps : ${steps.join(' -> ')}. Les actions correspondantes sont prêtes dans cet ordre.`
-    : `J’ai cadré l’action proprement : ${steps.join(' -> ')}. L’action correspondante est prête.`
+    ? `Je te l’ai structuré en ${steps.length} temps : ${steps.join(' -> ')}. J’ai préparé les actions correspondantes dans cet ordre pour que tu puisses valider l’ensemble proprement.`
+    : `Je pars là-dessus : ${steps.join(' -> ')}. L’action correspondante est prête à valider.`
 }

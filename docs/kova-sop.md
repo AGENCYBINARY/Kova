@@ -788,3 +788,52 @@ Important honest note:
 
 - The configured production live target for this run still has no connected `notion` integration in Neon (`[]` on direct prod query), so Notion execute coverage remains a target-data limitation, not a code-path failure.
 - The workflow spine is now durable enough for resume / wait / retry scheduling, but it is still not yet a fully general long-lived state machine with arbitrary branching or human-in-the-loop pause/resume UX.
+
+## Continuity Update — 2026-04-07 (AI-first orchestration tightening + ambiguous/multi-app live coverage)
+
+This slice was about making Kova feel less like a router with safeguards and more like a real operator that thinks first, then uses guardrails only when needed.
+
+What changed:
+
+- The agent prompt in [src/lib/ai/client.ts](/Users/agencybinary/Documents/CODEX/src/lib/ai/client.ts) now reinforces a stricter model-first standard:
+  - reason first, then propose actions
+  - ask one unlocking question when key information is missing
+  - explain the order of operations and assumptions when actions are proposed
+  - never mirror the user’s wording back as fake reasoning
+- [src/lib/agent/v1.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1.ts) now narrows deterministic rescue to the actual failure cases:
+  - missing/invalid model proposals
+  - low-value model wording only when there is no usable proposal
+  - weak calendar scheduling proposals
+  - broken or under-planned meeting/email bundles
+- The visible narration path is stronger:
+  - plan-backed copy is used when the model is too terse on a real multi-step proposal
+  - single-action rescues keep concrete deterministic wording instead of generic “it’s ready” filler
+- [src/lib/agent/v1-deterministic.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1-deterministic.ts) was tightened so calendar update/delete shortcuts do not steal bundle requests that clearly ask for both an invite and an email.
+- [src/lib/agent/planning.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/planning.ts) now produces more reviewable, chief-of-staff style action narration instead of flat status toasts.
+- The live runner in [scripts/integration-live-runner.ts](/Users/agencybinary/Documents/CODEX/scripts/integration-live-runner.ts) now:
+  - treats safe disambiguation as a valid result for ambiguous live scenarios
+  - covers a real cross-app preview for `calendar + Gmail`
+  - no longer claims a docs+Drive multi-app path that the product does not yet support as a first-class execute flow
+
+Tests added / strengthened in this slice:
+
+- model-first valid multi-app proposals survive terse model copy
+- valid model proposals are no longer discarded only because the wording is low-value
+- generic meeting bundles recover to `create_calendar_event + send_email` when the model under-plans
+
+Validation baseline for this tranche:
+
+- `npm test` -> pass (`140/140`)
+- `npm run lint` -> pass
+- `npm run build` -> pass
+- `npm run integration:smoke:prod` -> pass
+- `npm run integration:live:prod` -> pass (`LIVE_RUNNER_OK 21`)
+- `npm run integration:live:execute:prod` -> pass on Gmail / Calendar / Drive / Docs / Photos
+
+Honest product state after this slice:
+
+- Kova is better aligned with the intended product model: the model is more central, and the deterministic layer is more clearly a safety net.
+- Ambiguous live behavior is now evaluated more honestly: a clarification shortlist is treated as good behavior, not a test failure.
+- Cross-app meeting bundles are behaving the way the product should behave in live prod validation.
+- Notion still remains a validation gap on the current production live target because that target does not have Notion connected in Neon.
+- The product is now meaningfully closer to “assistant-first” quality, but it is still not a fully general long-horizon stateful agent with arbitrary branching, memory repair, and exhaustive multi-app execution coverage.
