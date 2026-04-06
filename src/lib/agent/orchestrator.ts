@@ -266,6 +266,7 @@ export async function orchestrateChatTurn(params: {
     proposalCount: agentResult.proposals.length,
     workspaceRole: governance.role,
     unifiedAgentTurn: true,
+    ...(agentResult.plan && agentResult.plan.length > 0 ? { plan: agentResult.plan } : {}),
     ...(agentDisambiguations.length > 0 ? { disambiguations: agentDisambiguations } : {}),
     ...(connectedContextResult?.metadata || {}),
   })

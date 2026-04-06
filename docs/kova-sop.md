@@ -533,3 +533,49 @@ If work resumes after this point, the next high-value tracks are:
 1. continue agent/runtime quality improvements so Kova behaves more like a premium operator and less like a raw tool router
 2. keep reducing monoliths in `registry`, `v1`, and remaining integration surfaces
 3. strengthen live validation so app-connected behavior is checked more systematically, not only manually
+
+## Continuity Update — 2026-04-06 (AI-first planning pivot)
+
+Commits after this continuity note should reflect a targeted runtime change, not a broad integration pass.
+
+What changed:
+
+- `runAgentTurn()` was shifted further toward a model-first flow.
+- Deterministic proposal building no longer short-circuits the model by default for:
+  - early disambiguation
+  - capability-question handling
+- Deterministic logic remains in three places only:
+  - explicit shortcut mode when `KOVA_PREFER_DETERMINISTIC_ACTIONS=true`
+  - safety fallback when the model returns no usable proposals or fails
+  - final validation/repair of model proposals before execution
+- The OpenAI system prompt now explicitly instructs Kova to return small ordered multi-step plans when a workflow spans multiple apps or steps.
+
+Validation baseline for this tranche:
+
+- `npm test` -> pass (`121/121`)
+- `npm run lint` -> pass
+- `npm run build` -> pass
+- `npm run integration:live:prod` -> pass (`LIVE_RUNNER_OK 20`)
+- `npm run integration:live:execute:prod` -> pass (`LIVE_RUNNER_OK 20`)
+
+Files changed in this slice:
+
+- [src/lib/agent/v1.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1.ts)
+- [src/lib/ai/client.ts](/Users/agencybinary/Documents/CODEX/src/lib/ai/client.ts)
+- [tests/agent-actions.test.ts](/Users/agencybinary/Documents/CODEX/tests/agent-actions.test.ts)
+
+Tests added:
+
+- model can drive an ordered multi-step plan across apps
+- capability questions stay conversational even if the model over-eagerly proposes an action
+- deterministic fallback still rescues execution when the model claims success without a valid proposal
+- calendar update requests stay on the calendar path instead of drifting into email help
+- fallback calendar updates can carry `relativeShiftMinutes` when a selected event must move
+
+Remaining honest gap after this slice:
+
+- Kova is now more model-led in `runAgentTurn`, but the orchestration layer still contains deterministic follow-up builders and connected-context fallbacks.
+- For a deeper AI-first architecture, the next big refactor targets are:
+  - [src/lib/agent/orchestrator.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/orchestrator.ts)
+  - [src/lib/agent/v1-deterministic.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1-deterministic.ts)
+  - connected read / follow-up planning paths that still bypass model reasoning in some cases

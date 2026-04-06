@@ -195,6 +195,7 @@ const updateCalendarEventSchema = z.object({
   title: z.string().optional(),
   startTime: z.string().optional(),
   endTime: z.string().optional(),
+  relativeShiftMinutes: z.number().int().optional(),
   attendees: z.array(z.string().email()).optional(),
   description: z.string().optional(),
 }).passthrough()
@@ -1401,6 +1402,7 @@ export const tools: Array<McpToolDefinition> = [
         title: { type: 'string' },
         startTime: { type: 'string' },
         endTime: { type: 'string' },
+        relativeShiftMinutes: { type: 'integer' },
         attendees: { type: 'array', items: { type: 'string', format: 'email' } },
         description: { type: 'string' },
       },

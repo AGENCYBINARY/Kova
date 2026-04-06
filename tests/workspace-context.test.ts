@@ -55,6 +55,13 @@ test('gmail draft requests stay in the email action path even when the address i
   assert.equal(isEmailSendIntent('Prépare un brouillon Gmail pour maxime@example.com à propos de "Votre solde est bas"'), true)
 })
 
+test('calendar updates are not misclassified as email-send intents', () => {
+  assert.equal(
+    isEmailSendIntent("Mets à jour l'événement Google Calendar sélectionné en le décalant de 30 minutes"),
+    false
+  )
+})
+
 test('calendar action phrasing with faire stays out of read-only mode', () => {
   assert.deepEqual(parseConnectedContextRequest('tu peux me faire un evenement dans calendar google le motif est un rdv avec Maxime'), {
     mode: 'action',

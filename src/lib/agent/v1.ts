@@ -1,5 +1,4 @@
 import { analyzeUserRequest, isLowValueAssistantResponse, isOpenAiConfigured } from '@/lib/ai/client'
-import { synthesizeDeterministicAssistantNarration } from '@/lib/ai/narration'
 import {
   executiveAssistantSkills,
   resolveEnabledAssistantSkills,
@@ -15,11 +14,11 @@ import {
   isCapabilityQuestion,
   isConversationalInput,
   isEmailCompositionAssistanceRequest,
-  shouldPreferDeterministicAction,
   type AgentActionType,
   type AgentProposal,
   type AgentTurnResult,
 } from '@/lib/agent/v1-deterministic'
+import { buildPlanBackedNarration, type AgentPlanStep } from '@/lib/agent/planning'
 import { resolveActionReferencesDetailed } from '@/lib/agent/reference-resolution'
 import {
   extractEmailAddresses,
@@ -103,6 +102,54 @@ export function responseClaimsActionReady(response: string) {
   )
 }
 
+function isActionOrWorkflowRequest(input: string) {
+  const normalizedInput = normalizeInput(input)
+  return /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|open|ouvrir|ouvre|select|selectionne|selectionner|choisis|choisir|gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|google photos|photos|photo|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\\b|appdata|app data)/i.test(
+    normalizedInput
+  )
+}
+
+function buildRoleDeniedResponse(language: 'fr' | 'en') {
+  return language === 'en'
+    ? 'I understood the request, but your workspace role is not allowed to use that tool.'
+    : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
+}
+
+function buildResolvedDeterministicTurn(params: {
+  input: string
+  knownContacts: KnownContact[]
+  assistantProfile?: AssistantProfile
+  allowedActionTypes: AgentActionType[]
+  connectedContextMetadata?: Record<string, unknown>
+  responseOverride?: string
+  plan?: AgentPlanStep[]
+}): AgentTurnResult {
+  const fallback = buildFallbackResponseWithContactsAndProfile(
+    params.input,
+    params.knownContacts,
+    params.assistantProfile
+  )
+  const fallbackResolution = resolveActionReferencesDetailed({
+    proposals: fallback.proposals.filter((proposal) => params.allowedActionTypes.includes(proposal.type)),
+    userInput: params.input,
+    connectedContextMetadata: params.connectedContextMetadata,
+  })
+  const filteredProposals = fallbackResolution.proposals
+  const language = params.assistantProfile?.defaultLanguage ?? 'fr'
+
+  return {
+    response:
+      fallbackResolution.disambiguations.length > 0
+        ? buildDisambiguationResponse(fallbackResolution.disambiguations, params.assistantProfile)
+        : fallback.proposals.length > 0 && filteredProposals.length === 0
+          ? buildRoleDeniedResponse(language)
+          : params.responseOverride ?? fallback.response,
+    proposals: fallbackResolution.disambiguations.length > 0 ? [] : filteredProposals,
+    disambiguations: fallbackResolution.disambiguations,
+    plan: params.plan ?? [],
+  }
+}
+
 export async function runAgentTurn(
   input: string,
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
@@ -119,6 +166,7 @@ export async function runAgentTurn(
   const availableTools = listMcpTools().filter((tool) =>
     allowedActionTypes.includes(tool.actionType as AgentActionType)
   )
+  const language = assistantProfile?.defaultLanguage ?? 'fr'
 
   if (isConversationalInput(input)) {
     if (isOpenAiConfigured()) {
@@ -138,6 +186,7 @@ export async function runAgentTurn(
           response: aiResult.response,
           proposals: [],
           disambiguations: [],
+          plan: aiResult.plan,
         }
       } catch {
         // Fall back to deterministic conversation if the model is unavailable.
@@ -148,89 +197,50 @@ export async function runAgentTurn(
       response: buildConversationalResponse(input, assistantProfile),
       proposals: [],
       disambiguations: [],
+      plan: [],
     }
   }
 
   if (availableTools.length === 0) {
     return {
       response:
-        assistantProfile?.defaultLanguage === 'en'
+        language === 'en'
           ? 'I can answer questions normally, but this workspace role is not allowed to execute connected app actions.'
           : 'Je peux répondre normalement, mais ce rôle workspace n’est pas autorisé à exécuter des actions sur les applications connectées.',
       proposals: [],
       disambiguations: [],
+      plan: [],
     }
   }
 
   const deterministicFallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
 
-  if (deterministicFallback.disambiguations && deterministicFallback.disambiguations.length > 0) {
-    return {
-      response: buildDisambiguationResponse(deterministicFallback.disambiguations, assistantProfile),
-      proposals: [],
-      disambiguations: deterministicFallback.disambiguations,
-    }
-  }
-
-  const deterministicResolution = resolveActionReferencesDetailed({
-    proposals: deterministicFallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type)),
-    userInput: input,
-    connectedContextMetadata: options.connectedContextMetadata,
-  })
-  const deterministicFilteredProposals = deterministicResolution.proposals
-
   if (isCapabilityQuestion(input, deterministicFallback.proposals)) {
-    return {
-      response: buildCapabilityResponse(input, deterministicFallback.proposals, assistantProfile),
-      proposals: [],
-      disambiguations: [],
-    }
-  }
-
-  if (shouldPreferDeterministicAction(input, deterministicFallback.proposals)) {
-    const hasDisambiguation = deterministicResolution.disambiguations.length > 0
-    const permissionDenied =
-      deterministicFallback.proposals.length > 0 && deterministicFilteredProposals.length === 0
-
-    let response: string
-    if (hasDisambiguation) {
-      response = buildDisambiguationResponse(deterministicResolution.disambiguations, assistantProfile)
-    } else if (permissionDenied) {
-      response =
-        assistantProfile?.defaultLanguage === 'en'
-          ? 'I understood the request, but your workspace role is not allowed to use that tool.'
-          : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
-    } else {
-      response = deterministicFallback.response
-    }
-
-    if (
-      isOpenAiConfigured() &&
-      deterministicFilteredProposals.length > 0 &&
-      !hasDisambiguation &&
-      !permissionDenied
-    ) {
+    if (isOpenAiConfigured()) {
       try {
-        response = await synthesizeDeterministicAssistantNarration({
-          defaultLanguage: assistantProfile?.defaultLanguage ?? 'fr',
-          userMessage: input,
-          draftResponse: response,
-          proposals: deterministicFilteredProposals.map((p) => ({
-            type: p.type,
-            title: p.title,
-            description: p.description,
-          })),
+        const aiResult = await analyzeUserRequest(input, conversationHistory, {
+          assistantProfile,
+          skills: enabledSkills,
           workspaceContext: options.workspaceContext,
+          behaviorMode: 'conversation',
         })
+
+        return {
+          response: aiResult.response,
+          proposals: [],
+          disambiguations: [],
+          plan: aiResult.plan,
+        }
       } catch {
-        // keep deterministic draft
+        // fall through to deterministic capability reply
       }
     }
 
     return {
-      response,
-      proposals: hasDisambiguation ? [] : deterministicFilteredProposals,
-      disambiguations: deterministicResolution.disambiguations,
+      response: buildCapabilityResponse(input, deterministicFallback.proposals, assistantProfile),
+      proposals: [],
+      disambiguations: [],
+      plan: [],
     }
   }
 
@@ -427,18 +437,28 @@ export async function runAgentTurn(
         }
       })
 
-      const normalizedInput = normalizeInput(input)
-      const allowProposals = /(send|email|mail|draft|reply|write|create|update|schedule|book|invite|plan|share|upload|save|store|sync|connect|disconnect|refresh|archive|unarchive|restore|label|forward|move|rename|star|unstar|trash|copy|duplicate|revoke|unshare|folder|open|ouvrir|ouvre|select|selectionne|selectionner|choisis|choisir|gmail|google calendar|calendar|calendrier|google meet|meet|google docs|google doc|docs|document|notion|google drive|drive|google photos|photos|photo|visio|réunion|reunion|dossier|folder|fichier|file|page|database|base de donnees|base de données|doc\\b|appdata|app data)/i.test(normalizedInput)
+      const allowProposals = isActionOrWorkflowRequest(input)
       const modelClaimsActionReadyWithoutProposal =
         allowProposals &&
         aiResult.proposals.length === 0 &&
         safeProposals.length === 0 &&
         responseClaimsActionReady(aiResult.response)
+      const lowValueActionResponse =
+        allowProposals &&
+        safeProposals.length === 0 &&
+        isLowValueAssistantResponse(aiResult.response)
+      const weakCalendarProposal = safeProposals.some(
+        (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
+      )
       const hadModelProposalButNoneValidated = allowProposals && aiResult.proposals.length > 0 && safeProposals.length === 0
-      const fallbackResolutionForMissingOrInvalidModel = hadModelProposalButNoneValidated || modelClaimsActionReadyWithoutProposal
+      const fallbackResolutionForMissingOrInvalidModel =
+        hadModelProposalButNoneValidated ||
+        modelClaimsActionReadyWithoutProposal ||
+        lowValueActionResponse ||
+        weakCalendarProposal
         ? resolveActionReferencesDetailed({
             proposals: (() => {
-              const raw = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile).proposals.filter(
+              const raw = deterministicFallback.proposals.filter(
                 (proposal) => allowedActionTypes.includes(proposal.type)
               )
               if (isEmailCompositionAssistanceRequest(input)) {
@@ -459,10 +479,6 @@ export async function runAgentTurn(
           })
         : { proposals: [], disambiguations: [] }
       const fallbackForMissingOrInvalidModelProposal = fallbackResolutionForMissingOrInvalidModel.proposals
-      const deniedByRole =
-        hadModelProposalButNoneValidated &&
-        fallbackForMissingOrInvalidModelProposal.length === 0 &&
-        availableTools.length === 0
       const hasDisambiguation =
         resolvedReferenceResult.disambiguations.length > 0 ||
         fallbackResolutionForMissingOrInvalidModel.disambiguations.length > 0
@@ -472,16 +488,13 @@ export async function runAgentTurn(
             ...fallbackResolutionForMissingOrInvalidModel.disambiguations,
           ]
         : []
-      const deterministicFallbackResponse = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
       const shouldUseFallbackResponse =
         allowProposals &&
         !hasDisambiguation &&
         safeProposals.length === 0 &&
-        (fallbackForMissingOrInvalidModelProposal.length > 0 || responseClaimsActionReady(aiResult.response))
-
-      const weakCalendarProposal = safeProposals.some(
-        (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
-      )
+        (fallbackForMissingOrInvalidModelProposal.length > 0 ||
+          responseClaimsActionReady(aiResult.response) ||
+          isLowValueAssistantResponse(aiResult.response))
 
       /** Prefer the model’s wording whenever it said something substantive — deterministic text is only a safety net. */
       const keepModelVoice =
@@ -490,17 +503,21 @@ export async function runAgentTurn(
         !isLowValueAssistantResponse(aiResult.response)
 
       const pickVisibleResponse = () => {
+        if (safeProposals.length > 0 && !keepModelVoice) {
+          return buildPlanBackedNarration({
+            language,
+            plan: aiResult.plan,
+            proposalCount: safeProposals.length,
+          })
+        }
+        if (safeProposals.length > 0) {
+          return aiResult.response
+        }
         if (shouldUseFallbackResponse && keepModelVoice) {
           return aiResult.response
         }
         if (shouldUseFallbackResponse) {
-          return deterministicFallbackResponse.response
-        }
-        if (weakCalendarProposal && keepModelVoice) {
-          return aiResult.response
-        }
-        if (weakCalendarProposal) {
-          return deterministicFallbackResponse.response
+          return deterministicFallback.response
         }
         if (!allowProposals && safeProposals.length > 0) {
           return buildConversationalResponse(input, assistantProfile)
@@ -512,11 +529,7 @@ export async function runAgentTurn(
         response:
           hasDisambiguation
             ? buildDisambiguationResponse(disambiguations, assistantProfile)
-            : deniedByRole
-              ? assistantProfile?.defaultLanguage === 'en'
-                ? 'I understood the request, but your workspace role is not allowed to use that tool.'
-                : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
-              : pickVisibleResponse(),
+            : pickVisibleResponse(),
         proposals:
           hasDisambiguation
             ? []
@@ -528,49 +541,24 @@ export async function runAgentTurn(
                 : fallbackForMissingOrInvalidModelProposal
               : [],
         disambiguations,
+        plan: aiResult.plan,
       }
     } catch {
-      const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
-      const fallbackResolution = resolveActionReferencesDetailed({
-        proposals: fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type)),
-        userInput: input,
+      return buildResolvedDeterministicTurn({
+        input,
+        knownContacts,
+        assistantProfile,
+        allowedActionTypes,
         connectedContextMetadata: options.connectedContextMetadata,
       })
-      const filteredProposals = fallbackResolution.proposals
-
-      return {
-        response:
-          fallbackResolution.disambiguations.length > 0
-            ? buildDisambiguationResponse(fallbackResolution.disambiguations, assistantProfile)
-            : fallback.proposals.length > 0 && filteredProposals.length === 0
-              ? assistantProfile?.defaultLanguage === 'en'
-                ? 'I understood the request, but your workspace role is not allowed to use that tool.'
-                : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
-              : fallback.response,
-        proposals: fallbackResolution.disambiguations.length > 0 ? [] : filteredProposals,
-        disambiguations: fallbackResolution.disambiguations,
-      }
     }
   }
 
-  const fallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
-  const fallbackResolution = resolveActionReferencesDetailed({
-    proposals: fallback.proposals.filter((proposal) => allowedActionTypes.includes(proposal.type)),
-    userInput: input,
+  return buildResolvedDeterministicTurn({
+    input,
+    knownContacts,
+    assistantProfile,
+    allowedActionTypes,
     connectedContextMetadata: options.connectedContextMetadata,
   })
-  const filteredProposals = fallbackResolution.proposals
-
-  return {
-    response:
-      fallbackResolution.disambiguations.length > 0
-        ? buildDisambiguationResponse(fallbackResolution.disambiguations, assistantProfile)
-        : fallback.proposals.length > 0 && filteredProposals.length === 0
-          ? assistantProfile?.defaultLanguage === 'en'
-            ? 'I understood the request, but your workspace role is not allowed to use that tool.'
-            : 'J’ai compris la demande, mais ton rôle workspace n’est pas autorisé à utiliser cet outil.'
-          : fallback.response,
-    proposals: fallbackResolution.disambiguations.length > 0 ? [] : filteredProposals,
-    disambiguations: fallbackResolution.disambiguations,
-  }
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { AgentPlanStep } from '@/lib/agent/planning'
 import type { AssistantProfile } from '@/lib/assistant/profile'
 import type { ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
 import {
@@ -68,6 +69,7 @@ export interface AgentTurnResult {
   response: string
   proposals: AgentProposal[]
   disambiguations?: ReferenceDisambiguation[]
+  plan?: AgentPlanStep[]
 }
 
 export type AgentExecutionMode = 'ask' | 'auto'
@@ -1035,6 +1037,44 @@ function buildDeleteCalendarProposal(profile?: AssistantProfile): AgentProposal 
   }
 }
 
+function extractRelativeCalendarShiftMinutes(input: string) {
+  const normalized = normalizeInput(input)
+  const match =
+    normalized.match(/\b(?:decale|decaler|decalant|décale|décaler|décalant|shift|move)\b.*?\b(\d{1,3})\s*(minute|min|minutes)\b/) ||
+    normalized.match(/\b(\d{1,3})\s*(minute|min|minutes)\b.*?\b(?:plus tard|later|after)\b/) ||
+    normalized.match(/\b(\d{1,3})\s*(minute|min|minutes)\b.*?\b(?:plus tot|plus tôt|earlier|before)\b/)
+
+  if (!match) return null
+
+  const minutes = Number.parseInt(match[1] || '', 10)
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    return null
+  }
+
+  const negative = /\b(plus tot|plus tôt|earlier|before|avance|avancer)\b/.test(normalized)
+  return negative ? -minutes : minutes
+}
+
+function buildUpdateCalendarProposal(input: string, profile?: AssistantProfile): AgentProposal {
+  const language = profile?.defaultLanguage || 'fr'
+  const relativeShiftMinutes = extractRelativeCalendarShiftMinutes(input)
+
+  return {
+    type: 'update_calendar_event',
+    title: language === 'en' ? 'Update calendar event' : 'Mettre à jour un événement agenda',
+    description:
+      language === 'en'
+        ? 'Update the selected Google Calendar event with the requested changes.'
+        : "Mettre à jour l'événement Google Calendar sélectionné avec les changements demandés.",
+    parameters: {
+      eventId: '',
+      ...(relativeShiftMinutes ? { relativeShiftMinutes } : {}),
+      ...(typeof input === 'string' && input.trim().length > 0 ? { description: input.trim() } : {}),
+    },
+    confidenceScore: relativeShiftMinutes ? 0.84 : 0.74,
+  }
+}
+
 function buildUpdateGoogleDocProposal(input: string, profile?: AssistantProfile): AgentProposal {
   const language = profile?.defaultLanguage || 'fr'
 
@@ -1468,6 +1508,21 @@ export function buildFallbackResponseWithContactsAndProfile(
 
   if (
     isMeetingRequest &&
+    updateIntent &&
+    !deleteIntent &&
+    !explicitEmailIntent
+  ) {
+    return {
+      response:
+        language === 'en'
+          ? 'Calendar update ready for review.'
+          : "Mise à jour de l'événement prête à valider.",
+      proposals: [buildUpdateCalendarProposal(input, assistantProfile)],
+    }
+  }
+
+  if (
+    isMeetingRequest &&
     deleteIntent &&
     !explicitEmailIntent
   ) {
@@ -1477,6 +1532,21 @@ export function buildFallbackResponseWithContactsAndProfile(
           ? 'Event deletion ready for review.'
           : "Suppression d'événement prête à valider.",
       proposals: [buildDeleteCalendarProposal(assistantProfile)],
+    }
+  }
+
+  if (
+    isMeetingRequest &&
+    updateIntent &&
+    !deleteIntent &&
+    !explicitEmailIntent
+  ) {
+    return {
+      response:
+        language === 'en'
+          ? 'Calendar update ready. Review and confirm.'
+          : 'Mise à jour de l’événement prête. Vérifie et confirme.',
+      proposals: [buildUpdateCalendarProposal(input, assistantProfile)],
     }
   }
 

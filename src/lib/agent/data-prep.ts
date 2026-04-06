@@ -126,6 +126,19 @@ export function prepareActionParameters(
     }
   }
 
+  if (actionType === 'update_calendar_event') {
+    return {
+      ...normalized,
+      title: typeof normalized.title === 'string' ? collapseWhitespace(normalized.title) : normalized.title,
+      description:
+        typeof normalized.description === 'string' ? normalizeMultiline(normalized.description) : normalized.description,
+      relativeShiftMinutes:
+        typeof normalized.relativeShiftMinutes === 'number' && Number.isFinite(normalized.relativeShiftMinutes)
+          ? Math.trunc(normalized.relativeShiftMinutes)
+          : normalized.relativeShiftMinutes,
+    }
+  }
+
   if (actionType === 'move_google_drive_file') {
     return {
       ...normalized,

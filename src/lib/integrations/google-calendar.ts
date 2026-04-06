@@ -141,6 +141,47 @@ export async function updateGoogleCalendarEvent(
   if (parameters.description || parameters.notes) body.description = String(parameters.description || parameters.notes || '')
   if (parameters.startTime) body.start = { dateTime: parameters.startTime }
   if (parameters.endTime) body.end = { dateTime: parameters.endTime }
+  const relativeShiftMinutes =
+    typeof parameters.relativeShiftMinutes === 'number' && Number.isFinite(parameters.relativeShiftMinutes)
+      ? Math.trunc(parameters.relativeShiftMinutes)
+      : null
+
+  if (
+    relativeShiftMinutes &&
+    !body.start &&
+    !body.end
+  ) {
+    const currentResponse = await googleFetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+      { timeoutMs: GOOGLE_READ_TIMEOUT_MS, retries: 1 }
+    )
+
+    if (!currentResponse.ok) {
+      throw new Error(`Calendar event preload failed: ${currentResponse.status}`)
+    }
+
+    const currentEvent = (await currentResponse.json()) as {
+      start?: { dateTime?: string; date?: string }
+      end?: { dateTime?: string; date?: string }
+    }
+    const currentStart = currentEvent.start?.dateTime || currentEvent.start?.date || null
+    const currentEnd = currentEvent.end?.dateTime || currentEvent.end?.date || null
+
+    if (currentStart && currentEnd) {
+      body.start = {
+        dateTime: new Date(new Date(currentStart).getTime() + relativeShiftMinutes * 60 * 1000).toISOString(),
+      }
+      body.end = {
+        dateTime: new Date(new Date(currentEnd).getTime() + relativeShiftMinutes * 60 * 1000).toISOString(),
+      }
+    }
+  }
+
   if (Array.isArray(parameters.attendees) && parameters.attendees.length > 0) {
     body.attendees = parameters.attendees.map((email) => ({ email }))
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { AgentPlanStep } from '@/lib/agent/planning'
 
 /** Locked model for Kova chat + structured analysis (`analyzeUserRequest`). Ignores `OPENAI_MODEL`. */
 export const KOVA_CHAT_MODEL = 'gpt-4.1' as const
@@ -122,6 +123,12 @@ export interface ActionProposal {
   confidenceScore?: number
 }
 
+const normalizedPlanStepSchema = z.object({
+  title: z.string().min(1),
+  detail: z.string().min(1),
+  app: z.string().min(1).optional(),
+})
+
 const normalizedActionProposalSchema = z.object({
   type: z.string().min(1),
   title: z.string().min(1),
@@ -133,6 +140,7 @@ const normalizedActionProposalSchema = z.object({
 const normalizedAnalysisResponseSchema = z.object({
   response: z.string().min(1),
   proposals: z.array(normalizedActionProposalSchema),
+  plan: z.array(normalizedPlanStepSchema),
 })
 
 const rawActionProposalSchema = z.object({
@@ -143,15 +151,22 @@ const rawActionProposalSchema = z.object({
   parameters_json: z.string().min(2),
 })
 
+const rawPlanStepSchema = z.object({
+  title: z.string().min(1),
+  detail: z.string().min(1),
+  app: z.string().min(1).optional(),
+})
+
 const rawAnalysisResponseSchema = z.object({
   response: z.string().min(1),
   proposals: z.array(rawActionProposalSchema),
+  plan: z.array(rawPlanStepSchema).optional().default([]),
 })
 
 const responseFormatJsonSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['response', 'proposals'],
+  required: ['response', 'proposals', 'plan'],
   properties: {
     response: {
       type: 'string',
@@ -181,6 +196,27 @@ const responseFormatJsonSchema = {
           parameters_json: {
             type: 'string',
             description: 'A JSON object encoded as a string. It must parse into the action parameters object.',
+          },
+        },
+      },
+    },
+    plan: {
+      type: 'array',
+      description:
+        'Operational reasoning plan for this turn. Use 0 steps for pure chat or simple read-only answers, otherwise 1 to 5 steps that explain the intended sequence before or alongside proposals.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['title', 'detail'],
+        properties: {
+          title: {
+            type: 'string',
+          },
+          detail: {
+            type: 'string',
+          },
+          app: {
+            type: 'string',
           },
         },
       },
@@ -215,6 +251,7 @@ export function parseStructuredAnalysisResponse(payload: unknown) {
       confidenceScore: proposal.confidenceScore,
       parameters: parseParametersJson(proposal.parameters_json),
     })),
+    plan: raw.plan,
   })
 }
 
@@ -239,6 +276,13 @@ Kova is a SaaS built around **this chat**: not a thin form with a chat sticker �
 ## PRIMARY MODE — YOU ARE THE MAIN BRAIN
 
 In normal operation **this request is yours**: you interpret nuance, use any **injected workspace context** (Gmail snippets, calendar, Drive, Notion, etc.) as ground truth, and return a single coherent **response** plus **proposals** that match the Kova console UX (clear titles, real email bodies, correct tool types). Do not sound like a router or a template engine. If the user refines a plan (“add Meet”, “change the tone”), **update** proposals intelligently — never paste their meta-instructions into email bodies. Hard-coded shortcuts may exist only when the deployment explicitly disables model-first routing; **assume you are always on** unless you have no tool catalog.
+
+## PLANNING MODE — THINK IN CLEAN STEPS
+
+- When a request naturally spans **multiple steps or multiple apps**, return a **small ordered plan** through multiple proposals instead of collapsing everything into one vague action.
+- Keep the plan **coherent and minimal**: only the steps required to get the job done well.
+- Use the visible **response** to explain the ordered plan in plain language: what happens first, what happens next, and where you still need confirmation.
+- Prefer **model judgment for planning and reformulation**. Deterministic tooling exists to execute safely, not to replace your reasoning.
 
 ## UNIFIED AGENT — ONE BRAIN
 
@@ -530,6 +574,13 @@ Never:
 Always respond with valid JSON:
 {
   "response": "Human, natural response in the user's language. If proposals is non-empty, include visible reasoning and strategy (see VOICE — action turns). If proposals is empty, stay appropriately concise.",
+  "plan": [
+    {
+      "title": "Short step title",
+      "detail": "What you are about to do or why this step matters.",
+      "app": "Optional app name"
+    }
+  ],
   "proposals": [
     {
       "type": "action_type",
@@ -542,6 +593,7 @@ Always respond with valid JSON:
 }
 
 - "response" is always filled. Never empty or generic.
+- "plan" is always present. Use [] for pure chat or a simple factual answer. Use 1 to 5 steps when you are planning work, sequencing multiple apps, or reformulating a request before action.
 - "proposals" is [] when no action is needed.
 - Only use action types from the runtime tool catalog.
 - confidenceScore: 0.9+ when all data is present, 0.7–0.89 when some inference was made, below 0.7 when uncertain.`
@@ -772,7 +824,7 @@ async function analyzeWithOpenAI(
   userMessage: string,
   conversationHistory: ConversationMessage[],
   effectiveSystemPrompt: string
-): Promise<{ response: string; proposals: ActionProposal[] }> {
+): Promise<{ response: string; proposals: ActionProposal[]; plan: AgentPlanStep[] }> {
   const apiKey = resolveOpenAiApiKey()
 
   if (!apiKey) {
@@ -804,6 +856,7 @@ async function analyzeWithOpenAI(
       return {
         response: parsed.response.trim() || buildNonEmptyResponse(userMessage, parsed.proposals),
         proposals: parsed.proposals,
+        plan: parsed.plan,
       }
     } catch (error) {
       const status = typeof error === 'object' && error && 'status' in error ? (error as { status?: number }).status : undefined
@@ -823,7 +876,7 @@ export async function analyzeUserRequest(
   userMessage: string,
   conversationHistory: ConversationMessage[],
   options: AnalyzeOptions = {}
-): Promise<{ response: string; proposals: ActionProposal[] }> {
+): Promise<{ response: string; proposals: ActionProposal[]; plan: AgentPlanStep[] }> {
   const contactsContext =
     options.knownContacts && options.knownContacts.length > 0
       ? `\nKnown contacts:\n${options.knownContacts.map((contact) => `- ${contact.name} <${contact.email}>`).join('\n')}`
@@ -912,7 +965,7 @@ export async function streamAIResponse(
   userMessage: string,
   conversationHistory: ConversationMessage[],
   onChunk: (chunk: string) => void
-): Promise<{ response: string; proposals: ActionProposal[] }> {
+): Promise<{ response: string; proposals: ActionProposal[]; plan: AgentPlanStep[] }> {
   const result = await analyzeUserRequest(userMessage, conversationHistory)
   onChunk(result.response)
   return result

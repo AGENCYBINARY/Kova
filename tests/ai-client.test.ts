@@ -30,6 +30,13 @@ test('direct factual replies are not detected as low-value responses', () => {
 test('structured response parser decodes parameters_json payloads', () => {
   const parsed = parseStructuredAnalysisResponse({
     response: 'C’est prêt.',
+    plan: [
+      {
+        title: 'Préparer le mail',
+        detail: 'Je rédige le message avant envoi.',
+        app: 'Gmail',
+      },
+    ],
     proposals: [
       {
         type: 'send_email',
@@ -42,6 +49,13 @@ test('structured response parser decodes parameters_json payloads', () => {
   })
 
   assert.equal(parsed.response, 'C’est prêt.')
+  assert.deepEqual(parsed.plan, [
+    {
+      title: 'Préparer le mail',
+      detail: 'Je rédige le message avant envoi.',
+      app: 'Gmail',
+    },
+  ])
   assert.deepEqual(parsed.proposals[0]?.parameters, {
     to: ['alice@example.com'],
     subject: 'Point décale',

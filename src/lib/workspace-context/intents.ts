@@ -204,20 +204,42 @@ export function isMeetingDeliveryRefinementIntent(input: string) {
 
 export function isEmailSendIntent(input: string) {
   const normalized = normalizeInput(input)
+  const mentionsEmailSurface = gmailPattern.test(normalized)
+  const mentionsOtherAppSurface =
+    calendarPattern.test(normalized) ||
+    drivePattern.test(normalized) ||
+    docsPattern.test(normalized) ||
+    photosPattern.test(normalized) ||
+    notionPattern.test(normalized)
+  const hasExplicitEmailSurface =
+    mentionsEmailSurface ||
+    emailDraftPattern.test(normalized) ||
+    /\b(destinataire|recipient|subject|objet|bcc|cc|thread|message|messages)\b/.test(normalized) ||
+    /@/.test(normalized)
+  const hasStrongEmailVerb =
+    /\b(send|draft|reply|write|compose|envoie|envoyer|redige|rediger|formuler|ecrire|ecris|reponds|repondre|transmets|forward)\b/.test(
+      normalized
+    )
+  const hasEmailEditingVerb =
+    /\b(update|edit|rewrite|refresh|modifie|modifier|mets|mettre|complete|compl[eè]te)\b/.test(normalized)
 
   if (isMeetingDeliveryRefinementIntent(input)) {
     return false
   }
 
-  if (!gmailPattern.test(normalized) && !emailActionPattern.test(normalized)) {
+  if (mentionsOtherAppSurface && !mentionsEmailSurface) {
     return false
   }
 
-  if (emailActionPattern.test(normalized)) {
+  if (!mentionsEmailSurface && !hasStrongEmailVerb && !hasEmailEditingVerb) {
+    return false
+  }
+
+  if ((hasStrongEmailVerb || hasEmailEditingVerb) && hasExplicitEmailSurface) {
     return true
   }
 
-  if (gmailPattern.test(normalized) && emailDraftPattern.test(normalized)) {
+  if (mentionsEmailSurface && emailDraftPattern.test(normalized)) {
     return true
   }
 
