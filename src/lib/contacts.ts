@@ -13,6 +13,7 @@ export {
   extractGmailLookupNameQuery,
   extractNameBeforeEmail,
   extractNameNearEmail,
+  extractRecipientFromSameInviteFollowUp,
   extractRecipientName,
   extractStrictGmailAddressLookupName,
   findContactByName,

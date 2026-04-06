@@ -4,6 +4,7 @@ import {
   extractEmailAddresses,
   extractGmailLookupNameQuery,
   extractNameNearEmail,
+  extractRecipientFromSameInviteFollowUp,
   extractRecipientName,
   findContactByName,
   findContactCandidatesByName,
@@ -40,6 +41,18 @@ test('extractNameNearEmail and extractRecipientName capture likely recipient nam
   )
   assert.equal(extractGmailLookupNameQuery('trouve toi le mail de tristan massarelli regarde mes mails envoyes'), 'Tristan Massarelli')
   assert.equal(extractGmailLookupNameQuery('cherche le mail de Marie Dupont sur gmail'), 'Marie Dupont')
+})
+
+test('extractRecipientFromSameInviteFollowUp catches pareil à / invitation pour lines', () => {
+  assert.equal(
+    extractRecipientFromSameInviteFollowUp('maintenant une invitation exactement pareil a Maxime NEVEU stp'),
+    'Maxime Neveu'
+  )
+  assert.equal(
+    extractRecipientFromSameInviteFollowUp('meme invitation pour Jean-Pierre Martin'),
+    'Jean-pierre Martin'
+  )
+  assert.equal(extractRecipientFromSameInviteFollowUp('pareil pour Marie-Claire Dubois stp'), 'Marie-claire Dubois')
 })
 
 test('findContactCandidatesByName returns ranked matches', () => {

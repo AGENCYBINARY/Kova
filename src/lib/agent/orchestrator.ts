@@ -11,6 +11,7 @@ import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
 import { isEmailCompositionAssistanceRequest } from '@/lib/agent/v1-deterministic'
 import { buildCalendarRedoFollowUp } from '@/lib/agent/follow-up'
+import { augmentContentForMeetingInviteRepeat } from '@/lib/agent/meeting-invite-repeat'
 import {
   type ChatContext,
   buildWelcomeMessage,
@@ -83,6 +84,12 @@ export async function orchestrateChatTurn(params: {
     content: message.content,
   }))
 
+  const agentRoutingContent = augmentContentForMeetingInviteRepeat({
+    content: params.content,
+    previousMessages: conversationHistory,
+    defaultLanguage: assistantProfile.defaultLanguage,
+  })
+
   const connectedContextSeed = extractConnectedContextSeed(previousMessages)
   const emailCompositionHelp = isEmailCompositionAssistanceRequest(params.content)
   // Skip connected-workspace resolution for drafting help: avoids mistaken read-only
@@ -91,7 +98,7 @@ export async function orchestrateChatTurn(params: {
   const connectedContextResult = emailCompositionHelp
     ? null
     : await resolveConnectedWorkspaceContext({
-        content: params.content,
+        content: agentRoutingContent,
         userId,
         workspaceId,
         contextSeed: connectedContextSeed,
@@ -177,7 +184,7 @@ export async function orchestrateChatTurn(params: {
   const googleResolvedContact =
     assistantProfile.autoResolveKnownContacts
       ? await resolveEmailContactFromGoogle({
-          content: params.content,
+          content: agentRoutingContent,
           knownContacts: contactsAfterCorrection,
           userId,
           workspaceId,
@@ -204,7 +211,7 @@ export async function orchestrateChatTurn(params: {
         disambiguations: [],
       }
     : await runAgentTurn(
-        params.content,
+        agentRoutingContent,
         conversationHistory,
         effectiveKnownContacts,
         assistantProfile,

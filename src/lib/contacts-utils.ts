@@ -184,6 +184,41 @@ export function findContactCandidatesByName(input: string, contacts: KnownContac
 const recipientNameFollowPattern =
   String.raw`(?=\s+(?:et|avec|pour|pour la|pour le|chercher|cherche|trouve|trouver|retrouve|retrouver|regarde|regarder|dans|gmail|disant|lui|dis|qui|envoyer|envoie|ne|pas|oublier|la|le|un|une|mardi|lundi|mercredi|jeudi|vendredi|samedi|dimanche|demain|réunion|reunion|objectif|agence|calendar|meet|lien|evenement|événement)\b|[,.:;!?]|$)`
 
+/** Hyphenated given names (Jean-Pierre) + optional second family token. */
+const sameInviteNameChunk =
+  '([A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)?(?:\\s+[A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)?){0,4})'
+
+function stripTrailingCourtesyTokens(raw: string) {
+  return raw.replace(/\s+(?:stp|svp|plz|please)\s*$/i, '').trim()
+}
+
+/**
+ * Short follow-ups: "même invitation pareil à Maxime", "invitation identique pour Jean Dupont".
+ */
+export function extractRecipientFromSameInviteFollowUp(input: string): string | null {
+  const normalized = input.replace(/\s+/g, ' ').trim()
+  const patterns: RegExp[] = [
+    new RegExp(
+      `\\b(?:pareil|pareille|meme|même|identique)(?:\\s+chose)?\\s+(?:à|a|pour)\\s+${sameInviteNameChunk}\\b`,
+      'i'
+    ),
+    new RegExp(`\\binvitation\\b[^.!?]{0,160}?(?:à|a|pour)\\s+${sameInviteNameChunk}\\b`, 'i'),
+    new RegExp(
+      `\\b(?:une autre|autre)\\s+(?:invitation|invite)\\s+(?:à|a|pour)\\s+${sameInviteNameChunk}\\b`,
+      'i'
+    ),
+  ]
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern)
+    if (match?.[1]) {
+      const trimmed = stripTrailingCourtesyTokens(match[1].trim())
+      const sanitized = sanitizeContactNameCandidate(trimmed)
+      if (sanitized) return sanitized
+    }
+  }
+  return null
+}
+
 export function extractRecipientName(input: string) {
   const normalized = input.replace(/\s+/g, ' ').trim()
 
