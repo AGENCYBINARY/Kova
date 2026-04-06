@@ -9,7 +9,7 @@ import {
   findContactCandidatesByName,
   type KnownContact,
 } from '@/lib/contacts'
-import { inferCalendarRangeFromUserText } from '@/lib/scheduling/user-schedule'
+import { canInferCalendarRangeFromUserText, inferCalendarRangeFromUserText } from '@/lib/scheduling/user-schedule'
 import { isEmailSendIntent, isReadOnlyWorkspaceQuestion } from '@/lib/workspace-context/intents'
 
 export const agentActionTypeSchema = z.enum([
@@ -180,7 +180,7 @@ function requestNeedsMeetLink(input: string) {
 function hasExplicitCalendarDate(input: string) {
   const normalized = normalizeInput(input)
   return (
-    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(
+    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|ce soir|ce matin|cet apres-midi|cet apres midi|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(
       normalized
     ) ||
     /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(normalized) ||
@@ -201,6 +201,10 @@ function hasExplicitCalendarTime(input: string) {
 
 function hasConcreteCalendarSchedule(input: string) {
   return hasExplicitCalendarDate(input) && hasExplicitCalendarTime(input)
+}
+
+function hasResolvableCalendarSchedule(input: string, durationMinutes: number) {
+  return hasConcreteCalendarSchedule(input) || canInferCalendarRangeFromUserText(input, durationMinutes)
 }
 
 function getCalendarAttendeesFromInput(input: string, contact?: KnownContact | null) {
@@ -616,9 +620,7 @@ function buildCalendarEventDescriptionFromInput(input: string, meetingTitle: str
 
 function buildCalendarProposal(input: string, profile?: AssistantProfile, contact?: KnownContact | null): AgentProposal {
   const durationMinutes = profile?.meetingDefaultDurationMinutes || 30
-  const inferredRange = hasConcreteCalendarSchedule(input)
-    ? inferCalendarRangeFromUserText(input, durationMinutes)
-    : null
+  const inferredRange = inferCalendarRangeFromUserText(input, durationMinutes)
   const now = Date.now()
   const fallbackStart = new Date(now + 1000 * 60 * 60 * 24)
   const start = inferredRange?.start ?? fallbackStart
@@ -1470,7 +1472,7 @@ export function buildFallbackResponseWithContactsAndProfile(
     /(gmail|email|e-mail|mail|send|envoie|envoyer|courriel|lien|link)/.test(intentText) &&
     explicitlyWantsSeparateEmail
   ) {
-    if (!hasConcreteCalendarSchedule(input)) {
+    if (!hasResolvableCalendarSchedule(input, assistantProfile?.meetingDefaultDurationMinutes || 30)) {
       const attendeeEmails = getCalendarAttendeesFromInput(input, knownContact)
       return {
         response:
@@ -1496,7 +1498,7 @@ export function buildFallbackResponseWithContactsAndProfile(
   }
 
   if ((isMeetingRequest || (wantsMeetingConfirmation && knownContact)) && !explicitEmailIntent) {
-    if (!hasConcreteCalendarSchedule(input)) {
+    if (!hasResolvableCalendarSchedule(input, assistantProfile?.meetingDefaultDurationMinutes || 30)) {
       const attendeeEmails = getCalendarAttendeesFromInput(input, knownContact)
       return {
         response:

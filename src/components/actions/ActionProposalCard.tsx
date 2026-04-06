@@ -1,7 +1,36 @@
 'use client'
 import { Badge, Button, Card } from '../ui'
 import { useLang } from '@/lib/lang-context'
+import type { Lang } from '@/lib/i18n'
 import styles from './ActionProposalCard.module.css'
+
+/** Matches server-side calendar default (Europe/Paris) so users see local wall time, not raw UTC. */
+const CALENDAR_PREVIEW_TZ = 'Europe/Paris'
+
+function formatCalendarDateTimeForPreview(iso: unknown, lang: Lang): string {
+  if (typeof iso !== 'string' || !iso.trim()) {
+    return '-'
+  }
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) {
+    return String(iso)
+  }
+  const locale = lang === 'en' ? 'en-GB' : 'fr-FR'
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: CALENDAR_PREVIEW_TZ,
+      timeZoneName: 'short',
+    }).format(d)
+  } catch {
+    return iso
+  }
+}
 
 interface ActionProposalCardProps {
   id: string
@@ -38,11 +67,17 @@ function renderEmailPreview(parameters: Record<string, unknown>, t: ReturnType<t
   )
 }
 
-function renderCalendarPreview(parameters: Record<string, unknown>, t: ReturnType<typeof useLang>['t']) {
+function renderCalendarPreview(
+  parameters: Record<string, unknown>,
+  t: ReturnType<typeof useLang>['t'],
+  lang: Lang
+) {
   const attendees = Array.isArray(parameters.attendees)
     ? parameters.attendees.filter((v): v is string => typeof v === 'string' && v.length > 0)
     : []
   const hasMeet = Boolean(parameters.createMeetLink)
+  const startLabel = formatCalendarDateTimeForPreview(parameters.startTime, lang)
+  const endLabel = formatCalendarDateTimeForPreview(parameters.endTime, lang)
   return (
     <div className={styles.previewBlock}>
       <div className={styles.previewRow}>
@@ -51,11 +86,11 @@ function renderCalendarPreview(parameters: Record<string, unknown>, t: ReturnTyp
       </div>
       <div className={styles.previewRow}>
         <span className={styles.previewLabel}>{t.proposal.start}</span>
-        <span className={styles.previewValue}>{String(parameters.startTime || '-')}</span>
+        <span className={styles.previewValue}>{startLabel}</span>
       </div>
       <div className={styles.previewRow}>
         <span className={styles.previewLabel}>{t.proposal.end}</span>
-        <span className={styles.previewValue}>{String(parameters.endTime || '-')}</span>
+        <span className={styles.previewValue}>{endLabel}</span>
       </div>
       <div className={styles.previewRow}>
         <span className={styles.previewLabel}>{t.proposal.attendees}</span>
@@ -144,11 +179,11 @@ const actionIcons: Record<string, JSX.Element> = {
 }
 
 export function ActionProposalCard({ id, type, title, description, parameters, onApprove, onReject, loading }: ActionProposalCardProps) {
-  const { t } = useLang()
+  const { t, lang } = useLang()
 
   const renderPreview = () => {
     if (type === 'send_email') return renderEmailPreview(parameters, t)
-    if (type === 'create_calendar_event') return renderCalendarPreview(parameters, t)
+    if (type === 'create_calendar_event') return renderCalendarPreview(parameters, t, lang)
     if (type === 'create_google_drive_file') return renderDrivePreview(parameters, t)
     if (type === 'create_google_photos_picker_session') return renderGooglePhotosPickerPreview()
     return (

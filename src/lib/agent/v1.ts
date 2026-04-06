@@ -29,6 +29,7 @@ import {
   type KnownContact,
 } from '@/lib/contacts'
 import { getToolByActionType, listMcpTools } from '@/lib/mcp/registry'
+import { canInferCalendarRangeFromUserText } from '@/lib/scheduling/user-schedule'
 
 export {
   agentActionTypeSchema,
@@ -71,7 +72,7 @@ function normalizeInput(input: string) {
 function hasExplicitCalendarDate(input: string) {
   const normalized = normalizeInput(input)
   return (
-    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(
+    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|ce soir|ce matin|cet apres-midi|cet apres midi|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(
       normalized
     ) ||
     /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(normalized) ||
@@ -363,8 +364,13 @@ export async function runAgentTurn(
         }
       })
 
+      const defaultMeetingDuration = assistantProfile?.meetingDefaultDurationMinutes || 30
       const safeProposals = enrichedProposals.map((proposal) => {
-        if (proposal.type === 'create_calendar_event' && !hasConcreteCalendarSchedule(input)) {
+        if (
+          proposal.type === 'create_calendar_event' &&
+          !hasConcreteCalendarSchedule(input) &&
+          !canInferCalendarRangeFromUserText(input, defaultMeetingDuration)
+        ) {
           return {
             ...proposal,
             confidenceScore: Math.min(proposal.confidenceScore, 0.35),

@@ -119,6 +119,40 @@ export function utcInstantForWallClock(
   return new Date(ms)
 }
 
+/**
+ * Next occurrence of (hour:minute) wall time in `timeZone` strictly after `now`
+ * (today if still ahead, otherwise following days).
+ */
+function inferNextWallClockFromNowInTimeZone(
+  hour: number,
+  minute: number,
+  durationMinutes: number,
+  timeZone: string,
+  now: Date
+): { start: Date; end: Date } | null {
+  let { year: y, month: m, day: d } = calendarPartsInTimeZone(now, timeZone)
+  for (let step = 0; step < 14; step++) {
+    const start = utcInstantForWallClock(y, m, d, hour, minute, timeZone)
+    if (start.getTime() > now.getTime()) {
+      const end = new Date(start.getTime() + durationMinutes * 60 * 1000)
+      return { start, end }
+    }
+    const next = nextCalendarDateParts(y, m, d, timeZone)
+    y = next.year
+    m = next.month
+    d = next.day
+  }
+  return null
+}
+
+export function canInferCalendarRangeFromUserText(
+  input: string,
+  durationMinutes: number,
+  options: { timeZone?: string; now?: Date } = {}
+): boolean {
+  return inferCalendarRangeFromUserText(input, durationMinutes, options) !== null
+}
+
 export function inferCalendarRangeFromUserText(
   input: string,
   durationMinutes: number,
@@ -128,22 +162,40 @@ export function inferCalendarRangeFromUserText(
   const now = options.now ?? new Date()
   const n = normalizeSchedulingInput(input)
 
-  const hasWeekday = Object.keys(weekdayToNumber).some((w) => new RegExp(`\\b${w}\\b`).test(n))
-  const hasDemain = /\b(demain|tomorrow)\b/.test(n)
-  if (!hasWeekday && !hasDemain) {
-    return null
-  }
-
+  const hmGlued = n.match(/\b(\d{1,2})\s*h(\d{2})\b/)
   const hm = n.match(/\b(\d{1,2})\s*h(?:eures?)?\b/)
   const colon = n.match(/\b(\d{1,2}):(\d{2})\b/)
-  if (!hm && !colon) {
+
+  let hour: number
+  let minute: number
+  if (hmGlued) {
+    hour = Number.parseInt(hmGlued[1], 10)
+    minute = Number.parseInt(hmGlued[2], 10)
+  } else if (hm) {
+    hour = Number.parseInt(hm[1], 10)
+    minute = colon ? Number.parseInt(colon[2], 10) : 0
+  } else if (colon) {
+    hour = Number.parseInt(colon[1], 10)
+    minute = Number.parseInt(colon[2], 10)
+  } else if (/\b(midi|noon)\b/.test(n)) {
+    hour = 12
+    minute = 0
+  } else if (/\b(minuit|midnight)\b/.test(n)) {
+    hour = 0
+    minute = 0
+  } else {
     return null
   }
 
-  let hour = hm ? Number.parseInt(hm[1], 10) : Number.parseInt(colon![1], 10)
-  let minute = colon ? Number.parseInt(colon[2], 10) : 0
   hour = Math.min(23, Math.max(0, hour))
   minute = Math.min(59, Math.max(0, minute))
+
+  const hasWeekday = Object.keys(weekdayToNumber).some((w) => new RegExp(`\\b${w}\\b`).test(n))
+  const hasDemain = /\b(demain|tomorrow)\b/.test(n)
+
+  if (!hasWeekday && !hasDemain) {
+    return inferNextWallClockFromNowInTimeZone(hour, minute, durationMinutes, timeZone, now)
+  }
 
   let targetDow: number | undefined
   for (const [word, dow] of Object.entries(weekdayToNumber)) {
