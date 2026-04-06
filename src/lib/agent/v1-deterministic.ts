@@ -1956,8 +1956,8 @@ export function buildFallbackResponseWithContactsAndProfile(
   return {
     response:
       language === 'en'
-        ? 'Tell me what needs to move — Gmail, Calendar, Drive, Docs, Notion, or Photos.'
-        : 'Dis-moi ce qu’il faut faire — Gmail, Agenda, Drive, Docs, Notion ou Photos.',
+        ? 'I didn’t connect that to a clear next step. Say it in one sentence: who it’s for, what you want (email, invite, doc, etc.), and any date or subject.'
+        : 'Je n’ai pas relié ça à une suite claire. Reformule en une phrase : pour qui, ce que tu veux (mail, invitation, doc…), et la date ou le sujet si besoin.',
     proposals: [],
   }
 }

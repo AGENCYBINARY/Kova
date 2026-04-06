@@ -27,7 +27,7 @@ export function looksLikeRepeatMeetingInviteBundle(text: string): boolean {
       n
     )
   const meetingCue =
-    /\b(invitation|invite|inviter|rdv|réunion|reunion|agenda|calendrier|evenement|événement|mail|email|courriel|meet|visio|google meet)\b/i.test(
+    /\b(invitation|invite|inviter|rdv|réunion|reunion|meeting|agenda|calendrier|evenement|événement|mail|email|courriel|meet|visio|google meet)\b/i.test(
       text
     )
   return repeatCue && meetingCue
@@ -37,12 +37,122 @@ function looksLikePriorBundledMeetingEmailRequest(text: string): boolean {
   const n = normalizeSchedulingInput(text)
   const mail = /\b(mail|email|courriel|gmail)\b/.test(n)
   const meet =
-    /\b(réunion|reunion|rdv|invitation|calendrier|agenda|mardi|lundi|mercredi|jeudi|vendredi|samedi|dimanche|demain|\d{1,2}\s*h)\b/.test(
+    /\b(réunion|reunion|meeting|rdv|invitation|calendrier|agenda|mardi|lundi|mercredi|jeudi|vendredi|samedi|dimanche|demain|\d{1,2}\s*h)\b/.test(
       n
     )
   const action =
-    /\b(trouve|trouver|cherche|chercher|rédige|redige|rediger|ecris|écris|ecrire|écrire|envoyer|envoie|ecrit|écrit)\b/.test(n)
+    /\b(trouve|trouver|cherche|chercher|rédige|redige|rediger|ecris|écris|ecrire|écrire|envoyer|envoie|ecrit|écrit|aide|aider)\b/.test(
+      n
+    )
   return mail && meet && action
+}
+
+/** Softer match: user asked for help drafting an invite / meeting mail (wording that may omit "trouve/trouver"). */
+function looksLikePriorEmailMeetingComposition(text: string): boolean {
+  const n = normalizeSchedulingInput(text)
+  const mailish = /\b(mail|email|courriel|gmail)\b/.test(n)
+  const topic =
+    /\b(invitation|invite|inviter|reunion|réunion|rdv|meeting|collegue|collaborateur|visio|agenda|calendrier)\b/.test(n)
+  const compose =
+    /\b(redige|rediger|ecrir|ecrire|aide|aider|prepar|propose|suggere|ecrit)\b/.test(n)
+  return mailish && topic && compose
+}
+
+function findPriorEmailMeetingCompositionUserTurn(previousMessages: ChatLine[], currentContent: string): string | null {
+  const trimmedCurrent = currentContent.trim()
+  for (let i = previousMessages.length - 1; i >= 0; i--) {
+    const line = previousMessages[i]
+    if (line.role !== 'user') continue
+    const t = line.content.trim()
+    if (!t || t === trimmedCurrent) continue
+    if (looksLikePriorEmailMeetingComposition(t)) {
+      return line.content
+    }
+  }
+  return null
+}
+
+function hasExplicitCalendarDateText(n: string): boolean {
+  return (
+    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|ce soir|ce matin|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(
+      n
+    ) || /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(n)
+  )
+}
+
+function hasExplicitCalendarTimeText(n: string): boolean {
+  return (
+    /\b\d{1,2}\s*(?:h|heure|heures)\b/.test(n) ||
+    /\b\d{1,2}:\d{2}\b/.test(n) ||
+    /\b(midi|minuit|noon|midnight)\b/.test(n)
+  )
+}
+
+/**
+ * Short reply that only adds scheduling (e.g. "oui mardi à 19h pendant 1h") — no standalone app intent.
+ */
+export function looksLikeSchedulingSlotReplyOnly(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed || trimmed.length > 140) return false
+  const n = normalizeSchedulingInput(trimmed)
+  if (!hasExplicitCalendarDateText(n) || !hasExplicitCalendarTimeText(n)) return false
+  if (/\b(envoie un mail|send email|creer un evenement|create event|nouveau doc|google drive)\b/.test(n)) {
+    return false
+  }
+  return true
+}
+
+function assistantLastTurnAskedForWhenOrSchedule(previousMessages: ChatLine[]): boolean {
+  if (previousMessages.length === 0) return false
+  const last = previousMessages[previousMessages.length - 1]
+  if (last.role !== 'assistant') return false
+  const c = last.content
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+  const fr =
+    (/\b(il me manque|il manque|j'ai besoin|besoin de|precise|précise|donne moi|donne-moi)\b/.test(c) &&
+      /\b(date|heure|horaire|moment|quand|jour)\b/.test(c)) ||
+    /\b(quelle|quel)\s+(date|heure|jour|moment|horaire)\b/.test(c) ||
+    /\b(date et l'heure|date et heure|heure exacte|horaire exact|moment exact)\b/.test(c) ||
+    /\b(precise|précise)\b.*\b(jour|heure|date)\b/.test(c)
+  const en =
+    (/\b(missing|still need|need)\b/.test(c) && /\b(date|time|when|schedule)\b/.test(c)) ||
+    /\bwhat (day|time|date)\b/.test(c) ||
+    /\bwhen (should|would|are you|do you want)\b/.test(c)
+  return Boolean(fr || en)
+}
+
+function findPriorMeetingRelatedUserTurn(previousMessages: ChatLine[], currentContent: string): string | null {
+  return (
+    findPriorBundledMeetingEmailUserTurn(previousMessages, currentContent) ||
+    findPriorEmailMeetingCompositionUserTurn(previousMessages, currentContent)
+  )
+}
+
+/**
+ * When the user only answers with day/time after the assistant asked for it, merge with the prior
+ * meeting+mail request so routing does not fall through to the generic "pick an app" template.
+ */
+export function augmentContentForMeetingScheduleFollowUp(params: {
+  content: string
+  previousMessages: ChatLine[]
+}): string {
+  const trimmed = params.content.trim()
+  if (!trimmed) {
+    return params.content
+  }
+  if (!looksLikeSchedulingSlotReplyOnly(trimmed)) {
+    return params.content
+  }
+  if (!assistantLastTurnAskedForWhenOrSchedule(params.previousMessages)) {
+    return params.content
+  }
+  const prior = findPriorMeetingRelatedUserTurn(params.previousMessages, trimmed)
+  if (!prior) {
+    return params.content
+  }
+  return `${prior} ${trimmed}`.trim()
 }
 
 function findPriorBundledMeetingEmailUserTurn(previousMessages: ChatLine[], currentContent: string): string | null {

@@ -12,7 +12,10 @@ import { runAgentTurn } from '@/lib/agent/v1'
 import { isEmailCompositionAssistanceRequest } from '@/lib/agent/v1-deterministic'
 import { buildCalendarRedoFollowUp, buildMeetingBundleRefinementFollowUp } from '@/lib/agent/follow-up'
 import { expirePendingActionsAsSuperseded } from '@/lib/actions/supersede-pending'
-import { augmentContentForMeetingInviteRepeat } from '@/lib/agent/meeting-invite-repeat'
+import {
+  augmentContentForMeetingInviteRepeat,
+  augmentContentForMeetingScheduleFollowUp,
+} from '@/lib/agent/meeting-invite-repeat'
 import {
   type ChatContext,
   buildWelcomeMessage,
@@ -85,10 +88,13 @@ export async function orchestrateChatTurn(params: {
     content: message.content,
   }))
 
-  const agentRoutingContent = augmentContentForMeetingInviteRepeat({
-    content: params.content,
+  const agentRoutingContent = augmentContentForMeetingScheduleFollowUp({
+    content: augmentContentForMeetingInviteRepeat({
+      content: params.content,
+      previousMessages: conversationHistory,
+      defaultLanguage: assistantProfile.defaultLanguage,
+    }),
     previousMessages: conversationHistory,
-    defaultLanguage: assistantProfile.defaultLanguage,
   })
 
   const connectedContextSeed = extractConnectedContextSeed(previousMessages)
