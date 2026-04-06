@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { getPrisma } from '@/lib/db/prisma'
 import { getStripe } from '@/lib/stripe'
 
@@ -16,7 +17,7 @@ export async function POST() {
     return NextResponse.json({ error: 'No subscription found' }, { status: 404 })
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://kova.agencybinary.fr'
+  const appUrl = getAppBaseUrl()
   const stripe = getStripe()
 
   const session = await stripe.billingPortal.sessions.create({

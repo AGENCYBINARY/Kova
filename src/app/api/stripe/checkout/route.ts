@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { getPrisma } from '@/lib/db/prisma'
 import { getStripe, PlanKey } from '@/lib/stripe'
 
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://kova.agencybinary.fr'
+    const appUrl = getAppBaseUrl()
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

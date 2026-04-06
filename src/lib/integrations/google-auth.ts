@@ -1,3 +1,4 @@
+import { getAppBaseUrl } from '@/lib/app-url'
 import { decryptSecret, encryptSecret } from '@/lib/security/crypto'
 import { prisma } from '@/lib/db/prisma'
 import {
@@ -55,12 +56,7 @@ export interface GoogleIntegrationCapabilityState {
 }
 
 function getGoogleRedirectUri() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
-  if (!appUrl) {
-    throw new Error('NEXT_PUBLIC_APP_URL is missing.')
-  }
-
-  return `${appUrl}/api/integrations/callback/google`
+  return `${getAppBaseUrl()}/api/integrations/callback/google`
 }
 
 function getGoogleClientConfig() {

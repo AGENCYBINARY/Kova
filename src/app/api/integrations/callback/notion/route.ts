@@ -1,10 +1,11 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { getAppContext } from '@/lib/app-context'
 import { exchangeNotionCodeForTokens, persistNotionTokens } from '@/lib/integrations/notion'
 
 function buildErrorRedirect(errorCode: string) {
-  return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/integrations?error=${errorCode}`)
+  return NextResponse.redirect(`${getAppBaseUrl()}/integrations?error=${errorCode}`)
 }
 
 function classifyNotionOAuthError(error: unknown) {
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
       workspaceName: tokens.workspace_name || null,
     })
 
-    const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/integrations?connected=notion`)
+    const response = NextResponse.redirect(`${getAppBaseUrl()}/integrations?connected=notion`)
     response.cookies.delete('oauth_state_notion')
     return response
   } catch (error) {

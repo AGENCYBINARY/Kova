@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { decryptSecret, encryptSecret } from '@/lib/security/crypto'
 import { prisma } from '@/lib/db/prisma'
 import type { IntegrationExecutionResult } from '@/lib/integrations/types'
@@ -68,12 +69,7 @@ function getNotionClientConfig() {
 }
 
 function getNotionRedirectUri() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
-  if (!appUrl) {
-    throw new Error('NEXT_PUBLIC_APP_URL is missing.')
-  }
-
-  return `${appUrl}/api/integrations/callback/notion`
+  return `${getAppBaseUrl()}/api/integrations/callback/notion`
 }
 
 export function buildNotionOAuthUrl(state: string) {

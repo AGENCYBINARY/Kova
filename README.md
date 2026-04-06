@@ -102,7 +102,7 @@ This project relies on local `.env` / `.env.local` files for:
 - `APP_ENCRYPTION_KEY`
 - Google OAuth
 - Notion OAuth
-- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_APP_URL` (HTTPS in production; **no trailing slash** — used for OAuth redirects and Stripe return URLs)
 - `OPENAI_API_KEY`
 - `KOVA_STANDALONE_SHARED_SECRET` if you run the standalone MCP server
 
