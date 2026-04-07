@@ -157,18 +157,21 @@ function mapBundleToSidebarIntegrations(data: SidebarBundle['integrations']) {
   ]
 }
 
-export function Sidebar() {
+export function Sidebar({ initialData }: { initialData?: SidebarBundle }) {
   const pathname = usePathname()
   const { user } = useUser()
   const { t } = useLang()
   const [mobileOpen, setMobileOpen] = useState(false)
   const userName = typeof user?.fullName === 'string' && user.fullName.trim() ? user.fullName : 'User'
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
-
   const { data, isLoading } = useSWR<SidebarBundle>(
     '/api/dashboard/sidebar',
     jsonFetcher,
-    dashboardSWRConfig
+    {
+      ...dashboardSWRConfig,
+      fallbackData: initialData,
+      revalidateOnMount: initialData ? false : dashboardSWRConfig.revalidateOnMount,
+    }
   )
 
   const integrations = useMemo(

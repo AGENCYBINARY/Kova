@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { expirePendingActions } from '@/lib/actions/pending-expiration'
+import { deferServerWork } from '@/lib/defer-server-work'
 import type { ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
 import type { Prisma } from '@prisma/client'
 import type { ConnectedContextSeed, ConnectedContextSource } from '@/lib/workspace-context/intents'
@@ -162,7 +163,7 @@ export function extractConnectedContextSeed(messages: PersistedMessageRecord[]):
 }
 
 export async function loadChatPageState(context: ChatContext) {
-  await expirePendingActions(context)
+  deferServerWork(expirePendingActions(context))
 
   const [messages, actions] = await Promise.all([
     prisma.message.findMany({
@@ -171,7 +172,13 @@ export async function loadChatPageState(context: ChatContext) {
         workspaceId: context.workspaceId,
       },
       orderBy: { createdAt: 'desc' },
-      take: 60,
+      take: 30,
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        metadata: true,
+      },
     }),
     prisma.action.findMany({
       where: {
@@ -180,7 +187,14 @@ export async function loadChatPageState(context: ChatContext) {
         status: 'pending',
       },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: 12,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        parameters: true,
+      },
     }),
   ])
 
@@ -202,7 +216,7 @@ export async function loadChatPageState(context: ChatContext) {
 }
 
 export async function loadChatRuntimeState(context: ChatContext) {
-  await expirePendingActions(context)
+  deferServerWork(expirePendingActions(context))
 
   const [previousMessagesRaw, pendingActionsRaw, recentActionsRaw] = await Promise.all([
     prisma.message.findMany({
@@ -212,6 +226,11 @@ export async function loadChatRuntimeState(context: ChatContext) {
       },
       orderBy: { createdAt: 'desc' },
       take: 20,
+      select: {
+        role: true,
+        content: true,
+        metadata: true,
+      },
     }),
     prisma.action.findMany({
       where: {
@@ -221,6 +240,17 @@ export async function loadChatRuntimeState(context: ChatContext) {
       },
       orderBy: { createdAt: 'desc' },
       take: 10,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        parameters: true,
+        status: true,
+        planId: true,
+        planStepIndex: true,
+        createdAt: true,
+      },
     }),
     prisma.action.findMany({
       where: {
@@ -232,6 +262,17 @@ export async function loadChatRuntimeState(context: ChatContext) {
       },
       orderBy: { updatedAt: 'desc' },
       take: 10,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        parameters: true,
+        status: true,
+        planId: true,
+        planStepIndex: true,
+        createdAt: true,
+      },
     }),
   ])
 

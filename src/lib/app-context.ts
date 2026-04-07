@@ -1,5 +1,6 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { Prisma } from '@prisma/client'
+import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/db/prisma'
 import { defaultAssistantProfile } from '@/lib/assistant/profile'
@@ -68,7 +69,7 @@ async function findDbUserByClerkId(clerkId: string): Promise<{ user: ResolvedDbU
   }
 }
 
-export async function getAppContext(): Promise<AppContextResult> {
+export const getAppContext = cache(async function getAppContext(): Promise<AppContextResult> {
   const { userId } = auth()
 
   if (!userId) {
@@ -232,4 +233,4 @@ export async function getAppContext(): Promise<AppContextResult> {
     workspaceId: activeWorkspaceId,
     workspaceRole: activeMembership?.role || 'viewer',
   }
-}
+})

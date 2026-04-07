@@ -13,9 +13,9 @@ export async function jsonFetcher<T = unknown>(url: string): Promise<T> {
 
 /** Sidebar, subscription: soft SWR — dedupe navigations, refresh on focus. */
 export const dashboardSWRConfig: SWRConfiguration = {
-  revalidateOnFocus: true,
-  revalidateIfStale: true,
-  dedupingInterval: 10_000,
+  revalidateOnFocus: false,
+  revalidateIfStale: false,
+  dedupingInterval: 60_000,
   errorRetryCount: 2,
 }
 

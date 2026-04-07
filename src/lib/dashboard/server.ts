@@ -325,6 +325,13 @@ export async function getSidebarBundle(): Promise<SidebarBundle> {
       where: scopeWhere,
       orderBy: [{ updatedAt: 'desc' }],
       take: 20,
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        metadata: true,
+        lastSyncAt: true,
+      },
     }),
     checkQuota(dbUserId),
   ])
@@ -512,6 +519,13 @@ export async function getIntegrationsPageData(): Promise<IntegrationsPageData> {
     where: scopeWhere,
     orderBy: [{ updatedAt: 'desc' }],
     take: 20,
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      metadata: true,
+      lastSyncAt: true,
+    },
   })
 
   return {
