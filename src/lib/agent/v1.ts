@@ -249,6 +249,112 @@ function proposalLeaksLiteralUserInstruction(proposal: AgentProposal) {
   )
 }
 
+function extractTemporalSignals(value: string) {
+  const normalized = normalizeInput(value)
+  const weekdays = new Set(
+    normalized.match(
+      /\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g
+    ) || []
+  )
+  const times = new Set<string>()
+  const glued = normalized.match(/\b(\d{1,2})\s*h(\d{2})\b/g) || []
+  for (const match of glued) {
+    const m = match.match(/(\d{1,2})\s*h(\d{2})/)
+    if (m) times.add(`${m[1]}h${m[2]}`)
+  }
+  const hourOnly = normalized.match(/\b(\d{1,2})\s*h(?:eures?)?\b/g) || []
+  for (const match of hourOnly) {
+    const m = match.match(/(\d{1,2})\s*h/)
+    if (m) times.add(`${m[1]}h`)
+  }
+  const colon = normalized.match(/\b(\d{1,2}):(\d{2})\b/g) || []
+  for (const match of colon) {
+    const m = match.match(/(\d{1,2}):(\d{2})/)
+    if (m) times.add(`${m[1]}h${m[2]}`)
+  }
+  return { weekdays, times }
+}
+
+function extractCalendarSignalsFromProposal(proposal: AgentProposal) {
+  if (proposal.type !== 'create_calendar_event' || typeof proposal.parameters.startTime !== 'string') {
+    return { weekdays: new Set<string>(), times: new Set<string>() }
+  }
+
+  const start = new Date(proposal.parameters.startTime)
+  if (Number.isNaN(start.getTime())) {
+    return { weekdays: new Set<string>(), times: new Set<string>() }
+  }
+
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    timeZone: 'Europe/Paris',
+  })
+    .format(start)
+    .toLowerCase()
+  const hour = new Intl.DateTimeFormat('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/Paris',
+  }).format(start)
+  return {
+    weekdays: new Set([weekday]),
+    times: new Set([hour.replace(':', 'h')]),
+  }
+}
+
+function setsOverlap(left: Set<string>, right: Set<string>) {
+  if (left.size === 0 || right.size === 0) {
+    return true
+  }
+  for (const value of Array.from(left)) {
+    if (right.has(value)) return true
+  }
+  return false
+}
+
+function proposalHasTemporalMismatchWithRequest(input: string, proposals: AgentProposal[]) {
+  const requestSignals = extractTemporalSignals(input)
+  if (requestSignals.weekdays.size === 0 && requestSignals.times.size === 0) {
+    return false
+  }
+
+  const calendarProposal = proposals.find((proposal) => proposal.type === 'create_calendar_event')
+  const calendarSignals = calendarProposal ? extractCalendarSignalsFromProposal(calendarProposal) : null
+
+  return proposals.some((proposal) => {
+    if (
+      proposal.type !== 'send_email' &&
+      proposal.type !== 'create_gmail_draft' &&
+      proposal.type !== 'update_gmail_draft'
+    ) {
+      return false
+    }
+    const emailSignals = extractTemporalSignals(
+      `${typeof proposal.parameters.subject === 'string' ? proposal.parameters.subject : ''}\n${typeof proposal.parameters.body === 'string' ? proposal.parameters.body : ''}`
+    )
+    if (emailSignals.weekdays.size === 0 && emailSignals.times.size === 0) {
+      return false
+    }
+
+    const conflictsWithRequest =
+      !setsOverlap(requestSignals.weekdays, emailSignals.weekdays) ||
+      !setsOverlap(requestSignals.times, emailSignals.times)
+    if (conflictsWithRequest) {
+      return true
+    }
+
+    if (!calendarSignals) {
+      return false
+    }
+
+    return (
+      !setsOverlap(calendarSignals.weekdays, emailSignals.weekdays) ||
+      !setsOverlap(calendarSignals.times, emailSignals.times)
+    )
+  })
+}
+
 function buildRoleDeniedResponse(language: 'fr' | 'en') {
   return language === 'en'
     ? 'I understood the request, but your workspace role is not allowed to use that tool.'
@@ -353,6 +459,168 @@ function isCalendarEmailMeetBundleProposal(proposals: AgentProposal[]) {
   )
 
   return hasCalendar && hasEmailWithMeetLink
+}
+
+function formatBundleCalendarLabel(iso: unknown, language: 'fr' | 'en') {
+  if (typeof iso !== 'string' || !iso.trim()) {
+    return null
+  }
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Paris',
+  }).format(date)
+}
+
+function alignCalendarEmailBundleProposals(params: {
+  input: string
+  language: 'fr' | 'en'
+  proposals: AgentProposal[]
+  knownContacts: KnownContact[]
+  assistantProfile?: AssistantProfile
+}) {
+  const calendarProposal = params.proposals.find((proposal) => proposal.type === 'create_calendar_event')
+  if (!calendarProposal) {
+    return params.proposals
+  }
+
+  const normalizedInput = normalizeInput(params.input)
+  const scheduleLabel = formatBundleCalendarLabel(calendarProposal.parameters.startTime, params.language)
+  const recipientName =
+    extractRecipientName(params.input) ||
+    extractGmailLookupNameQuery(params.input) ||
+    (typeof calendarProposal.parameters.resolvedContactName === 'string'
+      ? calendarProposal.parameters.resolvedContactName
+      : null)
+  const knownContact = recipientName ? findContactByName(recipientName, params.knownContacts) : null
+  const firstName = knownContact?.name?.split(/\s+/).filter(Boolean)[0] || ''
+  const signature =
+    params.assistantProfile?.signatureBlock?.trim() ||
+    params.assistantProfile?.signatureName ||
+    'Kova'
+  const isReschedule =
+    /\b(reporter|reporte|report|reschedule|decaler|décaler|annuler|cancel|move|postpone)\b/.test(normalizedInput)
+  const mentionsMeet = Boolean(calendarProposal.parameters.createMeetLink)
+
+  return params.proposals.map((proposal) => {
+    if (proposal.type !== 'send_email' && proposal.type !== 'create_gmail_draft') {
+      return proposal
+    }
+
+    const bodyHasMeetPlaceholder =
+      typeof proposal.parameters.body === 'string' &&
+      /\{\{\s*meet_?link\s*\}\}/i.test(proposal.parameters.body)
+    const shouldRealign =
+      bodyHasMeetPlaceholder || looksLikeCalendarEmailBundleIntent(params.input)
+
+    if (!shouldRealign) {
+      return proposal
+    }
+
+    const greeting =
+      params.language === 'en'
+        ? firstName ? `Hello ${firstName},` : 'Hello,'
+        : firstName ? `Bonjour ${firstName},` : 'Bonjour,'
+
+    const bodyLines =
+      params.language === 'en'
+        ? isReschedule
+          ? [
+              greeting,
+              '',
+              'I need to move our meeting.',
+              scheduleLabel ? `I’m proposing ${scheduleLabel} instead.` : 'I’m proposing an updated slot instead.',
+              mentionsMeet ? 'Here is the Google Meet link for the call:' : 'I’m sharing the updated invite here.',
+              ...(mentionsMeet ? ['{{meet_link}}'] : []),
+              '',
+              'Let me know if this works for you.',
+              '',
+              'Best regards,',
+              signature,
+            ]
+          : [
+              greeting,
+              '',
+              scheduleLabel ? `Here is the proposed slot: ${scheduleLabel}.` : 'Here is the proposed slot.',
+              mentionsMeet ? 'Here is the Google Meet link for the call:' : 'I’m sharing the invite here.',
+              ...(mentionsMeet ? ['{{meet_link}}'] : []),
+              '',
+              'Let me know if this works for you.',
+              '',
+              'Best regards,',
+              signature,
+            ]
+        : isReschedule
+          ? [
+              greeting,
+              '',
+              'Je dois décaler notre réunion.',
+              scheduleLabel ? `Je te propose ${scheduleLabel} à la place.` : 'Je te propose un créneau mis à jour.',
+              mentionsMeet ? 'Voici le lien Google Meet pour la visio :' : 'Je te partage l’invitation mise à jour ici.',
+              ...(mentionsMeet ? ['{{meet_link}}'] : []),
+              '',
+              'Dis-moi si ça te convient.',
+              '',
+              'Bien à toi,',
+              signature,
+            ]
+          : [
+              greeting,
+              '',
+              scheduleLabel ? `Je te propose ce créneau : ${scheduleLabel}.` : 'Je te propose ce créneau.',
+              mentionsMeet ? 'Voici le lien Google Meet pour la visio :' : 'Je te partage l’invitation ici.',
+              ...(mentionsMeet ? ['{{meet_link}}'] : []),
+              '',
+              'Dis-moi si ça te convient.',
+              '',
+              'Bien à toi,',
+              signature,
+            ]
+
+    return {
+      ...proposal,
+      title:
+        knownContact
+          ? proposal.type === 'create_gmail_draft'
+            ? `Create draft for ${knownContact.name}`
+            : `Send email to ${knownContact.name}`
+          : proposal.title,
+      description:
+        params.language === 'en'
+          ? 'Prepare the email that matches the calendar invite.'
+          : "Préparer l'email cohérent avec l'invitation agenda.",
+      parameters: {
+        ...proposal.parameters,
+        ...(knownContact
+          ? {
+              to: [knownContact.email],
+              resolvedContactName: knownContact.name,
+            }
+          : {}),
+        subject:
+          params.language === 'en'
+            ? isReschedule
+              ? 'Reschedule our meeting'
+              : typeof calendarProposal.parameters.title === 'string' && calendarProposal.parameters.title.trim()
+                ? calendarProposal.parameters.title
+                : 'Meeting details'
+            : isReschedule
+              ? 'Report de notre réunion'
+              : typeof calendarProposal.parameters.title === 'string' && calendarProposal.parameters.title.trim()
+                ? calendarProposal.parameters.title
+                : 'Détails de notre réunion',
+        body: bodyLines.join('\n'),
+      },
+      confidenceScore: Math.max(proposal.confidenceScore, knownContact ? 0.94 : 0.86),
+    }
+  })
 }
 
 function buildProposalBackedNarration(params: {
@@ -663,42 +931,51 @@ export async function runAgentTurn(
           confidenceScore: Math.min(proposal.confidenceScore, 0.45),
         }
       })
+      const presentationAlignedProposals = alignCalendarEmailBundleProposals({
+        input,
+        language,
+        proposals: safeProposals,
+        knownContacts,
+        assistantProfile,
+      })
 
       const allowProposals = isActionOrWorkflowRequest(input)
       const modelClaimsActionReadyWithoutProposal =
         allowProposals &&
         aiResult.proposals.length === 0 &&
-        safeProposals.length === 0 &&
+        presentationAlignedProposals.length === 0 &&
         responseClaimsActionReady(aiResult.response)
       const lowValueActionResponse =
         allowProposals &&
-        safeProposals.length === 0 &&
+        presentationAlignedProposals.length === 0 &&
         isLowValueAssistantResponse(aiResult.response)
       const onlyWeakCalendarProposalsRemain =
-        safeProposals.length > 0 &&
-        safeProposals.every(
+        presentationAlignedProposals.length > 0 &&
+        presentationAlignedProposals.every(
           (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
         )
-      const literalInstructionLeakDetected = safeProposals.some(proposalLeaksLiteralUserInstruction)
+      const literalInstructionLeakDetected = presentationAlignedProposals.some(proposalLeaksLiteralUserInstruction)
+      const temporalBundleMismatchDetected = proposalHasTemporalMismatchWithRequest(input, presentationAlignedProposals)
       const modelMissedCalendarEmailBundle =
         looksLikeCalendarEmailBundleIntent(input) &&
-        (!safeProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
-          !safeProposals.some(
+        (!presentationAlignedProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
+          !presentationAlignedProposals.some(
             (proposal) => proposal.type === 'send_email' || proposal.type === 'create_gmail_draft'
           ))
       const brokenMeetingBundleDetected =
         looksLikeMeetingEmailBundleRequest(input) &&
         (
-          !safeProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
-          !safeProposals.some(
+          !presentationAlignedProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
+          !presentationAlignedProposals.some(
             (proposal) => proposal.type === 'send_email' || proposal.type === 'create_gmail_draft'
           ) ||
-          literalInstructionLeakDetected
+          literalInstructionLeakDetected ||
+          temporalBundleMismatchDetected
         )
       const shouldRunFallbackResolution = shouldFallbackForModelFailure({
         allowProposals,
         aiProposalCount: aiResult.proposals.length,
-        safeProposalCount: safeProposals.length,
+        safeProposalCount: presentationAlignedProposals.length,
         modelClaimsActionReadyWithoutProposal,
         lowValueActionResponse,
         brokenMeetingBundleDetected: brokenMeetingBundleDetected || modelMissedCalendarEmailBundle,
@@ -741,7 +1018,7 @@ export async function runAgentTurn(
       const shouldUseFallbackResponse =
         allowProposals &&
         !hasDisambiguation &&
-        ((safeProposals.length === 0 && (fallbackForMissingOrInvalidModelProposal.length > 0 ||
+        ((presentationAlignedProposals.length === 0 && (fallbackForMissingOrInvalidModelProposal.length > 0 ||
           modelClaimsActionReadyWithoutProposal ||
           lowValueActionResponse ||
           onlyWeakCalendarProposalsRemain)) ||
@@ -750,14 +1027,14 @@ export async function runAgentTurn(
         allowProposals &&
         !hasDisambiguation &&
         fallbackForMissingOrInvalidModelProposal.length > 0 &&
-        (brokenMeetingBundleDetected || modelMissedCalendarEmailBundle || safeProposals.length === 0)
+        (brokenMeetingBundleDetected || modelMissedCalendarEmailBundle || presentationAlignedProposals.length === 0)
 
       const finalExecutableProposals =
         allowProposals && !hasDisambiguation
           ? (brokenMeetingBundleDetected || modelMissedCalendarEmailBundle) && fallbackForMissingOrInvalidModelProposal.length > 0
             ? fallbackForMissingOrInvalidModelProposal
-            : safeProposals.length > 0
-              ? safeProposals.filter(
+            : presentationAlignedProposals.length > 0
+              ? presentationAlignedProposals.filter(
                   (proposal) => !(proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
                 )
               : fallbackForMissingOrInvalidModelProposal
@@ -815,7 +1092,7 @@ export async function runAgentTurn(
         if (shouldUseFallbackResponse) {
           return deterministicFallback.response
         }
-        if (!allowProposals && safeProposals.length > 0) {
+        if (!allowProposals && presentationAlignedProposals.length > 0) {
           return buildConversationalResponse(input, assistantProfile)
         }
         return aiResult.response

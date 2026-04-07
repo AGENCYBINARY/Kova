@@ -542,6 +542,62 @@ test('model-first path can return an ordered multi-step plan across apps', async
   }
 })
 
+test('model bundle with conflicting day or time falls back to a consistent email/calendar pair', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response:
+      "C’est prêt. Je t’ai préparé l’agenda et le mail pour Maxime.",
+    proposals: [
+      {
+        type: 'create_calendar_event',
+        title: 'Create meeting invite for Maxime Neveu',
+        description: 'Create a Google Calendar event with optional Meet link.',
+        confidenceScore: 0.96,
+        parameters_json: JSON.stringify({
+          title: 'Réunion avec Maxime Neveu',
+          startTime: '2026-04-14T17:00:00.000Z',
+          endTime: '2026-04-14T17:30:00.000Z',
+          attendees: ['maxime.neveu@example.com'],
+          createMeetLink: true,
+        }),
+      },
+      {
+        type: 'send_email',
+        title: 'Send email to Maxime Neveu',
+        description: 'Send the follow-up email.',
+        confidenceScore: 0.95,
+        parameters_json: JSON.stringify({
+          to: ['maxime.neveu@example.com'],
+          subject: 'Rappel — réunion',
+          body: 'Bonjour Maxime,\n\nPetit rappel pour dimanche à 10h concernant notre rendez-vous.\n\nVoici le lien Google Meet pour la visio :\n{{meet_link}}\n',
+          resolvedContactName: 'Maxime Neveu',
+        }),
+      },
+    ],
+  })
+
+  try {
+    const result = await runAgentTurn(
+      'Rédige un mail à Maxime Neveu pour lui dire que notre réunion est mardi à 19h et prépare aussi l’invitation calendrier avec Google Meet.',
+      [],
+      [{ name: 'Maxime Neveu', email: 'maxime.neveu@example.com', aliases: ['Maxime', 'Neveu'] }]
+    )
+    const emailProposal = result.proposals.find((proposal) => proposal.type === 'send_email')
+    assert.ok(emailProposal)
+    assert.match(String(emailProposal?.parameters.body), /mardi/i)
+    assert.match(String(emailProposal?.parameters.body), /19h/i)
+    assert.doesNotMatch(String(emailProposal?.parameters.body), /dimanche|10h/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    } else {
+      delete process.env.OPENAI_API_KEY
+    }
+  }
+})
+
 test('simple greetings stay fast and do not hit the model even when OpenAI is configured', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   const originalFetch = global.fetch

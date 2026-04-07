@@ -640,12 +640,33 @@ function buildEmailSubject(input: string, profile?: AssistantProfile) {
 }
 
 function buildCalendarEventDescriptionFromInput(input: string, meetingTitle: string, profile?: AssistantProfile) {
-  const trimmed = input.trim()
   const lang = profile?.defaultLanguage === 'en' ? 'en' : 'fr'
+  const normalized = normalizeInput(input)
+  const isReschedule = /\b(reporter|reporte|report|reschedule|decaler|décaler|annuler|cancel|move)\b/.test(normalized)
+  const objective =
+    /objectif.*agence|agence.*objectif/.test(normalized)
+      ? lang === 'en'
+        ? 'Agency objectives review.'
+        : "Point sur les objectifs de l'agence."
+      : /client|prospect|partenaire/.test(normalized)
+        ? lang === 'en'
+          ? 'Client-facing meeting.'
+          : 'Réunion côté client.'
+        : lang === 'en'
+          ? 'Working session.'
+          : 'Session de travail.'
   if (lang === 'en') {
-    return [`Agenda: ${meetingTitle}`, '', 'Context from the request:', trimmed].join('\n').slice(0, 8000)
+    return [
+      `Agenda: ${meetingTitle}`,
+      objective,
+      isReschedule ? 'This invite reflects the updated schedule.' : 'Please confirm if this slot works for you.',
+    ].join('\n').slice(0, 8000)
   }
-  return [`Ordre du jour : ${meetingTitle}`, '', 'Demande initiale :', trimmed].join('\n').slice(0, 8000)
+  return [
+    `Ordre du jour : ${meetingTitle}`,
+    objective,
+    isReschedule ? 'Cette invitation correspond au créneau mis à jour.' : 'Merci de confirmer si ce créneau te convient.',
+  ].join('\n').slice(0, 8000)
 }
 
 export function buildCalendarProposal(input: string, profile?: AssistantProfile, contact?: KnownContact | null): AgentProposal {
@@ -684,10 +705,6 @@ export function buildCalendarProposal(input: string, profile?: AssistantProfile,
       attendees: attendeeEmails,
       createMeetLink: requestNeedsMeetLink(input),
       description: richDescription,
-      notes:
-        profile?.defaultLanguage === 'en'
-          ? `Kova · default duration ${durationMinutes} min · buffer ${profile?.schedulingBufferMinutes || 0} min · Google Meet when applicable`
-          : `Kova · durée ${durationMinutes} min · buffer ${profile?.schedulingBufferMinutes || 0} min · Google Meet si pertinent`,
     },
     confidenceScore: 0.9,
   }
@@ -733,6 +750,65 @@ function summarizeMeetingReminderFromInput(input: string, language: 'fr' | 'en')
   return `Petit rappel${when ? ` pour ${when}` : ''} concernant ${topic}.`
 }
 
+function extractWeekdayMentions(input: string) {
+  const normalized = normalizeInput(input)
+  const matches = normalized.match(
+    /\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g
+  )
+  return matches ? Array.from(new Set(matches)) : []
+}
+
+function extractTimeLabel(input: string) {
+  const normalized = normalizeInput(input)
+  const glued = normalized.match(/\b(\d{1,2})\s*h(\d{2})\b/)
+  if (glued) {
+    return `${glued[1]}h${glued[2]}`
+  }
+  const hourOnly = normalized.match(/\b(\d{1,2})\s*h(?:eures?)?\b/)
+  if (hourOnly) {
+    return `${hourOnly[1]}h`
+  }
+  const colon = normalized.match(/\b(\d{1,2}):(\d{2})\b/)
+  if (colon) {
+    return `${colon[1]}h${colon[2]}`
+  }
+  return null
+}
+
+function buildMeetingRescheduleEmailCopy(input: string, language: 'fr' | 'en') {
+  const normalized = normalizeInput(input)
+  const weekdays = extractWeekdayMentions(input)
+  const originalDay = weekdays[0] || null
+  const targetDay = weekdays.length >= 2 ? weekdays[weekdays.length - 1] : weekdays[0] || null
+  const timeLabel = extractTimeLabel(input)
+
+  if (language === 'en') {
+    const originalSlot = originalDay ? ` planned for ${originalDay}` : ''
+    const targetSlot = targetDay ? `${targetDay}${timeLabel ? ` at ${timeLabel.replace('h', ':')}` : ''}` : 'a new slot'
+    return {
+      subject: targetDay ? `Reschedule our meeting to ${targetSlot}` : 'Reschedule our meeting',
+      bodyLines: [
+        `I need to move our meeting${originalSlot}.`,
+        `Could we shift it to ${targetSlot}?`,
+        'I am sending an updated calendar invite with the Google Meet link.',
+        'Let me know if that works for you.',
+      ],
+    }
+  }
+
+  const originalSlot = originalDay ? ` prévue ${originalDay}` : ''
+  const targetSlot = targetDay ? `${targetDay}${timeLabel ? ` à ${timeLabel}` : ''}` : 'un autre créneau'
+  return {
+    subject: targetDay ? `Report de notre réunion à ${targetSlot}` : 'Report de notre réunion',
+    bodyLines: [
+      `Je dois décaler notre réunion${originalSlot}.`,
+      `Je te propose de la reporter à ${targetSlot}.`,
+      'Je t’envoie une nouvelle invitation avec le lien Google Meet.',
+      'Dis-moi si ce créneau te convient.',
+    ],
+  }
+}
+
 export function buildMeetingEmailFollowupProposal(
   input: string,
   contact: KnownContact | null,
@@ -742,29 +818,34 @@ export function buildMeetingEmailFollowupProposal(
   const first = contact?.name?.split(/\s+/).filter(Boolean)[0] || ''
   const greeting =
     language === 'en' ? (first ? `Hello ${first},` : 'Hello,') : first ? `Bonjour ${first},` : 'Bonjour,'
-  const reminder = summarizeMeetingReminderFromInput(input, language)
+  const looksLikeReschedule =
+    /\b(reporter|decaler|décaler|deplace|déplace|reprogrammer|reschedule|move|postpone|cancel|annuler|annule|oblige d annuler|obligé d'annuler)\b/.test(
+      normalizeInput(input)
+    )
+  const rescheduleCopy = looksLikeReschedule ? buildMeetingRescheduleEmailCopy(input, language) : null
+  const reminder = rescheduleCopy ? null : summarizeMeetingReminderFromInput(input, language)
   const body =
     language === 'en'
       ? [
           greeting,
           '',
-          reminder,
+          ...(rescheduleCopy ? rescheduleCopy.bodyLines : [reminder || '']),
           '',
           'Here is the Google Meet link for the call:',
           '{{meet_link}}',
           '',
-          'See you then,',
+          rescheduleCopy ? 'Best,' : 'See you then,',
           profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova',
         ].join('\n')
       : [
           greeting,
           '',
-          reminder,
+          ...(rescheduleCopy ? rescheduleCopy.bodyLines : [reminder || '']),
           '',
           'Voici le lien Google Meet pour la visio :',
           '{{meet_link}}',
           '',
-          'À tout à l’heure,',
+          rescheduleCopy ? 'Bien à toi,' : 'À tout à l’heure,',
           profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova',
         ].join('\n')
 
@@ -775,9 +856,11 @@ export function buildMeetingEmailFollowupProposal(
     parameters: {
       to: contact ? [contact.email] : ['recipient@example.com'],
       subject:
-        language === 'en'
-          ? 'Meeting reminder'
-          : /objectif/.test(normalizeInput(input)) && /agence/.test(normalizeInput(input))
+        rescheduleCopy
+          ? rescheduleCopy.subject
+          : language === 'en'
+            ? 'Meeting reminder'
+            : /objectif/.test(normalizeInput(input)) && /agence/.test(normalizeInput(input))
             ? "Rappel — objectifs de l'agence"
             : 'Rappel — réunion',
       body,

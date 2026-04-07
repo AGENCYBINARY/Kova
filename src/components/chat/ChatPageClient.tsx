@@ -150,25 +150,27 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
         setMessages((previous) => [...previous, data.assistantMessage])
       }
       if (Array.isArray(data.proposals) && data.proposals.length > 0) {
-        setMessages((previous) => [
-          ...previous,
-          {
-            id: `review-${Date.now()}`,
-            role: 'assistant',
-            content:
-              (data.effectiveExecutionMode || params.executionMode) === 'ask'
-                ? params.executionMode === 'auto'
-                  ? lang === 'en'
-                    ? 'I prepared the action for review because a manual check is still required.'
-                    : "J'ai préparé l'action pour révision car une vérification manuelle est encore requise."
+        if (!data.assistantMessage) {
+          setMessages((previous) => [
+            ...previous,
+            {
+              id: `review-${Date.now()}`,
+              role: 'assistant',
+              content:
+                (data.effectiveExecutionMode || params.executionMode) === 'ask'
+                  ? params.executionMode === 'auto'
+                    ? lang === 'en'
+                      ? 'I prepared the action for review because a manual check is still required.'
+                      : "J'ai préparé l'action pour révision car une vérification manuelle est encore requise."
+                    : lang === 'en'
+                      ? 'Ready for review.'
+                      : 'Prêt à valider.'
                   : lang === 'en'
-                    ? 'Action ready. Review it and approve when you want me to send it.'
-                    : "C’est prêt. Vérifie les détails et approuve quand tu veux que je l’exécute."
-                : lang === 'en'
-                  ? 'Done. The action was executed automatically.'
-                  : "Fait. L'action a été exécutée automatiquement.",
-          },
-        ])
+                    ? 'Done. The action was executed automatically.'
+                    : "Fait. L'action a été exécutée automatiquement.",
+            },
+          ])
+        }
         setProposals((previous) => [...previous, ...data.proposals])
       }
       if (Array.isArray(data.executionMessages) && data.executionMessages.length > 0) {

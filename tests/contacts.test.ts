@@ -45,6 +45,12 @@ test('extractNameNearEmail and extractRecipientName capture likely recipient nam
     ),
     'Tristan Massarelli'
   )
+  assert.equal(
+    extractRecipientName(
+      "est-ce que tu peux me rédiger un mail s'il te plaît pour envoyer à Maxime neveu et lui dire que j'ai un rendez-vous jeudi donc on va être obligé d'annuler notre réunion pour la reporter à vendredi si tu peux également lui mettre un événement calendrier et dans le mail et dans l'événement calendrier lui mettre une réunion Google meet"
+    ),
+    'Maxime Neveu'
+  )
   assert.equal(extractGmailLookupNameQuery('trouve toi le mail de tristan massarelli regarde mes mails envoyes'), 'Tristan Massarelli')
   assert.equal(extractGmailLookupNameQuery('cherche le mail de Marie Dupont sur gmail'), 'Marie Dupont')
   assert.equal(extractGmailLookupNameQuery('trouve le mail de Madame Paula Massarelli dans Gmail'), 'Paula Massarelli')
