@@ -21,6 +21,8 @@ import {
 } from '../src/lib/integrations/google'
 import {
   getValidNotionAccessToken,
+  pickSafeNotionPropertyUpdate,
+  readNotionPageSchema,
   searchNotionDatabases,
   searchNotionPages,
 } from '../src/lib/integrations/notion'
@@ -702,23 +704,17 @@ async function main() {
         const databases = await searchNotionDatabases(accessToken, { query: defaults.notionDatabaseQuery, maxResults: 2 })
         const firstDatabase = databases[0]
         if (firstDatabase?.id) {
-          const result = await executeAgentToolRequest({
+          const createOutput = await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
             actionType: 'create_notion_page',
             parameters: {
               title: `Live Runner ${new Date().toISOString()}`,
               content: 'Created by Kova integration live runner.',
               parentDatabaseId: firstDatabase.id,
-              properties: {
-                Status: 'Todo',
-              },
             },
-            requireApproval: false,
-            context: { workspaceId: target.workspaceId, userId: target.userId },
           })
-          const createdPageId =
-            result.mode === 'executed' && typeof result.execution.output.pageId === 'string'
-              ? result.execution.output.pageId
-              : null
+          const createdPageId = typeof createOutput.pageId === 'string' ? createOutput.pageId : null
           if (!createdPageId) {
             throw new Error('Notion create did not return a pageId.')
           }
@@ -743,16 +739,22 @@ async function main() {
         const pages = await searchNotionPages(accessToken, { query: defaults.notionPageQuery, maxResults: 2 })
         const firstPage = pages[0]
         if (firstPage?.id) {
-          await executeAgentToolRequest({
+          const pageSchema = await readNotionPageSchema(accessToken, firstPage.id)
+          const safeProperties = pickSafeNotionPropertyUpdate(
+            pageSchema.properties,
+            `Kova Live ${new Date().toISOString()}`
+          )
+          if (!safeProperties) {
+            throw new Error('No safe writable property found on the selected Notion page.')
+          }
+          await executeLiveAction({
+            workspaceId: target.workspaceId,
+            userId: target.userId,
             actionType: 'update_notion_page_properties',
             parameters: {
               pageId: firstPage.id,
-              properties: {
-                Status: 'Done',
-              },
+              properties: safeProperties,
             },
-            requireApproval: false,
-            context: { workspaceId: target.workspaceId, userId: target.userId },
           })
           results.push({ name: 'notion-properties-execute', ok: true, detail: `page ${firstPage.id} updated` })
         }

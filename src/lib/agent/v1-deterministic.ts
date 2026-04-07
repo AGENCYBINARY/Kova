@@ -246,6 +246,10 @@ function isGreetingOnly(input: string) {
   return greetingOnlyPattern.test(input.trim())
 }
 
+export function isSimpleGreetingInput(input: string) {
+  return isGreetingOnly(input)
+}
+
 export function isConversationalInput(input: string) {
   const normalized = input.trim()
   if (!normalized) return true

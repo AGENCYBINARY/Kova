@@ -837,3 +837,109 @@ Honest product state after this slice:
 - Cross-app meeting bundles are behaving the way the product should behave in live prod validation.
 - Notion still remains a validation gap on the current production live target because that target does not have Notion connected in Neon.
 - The product is now meaningfully closer to “assistant-first” quality, but it is still not a fully general long-horizon stateful agent with arbitrary branching, memory repair, and exhaustive multi-app execution coverage.
+
+## Continuity Update — 2026-04-07 (OpenAI runtime fix + stronger agent quality gate)
+
+This slice closed a root-cause bug that made Kova look “deterministic first” even when an OpenAI key was present.
+
+What was actually broken:
+
+- The OpenAI Responses structured-output schema in [src/lib/ai/client.ts](/Users/agencybinary/Documents/CODEX/src/lib/ai/client.ts) was invalid for strict JSON Schema mode.
+- Result: the OpenAI call could start, but the structured response could fail before Kova got usable model output, which pushed turns back into deterministic rescue behavior.
+- Symptom seen from product side: the assistant felt like a router, and OpenAI quota usage looked inconsistent or absent.
+
+What changed:
+
+- The primary model is now explicitly locked to `gpt-5.4` in [src/lib/ai/client.ts](/Users/agencybinary/Documents/CODEX/src/lib/ai/client.ts), with fallback candidates kept behind it.
+- Structured plan fields are now emitted in a strict-schema compatible shape, including nullable fields for optional plan controls.
+- Plan parsing is normalized into clean [AgentPlanStep](/Users/agencybinary/Documents/CODEX/src/lib/agent/planning.ts) objects before the rest of the runtime sees them.
+- A direct runtime diagnostic now exists in [scripts/openai-diagnose.ts](/Users/agencybinary/Documents/CODEX/scripts/openai-diagnose.ts), exposed through:
+  - `npm run openai:diag`
+  - `npm run openai:diag:prod`
+- The agent now blocks partial calendar+email bundles when the scheduling slot is incomplete:
+  - it asks one precise clarification instead of inventing a default meeting time
+  - this logic lives in [src/lib/agent/v1.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1.ts)
+
+Product impact:
+
+- Simple greetings now stay instant and conversational.
+- Real work requests route through the model with a stronger reasoning path.
+- Incomplete multi-app scheduling requests now stop cleanly on the missing fact instead of fabricating a broken email/calendar pack.
+- OpenAI usage is now observable in the actual runtime logs via `{"kova":"openai.usage", ...}` entries.
+
+Validation baseline for this slice:
+
+- `npm run openai:diag` -> pass
+- `npm run openai:diag:prod` -> pass
+- `npm test` -> pass (`142/142` at the point of the schema/runtime fix; full suite rerun required after any later edits in the same session)
+- `npm run lint` -> pass
+- `npm run build` -> pass
+- `npm run integration:smoke:prod` -> pass on 6 connected integrations (`gmail`, `calendar`, `google_docs`, `google_drive`, `notion`, `google_photos`)
+- `npm run integration:live:prod` -> pass (`LIVE_RUNNER_OK 24`)
+
+Honest note:
+
+- The live execute runner is the final product-level gate for this slice because it is the best proof that the assistant can still go from reasoning to action after the OpenAI runtime fix.
+- Cached token usage is expected on repeated prompts, so the OpenAI dashboard can look lower than raw prompt size alone would suggest.
+
+## Continuity Update — 2026-04-07 (final AI/runtime audit + full live execute pass)
+
+This pass closes the loop on the user's core concern: "does Kova really call OpenAI, or is it acting like a templated router?"
+
+What was verified for real:
+
+- `OPENAI_API_KEY` is correctly wired in both local and production runtime environments.
+- Kova now uses `gpt-5.4` as the locked primary analysis/planning model in [src/lib/ai/client.ts](/Users/agencybinary/Documents/CODEX/src/lib/ai/client.ts).
+- The runtime falls back to `gpt-4.1` on some turns when needed, which is visible in live logs and is intentional resilience, not evidence of a misconfiguration.
+- The direct diagnostics in [scripts/openai-diagnose.ts](/Users/agencybinary/Documents/CODEX/scripts/openai-diagnose.ts) passed in both local and prod:
+  - `npm run openai:diag`
+  - `npm run openai:diag:prod`
+- Runtime proof now exists as repeated `{"kova":"openai.usage", ...}` lines in tests and live prod validation.
+
+Product-quality fixes made in this pass:
+
+- The strict structured-output schema bug in [src/lib/ai/client.ts](/Users/agencybinary/Documents/CODEX/src/lib/ai/client.ts) was fixed so the model path stops failing closed into deterministic rescue behavior.
+- Simple greetings now stay fast and conversational without paying the cost of unnecessary deep planning.
+- Incomplete calendar + email bundles no longer fabricate a broken plan; they ask for the missing time instead.
+- Calendar update/delete previews no longer get blocked by the "missing time" clarification guard.
+- The Notion live execute harness no longer assumes a universal `Status` property. It now:
+  - creates database pages with the minimum safe payload
+  - chooses a genuinely writable property for page updates based on the actual page schema
+
+Files materially changed in this slice:
+
+- [src/lib/ai/client.ts](/Users/agencybinary/Documents/CODEX/src/lib/ai/client.ts)
+- [src/lib/agent/v1.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1.ts)
+- [src/lib/agent/v1-deterministic.ts](/Users/agencybinary/Documents/CODEX/src/lib/agent/v1-deterministic.ts)
+- [src/lib/integrations/notion.ts](/Users/agencybinary/Documents/CODEX/src/lib/integrations/notion.ts)
+- [scripts/integration-live-runner.ts](/Users/agencybinary/Documents/CODEX/scripts/integration-live-runner.ts)
+- [scripts/openai-diagnose.ts](/Users/agencybinary/Documents/CODEX/scripts/openai-diagnose.ts)
+- [tests/agent-actions.test.ts](/Users/agencybinary/Documents/CODEX/tests/agent-actions.test.ts)
+- [tests/ai-client.test.ts](/Users/agencybinary/Documents/CODEX/tests/ai-client.test.ts)
+
+Final validation for this pass:
+
+- `npm test` -> pass (`145/145`)
+- `npm run lint` -> pass
+- `npm run build` -> pass
+- `npm run openai:diag` -> pass
+- `npm run openai:diag:prod` -> pass
+- `npm run integration:smoke:prod` -> pass on the configured production live target
+- `npm run integration:live:execute:prod` -> pass end-to-end on:
+  - Gmail
+  - Calendar
+  - Google Drive
+  - Google Docs
+  - Notion
+  - Google Photos
+
+Honest product verdict after this pass:
+
+- Kova is now demonstrably using OpenAI as the brain of the assistant instead of only looking "AI-flavored" on top of rigid heuristics.
+- The product is stronger, more credible, and more publishable than before.
+- It is still not an "ultimate" agent in the absolute sense:
+  - some heuristic safety nets remain by design
+  - some responses are still more operational than deeply elegant
+  - the workflow engine is durable, but not yet a fully general long-horizon state machine
+- But the key threshold has been crossed:
+  - the SaaS is now genuinely AI-driven, integration-capable, and operational in real production validation.

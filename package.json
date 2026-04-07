@@ -18,6 +18,8 @@
     "integration:live:setup": "KOVA_LIVE_WRITE_ENV=true tsx --env-file-if-exists=.env.vercel.local scripts/run-integration-live.ts --setup-only",
     "integration:live:setup:prod": "KOVA_LIVE_WRITE_ENV=true tsx --env-file-if-exists=.env.vercel.prod.local scripts/run-integration-live.ts --setup-only",
     "integration:photos:diag:prod": "tsx --env-file-if-exists=.env.vercel.prod.local scripts/google-photos-diagnose.ts",
+    "openai:diag": "tsx --env-file-if-exists=.env.local scripts/openai-diagnose.ts --workspace",
+    "openai:diag:prod": "tsx --env-file-if-exists=.env.vercel.prod.local scripts/openai-diagnose.ts --workspace",
     "logs:prune": "tsx scripts/prune-execution-logs.ts",
     "db:reconcile": "tsx scripts/reconcile-neon-data.ts",
     "mcp:standalone": "tsx src/lib/mcp/standalone-server.ts",

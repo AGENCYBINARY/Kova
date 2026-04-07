@@ -62,3 +62,39 @@ test('structured response parser decodes parameters_json payloads', () => {
     body: 'Bonjour Alice',
   })
 })
+
+test('structured response parser accepts strict-schema null plan fields and normalizes them away', () => {
+  const parsed = parseStructuredAnalysisResponse({
+    response: 'Je te l’ai préparé en deux temps.',
+    plan: [
+      {
+        title: 'Préparer le mail',
+        detail: 'Je rédige le message avant envoi.',
+        app: 'Gmail',
+        kind: null,
+        waitUntil: null,
+        retryLimit: null,
+        retryBackoffSeconds: null,
+        conditionType: 'always',
+        conditionKey: null,
+      },
+    ],
+    proposals: [
+      {
+        type: 'create_gmail_draft',
+        title: 'Create Gmail draft',
+        description: 'Prepare the draft.',
+        confidenceScore: 0.9,
+        parameters_json: '{"to":["alice@example.com"],"subject":"Sujet","body":"Bonjour Alice"}',
+      },
+    ],
+  })
+
+  assert.deepEqual(parsed.plan, [
+    {
+      title: 'Préparer le mail',
+      detail: 'Je rédige le message avant envoi.',
+      app: 'Gmail',
+    },
+  ])
+})

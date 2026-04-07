@@ -381,6 +381,50 @@ async function fetchNotionPage(token: string, pageId: string) {
   }>
 }
 
+export async function readNotionPageSchema(token: string, pageId: string) {
+  const page = await fetchNotionPage(token, pageId)
+  return {
+    id: page.id,
+    parent: page.parent,
+    properties: page.properties || {},
+    url: page.url || null,
+  }
+}
+
+export function pickSafeNotionPropertyUpdate(
+  properties: Record<string, { type?: string }> | undefined,
+  title: string
+): Record<string, unknown> | null {
+  if (!properties) {
+    return null
+  }
+
+  const titlePropertyName = findNotionTitlePropertyName(properties)
+  if (titlePropertyName && properties[titlePropertyName]?.type === 'title') {
+    return {
+      [titlePropertyName]: title,
+    }
+  }
+
+  for (const [name, property] of Object.entries(properties)) {
+    if (property?.type === 'rich_text') {
+      return {
+        [name]: title,
+      }
+    }
+  }
+
+  for (const [name, property] of Object.entries(properties)) {
+    if (property?.type === 'checkbox') {
+      return {
+        [name]: true,
+      }
+    }
+  }
+
+  return null
+}
+
 function findNotionTitlePropertyName(properties: Record<string, { type?: string }> | undefined) {
   if (!properties) {
     return 'title'

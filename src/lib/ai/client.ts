@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import type { AgentPlanStep } from '@/lib/agent/planning'
 
-/** Locked model for Kova chat + structured analysis (`analyzeUserRequest`). Ignores `OPENAI_MODEL`. */
-export const KOVA_CHAT_MODEL = 'gpt-4.1' as const
+/** Locked primary brain for Kova chat + structured analysis (`analyzeUserRequest`). Ignores `OPENAI_MODEL`. */
+export const KOVA_CHAT_MODEL = 'gpt-5.4' as const
 
 /** OpenAI key: primary `OPENAI_API_KEY`, optional alias `OPENAI_KEY` (common misconfiguration). */
 export function resolveOpenAiApiKey(): string | undefined {
@@ -57,7 +57,54 @@ interface AnalyzeOptions {
 
 const OPENAI_REQUEST_TIMEOUT_MS = Number(process.env.KOVA_OPENAI_TIMEOUT_MS) || 45_000
 
-function resolveMaxOutputTokens(): number {
+type AnalysisComplexity = 'light' | 'standard' | 'deep'
+
+function normalizeForAnalysis(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function inferAnalysisComplexity(params: {
+  userMessage: string
+  behaviorMode?: AnalyzeOptions['behaviorMode']
+  toolCount: number
+  conversationTurnCount: number
+}) {
+  const normalized = normalizeForAnalysis(params.userMessage)
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length
+  const explicitAppMentions = ['gmail', 'calendar', 'calendrier', 'docs', 'drive', 'notion', 'photos']
+    .filter((token) => normalized.includes(token))
+    .length
+  const looksLikeWorkflow =
+    /(puis|ensuite|apres|après|et aussi|et ensuite|en meme temps|en même temps|same as before|meme objectif|meme modele|with the link|avec le lien)/.test(
+      normalized
+    )
+  const looksLikeActionRequest =
+    /(mail|email|gmail|calendar|calendrier|docs|drive|notion|photos|meeting|reunion|réunion|rdv|invite|draft|brouillon|create|cree|crée|send|envoie|envoyer|archive|share|move|rename|planifie|programme|prepare|prépare)/.test(
+      normalized
+    )
+
+  if (params.behaviorMode === 'conversation' && wordCount <= 8 && !looksLikeActionRequest) {
+    return 'light'
+  }
+
+  if (
+    explicitAppMentions >= 2 ||
+    looksLikeWorkflow ||
+    wordCount >= 35 ||
+    params.toolCount >= 18 ||
+    params.conversationTurnCount >= 8
+  ) {
+    return 'deep'
+  }
+
+  return 'standard'
+}
+
+function resolveMaxOutputTokens(complexity: AnalysisComplexity): number {
   const raw = process.env.KOVA_OPENAI_MAX_OUTPUT_TOKENS?.trim()
   if (raw) {
     const n = Number.parseInt(raw, 10)
@@ -65,8 +112,11 @@ function resolveMaxOutputTokens(): number {
       return n
     }
   }
+  if (complexity === 'light') {
+    return 512
+  }
   /** Default high enough for long JSON proposals + polished copy (was 1200, too tight for quality). */
-  return 4096
+  return complexity === 'deep' ? 6144 : 4096
 }
 
 type ResponsesApiUsage = {
@@ -89,6 +139,37 @@ function resolveSamplingTemperature(model: string): number {
     }
   }
   return 0.35
+}
+
+function resolveReasoningEffortForMode(mode?: AnalyzeOptions['behaviorMode'], complexity: AnalysisComplexity = 'standard') {
+  const configured = process.env.OPENAI_REASONING_EFFORT?.trim()
+  if (
+    configured === 'none' ||
+    configured === 'minimal' ||
+    configured === 'low' ||
+    configured === 'medium' ||
+    configured === 'high'
+  ) {
+    return configured
+  }
+
+  if (complexity === 'light') {
+    return 'none'
+  }
+
+  if (complexity === 'deep') {
+    return 'medium'
+  }
+
+  if (mode === 'conversation') {
+    return 'minimal'
+  }
+
+  if (mode === 'connected_read') {
+    return 'low'
+  }
+
+  return 'medium'
 }
 
 function logOpenAiUsage(params: {
@@ -126,15 +207,13 @@ export interface ActionProposal {
 const normalizedPlanStepSchema = z.object({
   title: z.string().min(1),
   detail: z.string().min(1),
-  app: z.string().min(1).optional(),
-  kind: z.enum(['action', 'wait']).optional(),
-  waitUntil: z.string().min(1).optional(),
-  retryLimit: z.number().int().min(0).max(5).optional(),
-  retryBackoffSeconds: z.number().int().min(30).max(86_400).optional(),
-  condition: z.object({
-    type: z.enum(['always', 'if_previous_step_succeeded', 'if_previous_output_exists']),
-    key: z.string().min(1).optional(),
-  }).optional(),
+  app: z.string().min(1).nullable().optional(),
+  kind: z.enum(['action', 'wait']).nullable().optional(),
+  waitUntil: z.string().min(1).nullable().optional(),
+  retryLimit: z.number().int().min(0).max(5).nullable().optional(),
+  retryBackoffSeconds: z.number().int().min(30).max(86_400).nullable().optional(),
+  conditionType: z.enum(['always', 'if_previous_step_succeeded', 'if_previous_output_exists']).nullable().optional(),
+  conditionKey: z.string().min(1).nullable().optional(),
 })
 
 const normalizedActionProposalSchema = z.object({
@@ -162,15 +241,13 @@ const rawActionProposalSchema = z.object({
 const rawPlanStepSchema = z.object({
   title: z.string().min(1),
   detail: z.string().min(1),
-  app: z.string().min(1).optional(),
-  kind: z.enum(['action', 'wait']).optional(),
-  waitUntil: z.string().min(1).optional(),
-  retryLimit: z.number().int().min(0).max(5).optional(),
-  retryBackoffSeconds: z.number().int().min(30).max(86_400).optional(),
-  condition: z.object({
-    type: z.enum(['always', 'if_previous_step_succeeded', 'if_previous_output_exists']),
-    key: z.string().min(1).optional(),
-  }).optional(),
+  app: z.string().min(1).nullable().optional(),
+  kind: z.enum(['action', 'wait']).nullable().optional(),
+  waitUntil: z.string().min(1).nullable().optional(),
+  retryLimit: z.number().int().min(0).max(5).nullable().optional(),
+  retryBackoffSeconds: z.number().int().min(30).max(86_400).nullable().optional(),
+  conditionType: z.enum(['always', 'if_previous_step_succeeded', 'if_previous_output_exists']).nullable().optional(),
+  conditionKey: z.string().min(1).nullable().optional(),
 })
 
 const rawAnalysisResponseSchema = z.object({
@@ -223,7 +300,6 @@ const responseFormatJsonSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['title', 'detail'],
         properties: {
           title: {
             type: 'string',
@@ -232,39 +308,68 @@ const responseFormatJsonSchema = {
             type: 'string',
           },
           app: {
-            type: 'string',
+            anyOf: [
+              { type: 'string' },
+              { type: 'null' },
+            ],
           },
           kind: {
-            type: 'string',
-            enum: ['action', 'wait'],
+            anyOf: [
+              {
+                type: 'string',
+                enum: ['action', 'wait'],
+              },
+              { type: 'null' },
+            ],
           },
           waitUntil: {
-            type: 'string',
+            anyOf: [
+              { type: 'string' },
+              { type: 'null' },
+            ],
             description: 'Optional ISO datetime. Use this when the workflow should pause until a specific time before continuing.',
           },
           retryLimit: {
-            type: 'integer',
+            anyOf: [
+              { type: 'integer' },
+              { type: 'null' },
+            ],
             description: 'Optional retry budget for this step when a provider error is transient.',
           },
           retryBackoffSeconds: {
-            type: 'integer',
+            anyOf: [
+              { type: 'integer' },
+              { type: 'null' },
+            ],
             description: 'Optional delay before retrying a transient provider failure on this step.',
           },
-          condition: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['type'],
-            properties: {
-              type: {
+          conditionType: {
+            anyOf: [
+              {
                 type: 'string',
                 enum: ['always', 'if_previous_step_succeeded', 'if_previous_output_exists'],
               },
-              key: {
-                type: 'string',
-              },
-            },
+              { type: 'null' },
+            ],
+          },
+          conditionKey: {
+            anyOf: [
+              { type: 'string' },
+              { type: 'null' },
+            ],
           },
         },
+        required: [
+          'title',
+          'detail',
+          'app',
+          'kind',
+          'waitUntil',
+          'retryLimit',
+          'retryBackoffSeconds',
+          'conditionType',
+          'conditionKey',
+        ],
       },
     },
   },
@@ -285,10 +390,48 @@ function parseParametersJson(value: string) {
   }
 }
 
-export function parseStructuredAnalysisResponse(payload: unknown) {
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as T
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .map(([key, item]) => [key, stripUndefinedDeep(item)] as const)
+    return Object.fromEntries(entries) as T
+  }
+
+  return value
+}
+
+function normalizePlanStep(step: z.infer<typeof rawPlanStepSchema>): AgentPlanStep {
+  return stripUndefinedDeep({
+    title: step.title,
+    detail: step.detail,
+    app: step.app ?? undefined,
+    kind: step.kind ?? undefined,
+    waitUntil: step.waitUntil ?? undefined,
+    retryLimit: step.retryLimit ?? undefined,
+    retryBackoffSeconds: step.retryBackoffSeconds ?? undefined,
+    condition:
+      step.conditionType && step.conditionType !== 'always'
+        ? {
+            type: step.conditionType,
+            key: step.conditionKey ?? undefined,
+          }
+        : undefined,
+  }) as AgentPlanStep
+}
+
+export function parseStructuredAnalysisResponse(payload: unknown): {
+  response: string
+  proposals: ActionProposal[]
+  plan: AgentPlanStep[]
+} {
   const raw = rawAnalysisResponseSchema.parse(payload)
 
-  return normalizedAnalysisResponseSchema.parse({
+  return {
     response: raw.response,
     proposals: raw.proposals.map((proposal) => ({
       type: proposal.type,
@@ -297,8 +440,8 @@ export function parseStructuredAnalysisResponse(payload: unknown) {
       confidenceScore: proposal.confidenceScore,
       parameters: parseParametersJson(proposal.parameters_json),
     })),
-    plan: raw.plan,
-  })
+    plan: raw.plan.map(normalizePlanStep),
+  }
 }
 
 const systemPrompt = `You are Kova — not a chatbot, not a generic assistant. You are the user's **right hand** at work: the layer that absorbs **repetitive, high-touch assistant and coordinator work** (inbox triage, drafting, scheduling, filing, recaps, follow-ups, stakeholder updates, light project hygiene) so they don't need a human for the boring parts.
@@ -732,7 +875,7 @@ function resolvePreferredModel() {
 
 function buildModelCandidates() {
   const preferred = resolvePreferredModel()
-  const candidates = [preferred.selected, 'gpt-4o', 'gpt-4o-mini'].filter((value): value is string => Boolean(value))
+  const candidates = [preferred.selected, 'gpt-4.1', 'gpt-4o'].filter((value): value is string => Boolean(value))
   return Array.from(new Set(candidates))
 }
 
@@ -740,27 +883,17 @@ function shouldUseGpt5Controls(model: string) {
   return model.startsWith('gpt-5')
 }
 
-function resolveReasoningEffort() {
-  const configured = process.env.OPENAI_REASONING_EFFORT?.trim()
-  if (
-    configured === 'minimal' ||
-    configured === 'low' ||
-    configured === 'medium' ||
-    configured === 'high'
-  ) {
-    return configured
-  }
-
-  return 'low'
-}
-
-function resolveVerbosity() {
+function resolveVerbosity(complexity: AnalysisComplexity = 'standard') {
   const configured = process.env.OPENAI_TEXT_VERBOSITY?.trim()
   if (configured === 'low' || configured === 'medium' || configured === 'high') {
     return configured
   }
 
-  return 'medium'
+  if (complexity === 'light') {
+    return 'low'
+  }
+
+  return complexity === 'deep' ? 'high' : 'medium'
 }
 
 function extractOutputText(payload: ResponsesApiResponse) {
@@ -837,27 +970,29 @@ async function requestStructuredResponse(params: {
   userMessage: string
   conversationHistory: ConversationMessage[]
   effectiveSystemPrompt: string
+  behaviorMode?: AnalyzeOptions['behaviorMode']
+  complexity: AnalysisComplexity
 }) {
-  const maxOut = resolveMaxOutputTokens()
+  const maxOut = resolveMaxOutputTokens(params.complexity)
   const body: Record<string, unknown> = {
     model: params.model,
     instructions: params.effectiveSystemPrompt,
     input: buildResponsesInput(params.userMessage, params.conversationHistory),
     max_output_tokens: maxOut,
     store: false,
-    ...(shouldUseGpt5Controls(params.model) ? { verbosity: resolveVerbosity() } : {}),
     text: {
       format: {
         type: 'json_schema',
         name: 'kova_agent_turn',
         schema: responseFormatJsonSchema,
       },
+      ...(shouldUseGpt5Controls(params.model) ? { verbosity: resolveVerbosity(params.complexity) } : {}),
     },
   }
 
   if (shouldUseGpt5Controls(params.model)) {
     body.reasoning = {
-      effort: resolveReasoningEffort(),
+      effort: resolveReasoningEffortForMode(params.behaviorMode, params.complexity),
     }
   } else {
     body.temperature = resolveSamplingTemperature(params.model)
@@ -886,7 +1021,9 @@ async function requestStructuredResponse(params: {
 async function analyzeWithOpenAI(
   userMessage: string,
   conversationHistory: ConversationMessage[],
-  effectiveSystemPrompt: string
+  effectiveSystemPrompt: string,
+  behaviorMode: AnalyzeOptions['behaviorMode'] | undefined,
+  complexity: AnalysisComplexity
 ): Promise<{ response: string; proposals: ActionProposal[]; plan: AgentPlanStep[] }> {
   const apiKey = resolveOpenAiApiKey()
 
@@ -905,6 +1042,8 @@ async function analyzeWithOpenAI(
         userMessage,
         conversationHistory,
         effectiveSystemPrompt,
+        behaviorMode,
+        complexity,
       })
       if (!payload) {
         throw new Error('OpenAI returned an empty payload.')
@@ -940,6 +1079,13 @@ export async function analyzeUserRequest(
   conversationHistory: ConversationMessage[],
   options: AnalyzeOptions = {}
 ): Promise<{ response: string; proposals: ActionProposal[]; plan: AgentPlanStep[] }> {
+  const complexity = inferAnalysisComplexity({
+    userMessage,
+    behaviorMode: options.behaviorMode,
+    toolCount: options.tools?.length ?? 0,
+    conversationTurnCount: conversationHistory.length,
+  })
+
   const contactsContext =
     options.knownContacts && options.knownContacts.length > 0
       ? `\nKnown contacts:\n${options.knownContacts.map((contact) => `- ${contact.name} <${contact.email}>`).join('\n')}`
@@ -1020,7 +1166,9 @@ Use this to resolve relative time references like "9h45", "demain", "ce soir", "
   return analyzeWithOpenAI(
     userMessage,
     conversationHistory,
-    `${systemPrompt}${dateContext}${behaviorContext}${profileContext}${skillsContext}${toolsContext}${contactsContext}${workspaceContext}`
+    `${systemPrompt}${dateContext}${behaviorContext}${profileContext}${skillsContext}${toolsContext}${contactsContext}${workspaceContext}`,
+    options.behaviorMode,
+    complexity
   )
 }
 

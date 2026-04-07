@@ -423,6 +423,45 @@ test('calendar update requests stay on the calendar path instead of drifting int
   }
 })
 
+test('selected-event deletes do not ask for a missing schedule clarification', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  try {
+    const result = await runAgentTurn(
+      "Supprime l'événement Google Calendar sélectionné",
+      [],
+      [],
+      undefined,
+      undefined,
+      {
+        connectedContextMetadata: {
+          connectedContextSummary: [
+            {
+              source: 'calendar',
+              events: [
+                {
+                  eventId: 'event_live_123',
+                  title: 'Point produit',
+                  startTime: '2026-04-07T10:00:00.000Z',
+                  endTime: '2026-04-07T10:30:00.000Z',
+                },
+              ],
+            },
+          ],
+        },
+      }
+    )
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['delete_calendar_event'])
+    assert.equal(result.proposals[0]?.parameters.eventId, 'event_live_123')
+    assert.doesNotMatch(result.response, /heure exacte/i)
+  } finally {
+    if (previousKey) {
+      process.env.OPENAI_API_KEY = previousKey
+    }
+  }
+})
+
 test('LLM-first by default; KOVA_PREFER_DETERMINISTIC_ACTIONS=true enables shortcut routing', () => {
   const prevDet = process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS
   delete process.env.KOVA_PREFER_DETERMINISTIC_ACTIONS
@@ -503,6 +542,28 @@ test('model-first path can return an ordered multi-step plan across apps', async
   }
 })
 
+test('simple greetings stay fast and do not hit the model even when OpenAI is configured', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  const originalFetch = global.fetch
+  process.env.OPENAI_API_KEY = 'test-key'
+  let called = false
+  global.fetch = (async () => {
+    called = true
+    throw new Error('fetch should not be called for simple greetings')
+  }) as typeof fetch
+
+  try {
+    const result = await runAgentTurn('Bonjour', [], [])
+    assert.equal(called, false)
+    assert.equal(result.proposals.length, 0)
+    assert.match(result.response, /Salut|Bonjour|je suis là/i)
+  } finally {
+    global.fetch = originalFetch
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
 test('model-first path keeps valid multi-app proposals even when the model reply is terse', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   process.env.OPENAI_API_KEY = 'test-key'
@@ -555,8 +616,58 @@ test('model-first path keeps valid multi-app proposals even when the model reply
       []
     )
     assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'create_gmail_draft'])
-    assert.match(result.response, /Google Calendar|Gmail|ordre|temps|étapes|ordre/i)
+    assert.match(result.response, /Google Meet|mail|séquence|lien/i)
     assert.doesNotMatch(result.response, /^C'est prêt\.$/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
+test('calendar plus email bundles with a Meet placeholder use accurate sequence narration', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response: 'Je prépare le mail et le rendez-vous.',
+    plan: [],
+    proposals: [
+      {
+        type: 'create_calendar_event',
+        title: 'Create calendar invite',
+        description: 'Create the calendar invite with Google Meet.',
+        confidenceScore: 0.93,
+        parameters_json: JSON.stringify({
+          title: 'Point client',
+          startTime: '2026-04-08T13:00:00.000Z',
+          endTime: '2026-04-08T13:30:00.000Z',
+          attendees: ['client@example.com'],
+          createMeetLink: true,
+        }),
+      },
+      {
+        type: 'send_email',
+        title: 'Send follow-up mail',
+        description: 'Send the email that shares the meeting link.',
+        confidenceScore: 0.9,
+        parameters_json: JSON.stringify({
+          to: ['client@example.com'],
+          subject: 'Point client',
+          body: 'Bonjour,\\n\\nVoici le lien : {{meet_link}}',
+        }),
+      },
+    ],
+  })
+
+  try {
+    const result = await runAgentTurn(
+      'Prépare une invitation agenda demain à 15h avec client@example.com, ajoute Google Meet et prépare aussi le mail avec le lien.',
+      [],
+      []
+    )
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'send_email'])
+    assert.match(result.response, /d’abord l’invitation agenda|d'abord l'invitation agenda/i)
+    assert.match(result.response, /puis le mail/i)
   } finally {
     restoreFetch()
     if (previousKey) process.env.OPENAI_API_KEY = previousKey
@@ -591,6 +702,56 @@ test('generic meeting bundle requests still recover to a calendar-plus-email wor
     )
     assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'send_email'])
     assert.match(result.response, /Google Meet|email|mail/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
+test('calendar-plus-email bundles ask for the missing time instead of preparing a partial workflow', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response:
+      "Je prépare l'email à Maxime et je programme la réunion vendredi avec Google Meet.",
+    plan: [
+      {
+        title: 'Préparer l’email',
+        detail: 'Prévenir Maxime du report.',
+        app: 'Gmail',
+      },
+      {
+        title: 'Créer l’invitation',
+        detail: 'Programmer la réunion vendredi avec Google Meet.',
+        app: 'Google Calendar',
+      },
+    ],
+    proposals: [
+      {
+        type: 'send_email',
+        title: 'Prévenir Maxime du report',
+        description: 'Préparer le mail avec le lien Meet.',
+        confidenceScore: 0.9,
+        parameters_json: JSON.stringify({
+          to: ['maxime.neveu@example.com'],
+          subject: 'Report de notre réunion',
+          body: 'Bonjour Maxime, voici le lien {{meet_link}}.',
+        }),
+      },
+    ],
+  })
+
+  try {
+    const result = await runAgentTurn(
+      "Est-ce que tu peux me rédiger un mail pour envoyer à Maxime Neveu et lui dire que j'ai un rendez-vous jeudi donc on va être obligé d'annuler notre réunion pour la reporter à vendredi, avec un événement calendrier et Google Meet ?",
+      [],
+      [{ name: 'Maxime Neveu', email: 'maxime.neveu@example.com', aliases: ['Maxime'] }]
+    )
+    assert.equal(result.proposals.length, 0)
+    assert.equal(result.plan?.length ?? 0, 0)
+    assert.match(result.response, /heure/i)
+    assert.match(result.response, /déplacer|report|vendredi/i)
   } finally {
     restoreFetch()
     if (previousKey) process.env.OPENAI_API_KEY = previousKey

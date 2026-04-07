@@ -14,6 +14,7 @@ import {
   isCapabilityQuestion,
   isConversationalInput,
   isEmailCompositionAssistanceRequest,
+  isSimpleGreetingInput,
   type AgentActionType,
   type AgentProposal,
   type AgentTurnResult,
@@ -94,6 +95,32 @@ function hasConcreteCalendarSchedule(input: string) {
   return hasExplicitCalendarDate(input) && hasExplicitCalendarTime(input)
 }
 
+function needsCalendarTimingClarification(input: string, proposals: AgentProposal[]) {
+  const mentionsCalendarExecution =
+    proposals.some((proposal) => proposal.type === 'create_calendar_event') ||
+    looksLikeCalendarEmailBundleIntent(input) ||
+    looksLikeCalendarSchedulingRequest(input)
+
+  if (!mentionsCalendarExecution) {
+    return false
+  }
+
+  return !hasConcreteCalendarSchedule(input) && !canInferCalendarRangeFromUserText(input, 30)
+}
+
+function buildCalendarTimingClarificationResponse(language: 'fr' | 'en', input: string) {
+  const bundle = looksLikeCalendarEmailBundleIntent(input)
+  if (language === 'en') {
+    return bundle
+      ? 'I have the reschedule, the email, and the Meet link in mind. I’m missing one thing before I prepare it cleanly: what time should I move it to?'
+      : 'I can prepare that cleanly. I’m just missing the exact time.'
+  }
+
+  return bundle
+    ? 'J’ai bien le report, le mail et le lien Meet en tête. Il me manque juste une chose pour te préparer ça proprement : tu veux le déplacer à quelle heure ?'
+    : 'Je peux te préparer ça proprement. Il me manque juste l’heure exacte.'
+}
+
 export function responseClaimsActionReady(response: string) {
   return /(c'?est pret|c'est pret|pret(?:e)?|ready|done|prepared|action prete|email pret|draft ready|brouillon pret|rdv pret|invite ready|partage drive pret|archivage pret|sera archive(?:e)?|will be archived|va etre archive(?:e)?|session google photos ouverte|google photos session opened|picker google photos ouvert|google photos picker opened)/i.test(
     response
@@ -134,6 +161,66 @@ function looksLikeCalendarEmailBundleIntent(input: string) {
   const mentionsMailWork = /(gmail|mail|email|courriel|brouillon|draft|message)/.test(normalizedInput)
   const mentionsLinkOrMeet = /(google meet|meet|lien|link|visio)/.test(normalizedInput)
   return mentionsCalendarWork && mentionsMailWork && mentionsLinkOrMeet
+}
+
+function looksLikeCalendarSchedulingRequest(input: string) {
+  const normalizedInput = normalizeInput(input)
+  const mentionsCalendarWork =
+    /(calendar|calendrier|agenda|meeting|reunion|réunion|rdv|rendez vous|rendez-vous|invite|invitation|google meet|meet|visio)/.test(
+      normalizedInput
+    )
+  const mentionsSchedulingVerb =
+    /(cree|crée|ajoute|planifie|programme|reporte|decale|décale|deplacer|déplacer|move|reschedule|schedule|book|annuler|cancel|replace|decaler|reporter)/.test(
+      normalizedInput
+    )
+  return mentionsCalendarWork && mentionsSchedulingVerb
+}
+
+function buildCalendarScheduleClarificationResponse(params: {
+  input: string
+  language: 'fr' | 'en'
+  includesEmailWork: boolean
+}) {
+  const needsDate = !hasExplicitCalendarDate(params.input)
+  const needsTime = !hasExplicitCalendarTime(params.input)
+
+  if (params.language === 'en') {
+    if (params.includesEmailWork) {
+      if (needsDate && needsTime) {
+        return 'I can prepare the email and the calendar invite with Google Meet, but I still need the exact date and time before I lock the sequence. Send me the slot you want, and I’ll rebuild the whole pack cleanly.'
+      }
+      if (needsTime) {
+        return 'I can prepare the email and the calendar invite with Google Meet, but I still need the exact time before I lock the sequence. Send me the slot you want, and I’ll rebuild the whole pack cleanly.'
+      }
+      return 'I can prepare the email and the calendar invite with Google Meet, but I still need the exact date before I lock the sequence. Send me the slot you want, and I’ll rebuild the whole pack cleanly.'
+    }
+
+    if (needsDate && needsTime) {
+      return 'I can prepare the invite cleanly, but I still need the exact date and time. Send me the slot you want and I’ll set it up.'
+    }
+    if (needsTime) {
+      return 'I can prepare the invite cleanly, but I still need the exact time. Send me the slot you want and I’ll set it up.'
+    }
+    return 'I can prepare the invite cleanly, but I still need the exact date. Send me the slot you want and I’ll set it up.'
+  }
+
+  if (params.includesEmailWork) {
+    if (needsDate && needsTime) {
+      return 'Je peux te préparer le mail et l’invitation avec Google Meet, mais il me manque encore la date et l’heure exactes avant de verrouiller la séquence. Donne-moi le créneau voulu et je te reconstruis le pack proprement.'
+    }
+    if (needsTime) {
+      return 'Je peux te préparer le mail et l’invitation avec Google Meet, mais il me manque encore l’heure exacte avant de verrouiller la séquence. Donne-moi le créneau voulu et je te reconstruis le pack proprement.'
+    }
+    return 'Je peux te préparer le mail et l’invitation avec Google Meet, mais il me manque encore la date exacte avant de verrouiller la séquence. Donne-moi le créneau voulu et je te reconstruis le pack proprement.'
+  }
+
+  if (needsDate && needsTime) {
+    return 'Je peux te préparer l’invitation proprement, mais il me manque encore la date et l’heure exactes. Donne-moi le créneau voulu et je te la prépare.'
+  }
+  if (needsTime) {
+    return 'Je peux te préparer l’invitation proprement, mais il me manque encore l’heure exacte. Donne-moi le créneau voulu et je te la prépare.'
+  }
+  return 'Je peux te préparer l’invitation proprement, mais il me manque encore la date exacte. Donne-moi le créneau voulu et je te la prépare.'
 }
 
 function looksLikeLiteralInstructionText(value: unknown) {
@@ -256,6 +343,31 @@ function shouldUsePlanNarration(params: {
   return params.plan.length > 0 && params.modelResponse.trim().length < 60
 }
 
+function isCalendarEmailMeetBundleProposal(proposals: AgentProposal[]) {
+  const hasCalendar = proposals.some((proposal) => proposal.type === 'create_calendar_event')
+  const hasEmailWithMeetLink = proposals.some(
+    (proposal) =>
+      (proposal.type === 'send_email' || proposal.type === 'create_gmail_draft') &&
+      typeof proposal.parameters.body === 'string' &&
+      /\{\{\s*meet_?link\s*\}\}/i.test(proposal.parameters.body)
+  )
+
+  return hasCalendar && hasEmailWithMeetLink
+}
+
+function buildProposalBackedNarration(params: {
+  language: 'fr' | 'en'
+  proposals: AgentProposal[]
+}) {
+  if (isCalendarEmailMeetBundleProposal(params.proposals)) {
+    return params.language === 'en'
+      ? 'I prepared the sequence cleanly: first the calendar invite with Google Meet so the live link exists, then the email that reuses that link. Both actions are ready for your review.'
+      : 'Je t’ai préparé la séquence proprement : d’abord l’invitation agenda avec Google Meet pour générer le vrai lien, puis le mail qui réutilise ce lien. Les deux actions sont prêtes à valider.'
+  }
+
+  return null
+}
+
 export async function runAgentTurn(
   input: string,
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
@@ -273,6 +385,15 @@ export async function runAgentTurn(
     allowedActionTypes.includes(tool.actionType as AgentActionType)
   )
   const language = assistantProfile?.defaultLanguage ?? 'fr'
+
+  if (isSimpleGreetingInput(input)) {
+    return {
+      response: buildConversationalResponse(input, assistantProfile),
+      proposals: [],
+      disambiguations: [],
+      plan: [],
+    }
+  }
 
   if (isConversationalInput(input)) {
     if (isOpenAiConfigured()) {
@@ -641,6 +762,11 @@ export async function runAgentTurn(
                 )
               : fallbackForMissingOrInvalidModelProposal
           : []
+      const shouldAskCalendarTimingClarification =
+        allowProposals &&
+        !hasDisambiguation &&
+        finalExecutableProposals.length > 0 &&
+        needsCalendarTimingClarification(input, finalExecutableProposals)
 
       /** Prefer the model’s wording whenever it said something substantive — deterministic text is only a safety net. */
       const keepModelVoice =
@@ -655,8 +781,15 @@ export async function runAgentTurn(
         finalExecutableProposalCount: finalExecutableProposals.length,
         usingFallbackExecutableProposals,
       })
+      const proposalBackedNarration = buildProposalBackedNarration({
+        language,
+        proposals: finalExecutableProposals,
+      })
 
       const pickVisibleResponse = () => {
+        if (proposalBackedNarration) {
+          return proposalBackedNarration
+        }
         if (finalExecutableProposals.length > 0 && shouldUsePlanBasedNarration) {
           return buildPlanBackedNarration({
             language,
@@ -692,10 +825,12 @@ export async function runAgentTurn(
         response:
           hasDisambiguation
             ? buildDisambiguationResponse(disambiguations, assistantProfile)
+            : shouldAskCalendarTimingClarification
+              ? buildCalendarTimingClarificationResponse(language, input)
             : pickVisibleResponse(),
-        proposals: finalExecutableProposals,
+        proposals: shouldAskCalendarTimingClarification ? [] : finalExecutableProposals,
         disambiguations,
-        plan: aiResult.plan,
+        plan: shouldAskCalendarTimingClarification ? [] : aiResult.plan,
       }
     } catch {
       return buildResolvedDeterministicTurn({
