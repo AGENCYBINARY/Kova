@@ -186,8 +186,24 @@ export function isMeetingDeliveryRefinementIntent(input: string) {
     /\b(je te demande|comme prevu|comme prévu|deja prepare|déjà préparé|la proposition|les actions en attente)\b/.test(
       normalized
     )
+  const explicitFreshRequest =
+    /\b(ecris|écris|ecrire|écrire|rédige|redige|prepare|prépare|envoie|envoyer|cree|crée|creer|créer)\b/.test(
+      normalized
+    ) &&
+    (
+      /\b(a|à)\s+[a-z][a-z-]+(?:\s+[a-z][a-z-]+){0,2}\b/.test(normalized) ||
+      /@/.test(normalized) ||
+      /\b(demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|today|tomorrow|\d{1,2}\s*h|\d{1,2}:\d{2})\b/.test(
+        normalized
+      ) ||
+      /\b(objectif|objectifs|sujet|but|purpose|goal)\b/.test(normalized)
+    )
 
   if (!mentionsTarget) {
+    return false
+  }
+
+  if (explicitFreshRequest && !incrementalAsk) {
     return false
   }
 

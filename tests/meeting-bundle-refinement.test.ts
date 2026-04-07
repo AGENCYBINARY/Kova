@@ -12,6 +12,15 @@ test('isMeetingDeliveryRefinementIntent detects Meet + mail refinement', () => {
   )
 })
 
+test('isMeetingDeliveryRefinementIntent stays false for a fresh meeting brief with recipient and schedule', () => {
+  assert.equal(
+    isMeetingDeliveryRefinementIntent(
+      "peux-tu s'il te plaît écrire un mail à Maxime Neveu avec un lien Google meet en lui disant que il y a une grande visio demain mercredi à 19h30 pour les objectifs"
+    ),
+    false
+  )
+})
+
 test('isEmailSendIntent is false for refinement (avoids literal instruction email)', () => {
   assert.equal(
     isEmailSendIntent('je te demande de mettre un liens dans le mail et l evenement calendrier'),
