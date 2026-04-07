@@ -16,6 +16,11 @@ interface Message {
   content: string
   metadata?: {
     disambiguations?: ChatDisambiguation[]
+    plan?: Array<{
+      title?: string
+      detail?: string
+      app?: string
+    }>
   }
 }
 
@@ -265,6 +270,7 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
             <MessageBubble
               role={message.role}
               content={message.content}
+              metadata={message.metadata}
               userFallback={userFallback}
               isStreaming={isStreaming && message.role === 'assistant' && message.id === messages[messages.length - 1]?.id}
             />

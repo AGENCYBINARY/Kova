@@ -251,26 +251,46 @@ function proposalLeaksLiteralUserInstruction(proposal: AgentProposal) {
 
 function extractTemporalSignals(value: string) {
   const normalized = normalizeInput(value)
+  const normalizeWeekday = (weekday: string) => {
+    const token = weekday.toLowerCase()
+    if (token === 'lundi' || token === 'monday') return 'mon'
+    if (token === 'mardi' || token === 'tuesday') return 'tue'
+    if (token === 'mercredi' || token === 'wednesday') return 'wed'
+    if (token === 'jeudi' || token === 'thursday') return 'thu'
+    if (token === 'vendredi' || token === 'friday') return 'fri'
+    if (token === 'samedi' || token === 'saturday') return 'sat'
+    if (token === 'dimanche' || token === 'sunday') return 'sun'
+    return token
+  }
+  const normalizeTime = (hours: string, minutes?: string) => {
+    const hour = Number.parseInt(hours, 10)
+    const minute = minutes ? Number.parseInt(minutes, 10) : 0
+    if (Number.isNaN(hour) || Number.isNaN(minute)) {
+      return `${hours}:${minutes ?? '00'}`
+    }
+    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
+  }
+
   const weekdays = new Set(
-    normalized.match(
+    (normalized.match(
       /\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g
-    ) || []
+    ) || []).map(normalizeWeekday)
   )
   const times = new Set<string>()
   const glued = normalized.match(/\b(\d{1,2})\s*h(\d{2})\b/g) || []
   for (const match of glued) {
     const m = match.match(/(\d{1,2})\s*h(\d{2})/)
-    if (m) times.add(`${m[1]}h${m[2]}`)
+    if (m) times.add(normalizeTime(m[1], m[2]))
   }
   const hourOnly = normalized.match(/\b(\d{1,2})\s*h(?:eures?)?\b/g) || []
   for (const match of hourOnly) {
     const m = match.match(/(\d{1,2})\s*h/)
-    if (m) times.add(`${m[1]}h`)
+    if (m) times.add(normalizeTime(m[1]))
   }
   const colon = normalized.match(/\b(\d{1,2}):(\d{2})\b/g) || []
   for (const match of colon) {
     const m = match.match(/(\d{1,2}):(\d{2})/)
-    if (m) times.add(`${m[1]}h${m[2]}`)
+    if (m) times.add(normalizeTime(m[1], m[2]))
   }
   return { weekdays, times }
 }
@@ -298,8 +318,22 @@ function extractCalendarSignalsFromProposal(proposal: AgentProposal) {
     timeZone: 'Europe/Paris',
   }).format(start)
   return {
-    weekdays: new Set([weekday]),
-    times: new Set([hour.replace(':', 'h')]),
+    weekdays: new Set([
+      weekday === 'monday'
+        ? 'mon'
+        : weekday === 'tuesday'
+          ? 'tue'
+          : weekday === 'wednesday'
+            ? 'wed'
+            : weekday === 'thursday'
+              ? 'thu'
+              : weekday === 'friday'
+                ? 'fri'
+                : weekday === 'saturday'
+                  ? 'sat'
+                  : 'sun',
+    ]),
+    times: new Set([hour]),
   }
 }
 
@@ -469,7 +503,7 @@ function formatBundleCalendarLabel(iso: unknown, language: 'fr' | 'en') {
   if (Number.isNaN(date.getTime())) {
     return null
   }
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'fr-FR', {
+  const formatted = new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'fr-FR', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -477,6 +511,7 @@ function formatBundleCalendarLabel(iso: unknown, language: 'fr' | 'en') {
     minute: '2-digit',
     timeZone: 'Europe/Paris',
   }).format(date)
+  return language === 'fr' ? formatted.replace(':', 'h') : formatted
 }
 
 function alignCalendarEmailBundleProposals(params: {
@@ -1084,7 +1119,7 @@ export async function runAgentTurn(
           return deterministicFallback.response
         }
         if (finalExecutableProposals.length > 0) {
-          return aiResult.response
+          return keepModelVoice && !usingFallbackExecutableProposals ? aiResult.response : deterministicFallback.response
         }
         if (shouldUseFallbackResponse && keepModelVoice) {
           return aiResult.response

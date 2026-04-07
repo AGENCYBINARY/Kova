@@ -943,3 +943,40 @@ Honest product verdict after this pass:
   - the workflow engine is durable, but not yet a fully general long-horizon state machine
 - But the key threshold has been crossed:
   - the SaaS is now genuinely AI-driven, integration-capable, and operational in real production validation.
+
+## Continuity Update — 2026-04-07 (frontend-truth pass: real assistant feel, not just backend correctness)
+
+This pass focused on the exact gap the user reported: backend validations looked good, but the visible chat/product experience still felt robotic, brittle, and mid.
+
+What was fixed:
+
+- Contact extraction now correctly catches French phrasing like "envoyer à Maxime Neveu et lui dire..." instead of dropping the intended recipient and drifting to another contact.
+- Calendar/email bundle alignment now canonicalizes weekday and time comparisons, so good bundles are no longer rejected because of formatting differences like `mercredi` vs `wednesday` or `19h` vs `19:00`.
+- Assistant-visible calendar descriptions are cleaner:
+  - raw prompt text is no longer dumped into event descriptions
+  - internal technical notes are no longer leaked into attendee-facing event copy
+- The assistant now keeps the model voice when it is genuinely useful, while still falling back to explicit proposal-backed narration for bundle flows where the structure matters more than the model wording.
+- Chat bubbles now surface the structured plan from assistant message metadata, so the user can actually see the reasoning/sequence instead of only a flat sentence plus cards.
+- Action cards now render better previews for more semantic families:
+  - Gmail drafts / updates / replies / forwards reuse the email preview
+  - calendar updates reuse the calendar preview
+- Meeting bundle refinements are stricter:
+  - paired email/calendar refinements now require a real linked pair (`planId` / `requestGroupId`) before rebuilding both actions together
+  - mail-only or calendar-only refinements still work, but unrelated old actions are no longer silently recombined
+- Contact candidate scoring is more robust to partial data by tolerating missing `aliases` arrays instead of throwing on sparse records.
+
+Real checks from this pass:
+
+- `npm test` -> pass (`147/147`)
+- `npm run lint` -> pass
+- `npm run build` -> pass
+- `npm run openai:diag:prod` -> pass, with real `gpt-5.4` usage logs
+- direct runtime reproduction of the user's complaint now yields:
+  - the correct recipient identity (`Maxime Neveu`)
+  - a clean clarification on the only missing fact (the Friday time)
+  - no fabricated email or calendar action before the schedule is complete
+
+Important product note:
+
+- This pass was specifically about making the frontend-visible assistant feel consistent with the backend reasoning.
+- The goal was not to remove every deterministic safeguard, but to stop those safeguards from flattening the assistant into a fake-looking router.

@@ -153,7 +153,9 @@ export function findContactCandidatesByName(input: string, contacts: KnownContac
   const scored: Array<{ contact: KnownContact; score: number }> = []
 
   for (const contact of contacts) {
-    const nameCandidates = [contact.name, ...contact.aliases].map(normalizeContactValue)
+    const nameCandidates = [contact.name, ...(Array.isArray(contact.aliases) ? contact.aliases : [])].map(
+      normalizeContactValue
+    )
     let best = 0
     for (const candidate of nameCandidates) {
       if (!candidate) continue

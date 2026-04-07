@@ -4,17 +4,25 @@ import styles from './MessageBubble.module.css'
 interface MessageBubbleProps {
   role: 'user' | 'assistant'
   content: string
+  metadata?: {
+    plan?: Array<{
+      title?: string
+      detail?: string
+      app?: string
+    }>
+  }
   isStreaming?: boolean
   thinking?: boolean
   userFallback?: string
 }
 
-export function MessageBubble({ role, content, isStreaming, thinking, userFallback }: MessageBubbleProps) {
+export function MessageBubble({ role, content, metadata, isStreaming, thinking, userFallback }: MessageBubbleProps) {
   const isUser = role === 'user'
   const lines = content.split('\n')
   const hasVisibleContent = lines.some((line) => line.trim().length > 0)
   const shouldRenderBubble = hasVisibleContent || (isStreaming && !thinking)
   const urlPattern = /(https?:\/\/[^\s]+)/g
+  const planSteps = role === 'assistant' && Array.isArray(metadata?.plan) ? metadata.plan.filter((step) => step?.title || step?.detail) : []
 
   const renderLine = (line: string, index: number) => {
     if (!line) {
@@ -86,6 +94,21 @@ export function MessageBubble({ role, content, isStreaming, thinking, userFallba
             <div className={styles.text}>
               {lines.map((line, index) => renderLine(line, index))}
             </div>
+            {planSteps.length > 0 ? (
+              <div className={styles.plan}>
+                <p className={styles.planLabel}>Plan</p>
+                <ol className={styles.planList}>
+                  {planSteps.map((step, index) => (
+                    <li key={`${role}-plan-${index}`} className={styles.planItem}>
+                      <span className={styles.planTitle}>
+                        {step.title || (step.app ? `Étape ${index + 1} · ${step.app}` : `Étape ${index + 1}`)}
+                      </span>
+                      {step.detail ? <span className={styles.planDetail}>{step.detail}</span> : null}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
             {isStreaming && <span className={styles.cursor} />}
           </div>
         ) : null}

@@ -115,6 +115,45 @@
   vertical-align: middle;
 }
 
+.plan {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.planLabel {
+  margin: 0 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.planList {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.planItem {
+  color: var(--text-primary);
+}
+
+.planTitle {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.planDetail {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
 @keyframes blink {
   0%, 50% {
     opacity: 1;

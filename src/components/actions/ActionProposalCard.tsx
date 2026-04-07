@@ -182,8 +182,10 @@ export function ActionProposalCard({ id, type, title, description, parameters, o
   const { t, lang } = useLang()
 
   const renderPreview = () => {
-    if (type === 'send_email') return renderEmailPreview(parameters, t)
-    if (type === 'create_calendar_event') return renderCalendarPreview(parameters, t, lang)
+    if (type === 'send_email' || type === 'create_gmail_draft' || type === 'update_gmail_draft' || type === 'reply_to_email' || type === 'forward_email') {
+      return renderEmailPreview(parameters, t)
+    }
+    if (type === 'create_calendar_event' || type === 'update_calendar_event') return renderCalendarPreview(parameters, t, lang)
     if (type === 'create_google_drive_file') return renderDrivePreview(parameters, t)
     if (type === 'create_google_photos_picker_session') return renderGooglePhotosPickerPreview()
     return (

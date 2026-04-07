@@ -208,7 +208,7 @@ function actionCreatedAt(a: PendingActionRecord): number {
   return Number.isFinite(t) ? t : 0
 }
 
-function pickCalendarAndMailFromRecords(records: PendingActionRecord[]) {
+function pickCalendarAndMailFromRecords(records: PendingActionRecord[], options?: { requireLinkedPair?: boolean }) {
   type Pair = { calendar: PendingActionRecord; mail: PendingActionRecord; ts: number }
   const pairs: Pair[] = []
   const byPlanId = new Map<string, PendingActionRecord[]>()
@@ -266,6 +266,16 @@ function pickCalendarAndMailFromRecords(records: PendingActionRecord[]) {
     return { calendar: pairs[0].calendar, mail: pairs[0].mail }
   }
 
+  if (options?.requireLinkedPair) {
+    const cals = records.filter((a) => a.type === 'create_calendar_event')
+    const mails = records.filter((a) => a.type === 'send_email' || a.type === 'create_gmail_draft')
+    cals.sort((a, b) => actionCreatedAt(b) - actionCreatedAt(a))
+    mails.sort((a, b) => actionCreatedAt(b) - actionCreatedAt(a))
+    if (cals[0]) return { calendar: cals[0], mail: undefined }
+    if (mails[0]) return { calendar: undefined, mail: mails[0] }
+    return null
+  }
+
   const cals = records.filter((a) => a.type === 'create_calendar_event')
   const mails = records.filter((a) => a.type === 'send_email' || a.type === 'create_gmail_draft')
   cals.sort((a, b) => actionCreatedAt(b) - actionCreatedAt(a))
@@ -307,8 +317,10 @@ export function buildMeetingBundleRefinementFollowUp(params: {
     return null
   }
 
-  const picked = pickCalendarAndMailFromRecords(params.pendingActions)
-    || (params.recentActions?.length ? pickCalendarAndMailFromRecords(params.recentActions) : null)
+  const picked = pickCalendarAndMailFromRecords(params.pendingActions, { requireLinkedPair: true })
+    || (params.recentActions?.length
+      ? pickCalendarAndMailFromRecords(params.recentActions, { requireLinkedPair: true })
+      : null)
   if (!picked || (!picked.calendar && !picked.mail)) {
     return null
   }
