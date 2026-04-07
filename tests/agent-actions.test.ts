@@ -598,23 +598,21 @@ test('model bundle with conflicting day or time falls back to a consistent email
   }
 })
 
-test('simple greetings stay fast and do not hit the model even when OpenAI is configured', async () => {
+test('simple greetings use the model when OpenAI is configured', async () => {
   const previousKey = process.env.OPENAI_API_KEY
-  const originalFetch = global.fetch
   process.env.OPENAI_API_KEY = 'test-key'
-  let called = false
-  global.fetch = (async () => {
-    called = true
-    throw new Error('fetch should not be called for simple greetings')
-  }) as typeof fetch
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response: 'Bonjour. Je suis là et prêt à t’aider.',
+    proposals: [],
+    plan: [],
+  })
 
   try {
     const result = await runAgentTurn('Bonjour', [], [])
-    assert.equal(called, false)
     assert.equal(result.proposals.length, 0)
-    assert.match(result.response, /Salut|Bonjour|je suis là/i)
+    assert.match(result.response, /Bonjour.*prêt à t’aider|Bonjour.*pret a t'aider/i)
   } finally {
-    global.fetch = originalFetch
+    restoreFetch()
     if (previousKey) process.env.OPENAI_API_KEY = previousKey
     else delete process.env.OPENAI_API_KEY
   }

@@ -689,15 +689,6 @@ export async function runAgentTurn(
   )
   const language = assistantProfile?.defaultLanguage ?? 'fr'
 
-  if (isSimpleGreetingInput(input)) {
-    return {
-      response: buildConversationalResponse(input, assistantProfile),
-      proposals: [],
-      disambiguations: [],
-      plan: [],
-    }
-  }
-
   if (isConversationalInput(input)) {
     if (isOpenAiConfigured()) {
       try {
