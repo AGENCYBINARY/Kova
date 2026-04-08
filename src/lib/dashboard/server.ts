@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/db/prisma'
 import { getAppContext } from '@/lib/app-context'
-import { checkQuota } from '@/lib/subscription'
 import { inferRiskLevel } from '@/lib/agent/execution-governance'
 import { dashboardIntegrations, type DashboardAction, type DashboardIntegration } from '@/lib/dashboard-data'
 import { buildDashboardScopeWhere } from '@/lib/dashboard/query'
@@ -305,7 +304,7 @@ export interface IntegrationsPageData {
 /** Single round-trip for sidebar: integrations strip + quota (one getAppContext). */
 export interface SidebarBundle {
   integrations: DashboardIntegration[]
-  quota: {
+  quota?: {
     plan: string
     used: number
     limit: number
@@ -324,30 +323,21 @@ export async function getSidebarBundle(): Promise<SidebarBundle> {
     workspaceId,
     userId: dbUserId,
   })
-  const [integrationRows, quotaCheck] = await Promise.all([
-    prisma.integration.findMany({
-      where: scopeWhere,
-      orderBy: [{ updatedAt: 'desc' }],
-      take: 8,
-      select: {
-        id: true,
-        type: true,
-        status: true,
-        metadata: true,
-        lastSyncAt: true,
-      },
-    }),
-    checkQuota(dbUserId),
-  ])
+  const integrationRows = await prisma.integration.findMany({
+    where: scopeWhere,
+    orderBy: [{ updatedAt: 'desc' }],
+    take: 8,
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      metadata: true,
+      lastSyncAt: true,
+    },
+  })
 
   return {
     integrations: mergeIntegrations(integrationRows),
-    quota: {
-      plan: quotaCheck.plan,
-      used: quotaCheck.used,
-      limit: quotaCheck.limit,
-      allowed: quotaCheck.allowed,
-    },
     user: {
       name: userName,
       email: userEmail,
@@ -366,24 +356,17 @@ async function getDashboardScope() {
 
 export async function getDashboardBundle(): Promise<DashboardBundle> {
   const scopeWhere = await getDashboardScope()
-  const workspaceRow = await prisma.workspace.findUnique({
-    where: { id: scopeWhere.workspaceId },
-    select: { preferences: true },
-  })
-  // Defer expiration so TTFB is not blocked by batched writes + audit logs (Speed Insights / RES).
-  deferServerWork(
-    expirePendingActions({
-      ...scopeWhere,
-      workspacePreferences: workspaceRow?.preferences,
-    })
-  )
   const now = new Date()
   const todayStart = new Date(now)
   todayStart.setHours(0, 0, 0, 0)
   const tomorrowStart = new Date(todayStart)
   tomorrowStart.setDate(todayStart.getDate() + 1)
 
-  const [pendingPreview, historyPreview, integrations, recentStatuses, pendingActionCount, completedTodayCount] = await Promise.all([
+  const [workspaceRow, pendingPreview, historyPreview, integrations, recentStatuses, pendingActionCount, completedTodayCount] = await Promise.all([
+    prisma.workspace.findUnique({
+      where: { id: scopeWhere.workspaceId },
+      select: { preferences: true },
+    }),
     prisma.action.findMany({
       where: {
         ...scopeWhere,
@@ -465,6 +448,14 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
       },
     }),
   ])
+
+  // Defer expiration so TTFB is not blocked by batched writes + audit logs (Speed Insights / RES).
+  deferServerWork(
+    expirePendingActions({
+      ...scopeWhere,
+      workspacePreferences: workspaceRow?.preferences,
+    })
+  )
 
   const mappedActions = [...pendingPreview.map(mapAction), ...historyPreview.map(mapAction)]
   const mappedIntegrations = mergeIntegrations(integrations)

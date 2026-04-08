@@ -172,7 +172,7 @@ export async function loadChatPageState(context: ChatContext) {
         workspaceId: context.workspaceId,
       },
       orderBy: { createdAt: 'desc' },
-      take: 16,
+      take: 12,
       select: {
         id: true,
         role: true,
@@ -187,7 +187,7 @@ export async function loadChatPageState(context: ChatContext) {
         status: 'pending',
       },
       orderBy: { createdAt: 'desc' },
-      take: 6,
+      take: 4,
       select: {
         id: true,
         type: true,

@@ -37,6 +37,7 @@ interface ChatPageClientProps {
   initialMessages: Message[]
   initialProposals: ActionProposal[]
   userFallback: string
+  bootstrapFromApi?: boolean
 }
 
 const WELCOME_FR =
@@ -60,12 +61,13 @@ function buildDisambiguationReply(
   }
 }
 
-export function ChatPageClient({ initialMessages, initialProposals, userFallback }: ChatPageClientProps) {
+export function ChatPageClient({ initialMessages, initialProposals, userFallback, bootstrapFromApi = false }: ChatPageClientProps) {
   const { t, lang } = useLang()
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [proposals, setProposals] = useState<ActionProposal[]>(initialProposals)
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [isBootstrapping, setIsBootstrapping] = useState(bootstrapFromApi && initialMessages.length === 0 && initialProposals.length === 0)
   const [preferredExecutionMode, setPreferredExecutionMode] = useState<ExecutionMode>('ask')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const hasInitialScrollRef = useRef(false)
@@ -98,6 +100,54 @@ export function ChatPageClient({ initialMessages, initialProposals, userFallback
       { id: `error-${Date.now()}`, role: 'assistant', content: t.chat.error },
     ])
   }, [t])
+
+  useEffect(() => {
+    if (!bootstrapFromApi || (initialMessages.length > 0 || initialProposals.length > 0)) {
+      return
+    }
+
+    let cancelled = false
+
+    async function bootstrap() {
+      try {
+        const response = await fetch('/api/chat', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to load chat bootstrap.')
+        }
+
+        const data = await response.json()
+        if (cancelled) {
+          return
+        }
+
+        if (Array.isArray(data.messages)) {
+          setMessages(data.messages)
+        }
+
+        if (Array.isArray(data.proposals)) {
+          setProposals(data.proposals)
+        }
+      } catch {
+        if (!cancelled) {
+          appendSystemError()
+        }
+      } finally {
+        if (!cancelled) {
+          setIsBootstrapping(false)
+        }
+      }
+    }
+
+    bootstrap()
+
+    return () => {
+      cancelled = true
+    }
+  }, [appendSystemError, bootstrapFromApi, initialMessages.length, initialProposals.length])
 
   const submitTurn = useCallback(async (params: {
     displayContent: string
@@ -265,6 +315,7 @@ export function ChatPageClient({ initialMessages, initialProposals, userFallback
         </div>
       </header>
       <div className={styles.messages}>
+        {isBootstrapping && messages.length === 0 ? <ChatThinkingStatus lang={lang} /> : null}
         {messages.map((message) => (
           <div key={message.id}>
             <MessageBubble
