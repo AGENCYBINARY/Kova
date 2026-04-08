@@ -1,23 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import dynamic from 'next/dynamic'
-import useSWR from 'swr'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useUser } from '@clerk/nextjs'
 import { useLang } from '@/lib/lang-context'
 import { KovaLayerMark } from '@/components/brand/KovaLayerMark'
 import { UsageBadge } from '@/components/ui/UsageBadge'
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
-import { dashboardSWRConfig, jsonFetcher } from '@/lib/swr-fetch'
 import type { SidebarBundle } from '@/lib/dashboard/server'
+import { SidebarUserFooter } from './SidebarUserFooter'
 import styles from './Sidebar.module.css'
-
-const SidebarUserFooter = dynamic(() => import('./SidebarUserFooter').then((m) => m.SidebarUserFooter), {
-  ssr: false,
-  loading: () => <div className={styles.footerSkeleton} aria-hidden />,
-})
 
 function getNavigation(t: ReturnType<typeof useLang>['t']) {
   return [
@@ -157,26 +149,22 @@ function mapBundleToSidebarIntegrations(data: SidebarBundle['integrations']) {
   ]
 }
 
-export function Sidebar({ initialData }: { initialData?: SidebarBundle }) {
+export function Sidebar({
+  initialData,
+  userName,
+  userEmail,
+}: {
+  initialData?: SidebarBundle
+  userName: string
+  userEmail: string
+}) {
   const pathname = usePathname()
-  const { user } = useUser()
   const { t } = useLang()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const userName = typeof user?.fullName === 'string' && user.fullName.trim() ? user.fullName : 'User'
-  const userEmail = user?.primaryEmailAddress?.emailAddress || ''
-  const { data, isLoading } = useSWR<SidebarBundle>(
-    '/api/dashboard/sidebar',
-    jsonFetcher,
-    {
-      ...dashboardSWRConfig,
-      fallbackData: initialData,
-      revalidateOnMount: initialData ? false : dashboardSWRConfig.revalidateOnMount,
-    }
-  )
 
   const integrations = useMemo(
-    () => (data ? mapBundleToSidebarIntegrations(data.integrations) : defaultIntegrations),
-    [data]
+    () => (initialData ? mapBundleToSidebarIntegrations(initialData.integrations) : defaultIntegrations),
+    [initialData]
   )
 
   const navigation = getNavigation(t)
@@ -249,8 +237,8 @@ export function Sidebar({ initialData }: { initialData?: SidebarBundle }) {
       </div>
       <div className={styles.usageBadgeWrapper}>
         <UsageBadge
-          loading={isLoading}
-          quota={data?.quota}
+          loading={!initialData}
+          quota={initialData?.quota}
         />
         <div className={styles.languageRow}>
           <LanguageSwitcher />

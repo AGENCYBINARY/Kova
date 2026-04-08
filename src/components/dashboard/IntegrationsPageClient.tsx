@@ -1,9 +1,6 @@
-'use client'
-
-import { useSearchParams } from 'next/navigation'
 import { Badge, Card } from '@/components/ui'
 import { IntegrationActions } from '@/components/integrations/IntegrationActions'
-import { useLang } from '@/lib/lang-context'
+import { getLang, getT } from '@/lib/lang-server'
 import type { IntegrationsPageData } from '@/lib/dashboard/server'
 import styles from '@/app/(dashboard)/integrations/page.module.css'
 
@@ -63,12 +60,18 @@ function formatIntegrationError(errorCode: string, lang: 'fr' | 'en') {
   return lang === 'fr' ? `Erreur d’intégration : ${errorCode.replace(/_/g, ' ')}` : `Integration error: ${errorCode.replace(/_/g, ' ')}`
 }
 
-export function IntegrationsPageClient({ data }: { data: IntegrationsPageData }) {
-  const { t, lang } = useLang()
+export function IntegrationsPageClient({
+  data,
+  connectedParam,
+  errorParam,
+}: {
+  data: IntegrationsPageData
+  connectedParam?: string | null
+  errorParam?: string | null
+}) {
+  const t = getT()
+  const lang = getLang()
   const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
-  const searchParams = useSearchParams()
-  const connectedParam = searchParams?.get('connected')
-  const errorParam = searchParams?.get('error')
   const connectedCount = data.integrations.filter((integration) => integration.status === 'connected').length
 
   const successMessage = connectedParam ? `${t.integrations.connectedMsg} ${connectedParam}` : null

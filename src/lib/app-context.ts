@@ -18,6 +18,8 @@ export interface AppContextResult {
   dbUserId: string
   workspaceId: string
   workspaceRole: string
+  userName: string
+  userEmail: string
 }
 
 interface ResolvedDbUser {
@@ -114,18 +116,68 @@ export const getAppContext = cache(async function getAppContext(): Promise<AppCo
     throw new Error('Unable to resolve current user.')
   }
 
-  let ownedWorkspaceIds: string[] = []
   const preferredWorkspaceId = cookies().get('kova_workspace_id')?.value?.trim() || null
 
-  const ownedWorkspaces = await prisma.workspace.findMany({
-    where: { ownerId: dbUser.id },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true, createdAt: true },
+  let memberships = await prisma.workspaceMembership.findMany({
+    where: {
+      userId: dbUser.id,
+    },
+    orderBy: [
+      {
+        workspace: {
+          createdAt: 'asc',
+        },
+      },
+    ],
+    include: {
+      workspace: {
+        select: {
+          id: true,
+        },
+      },
+    },
   })
 
-  ownedWorkspaceIds = ownedWorkspaces.map((workspace) => workspace.id)
+  if (memberships.length === 0) {
+    const ownedWorkspaces = await prisma.workspace.findMany({
+      where: { ownerId: dbUser.id },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    })
 
-  if (ownedWorkspaces.length === 0) {
+    if (ownedWorkspaces.length > 0) {
+      await prisma.workspaceMembership.createMany({
+        data: ownedWorkspaces.map((workspace) => ({
+          workspaceId: workspace.id,
+          userId: dbUser!.id,
+          role: 'owner',
+        })),
+        skipDuplicates: true,
+      })
+
+      memberships = await prisma.workspaceMembership.findMany({
+        where: {
+          userId: dbUser.id,
+        },
+        orderBy: [
+          {
+            workspace: {
+              createdAt: 'asc',
+            },
+          },
+        ],
+        include: {
+          workspace: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      })
+    }
+  }
+
+  if (memberships.length === 0) {
     const workspace = await prisma.workspace.create({
       data: {
         ownerId: dbUser.id,
@@ -152,54 +204,15 @@ export const getAppContext = cache(async function getAppContext(): Promise<AppCo
       })
     }
 
-    return {
-      userId,
-      dbUserId: dbUser.id,
-      workspaceId: workspace.id,
-      workspaceRole: 'owner',
-    }
+      return {
+        userId,
+        dbUserId: dbUser.id,
+        workspaceId: workspace.id,
+        workspaceRole: 'owner',
+        userName: dbUser.name || 'Kova Operator',
+        userEmail: dbUser.email,
+      }
   }
-
-  await Promise.all(
-    ownedWorkspaceIds.map((workspaceId) =>
-      prisma.workspaceMembership.upsert({
-        where: {
-          workspaceId_userId: {
-            workspaceId,
-            userId: dbUser!.id,
-          },
-        },
-        update: {
-          role: 'owner',
-        },
-        create: {
-          workspaceId,
-          userId: dbUser!.id,
-          role: 'owner',
-        },
-      })
-    )
-  )
-
-  const memberships = await prisma.workspaceMembership.findMany({
-    where: {
-      userId: dbUser.id,
-    },
-    orderBy: [
-      {
-        workspace: {
-          createdAt: 'asc',
-        },
-      },
-    ],
-    include: {
-      workspace: {
-        select: {
-          id: true,
-        },
-      },
-    },
-  })
 
   if (memberships.length === 0) {
     throw new Error('Unable to resolve current workspace membership.')
@@ -232,5 +245,7 @@ export const getAppContext = cache(async function getAppContext(): Promise<AppCo
     dbUserId: dbUser.id,
     workspaceId: activeWorkspaceId,
     workspaceRole: activeMembership?.role || 'viewer',
+    userName: dbUser.name || 'Kova Operator',
+    userEmail: dbUser.email,
   }
 })

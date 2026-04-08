@@ -1,8 +1,6 @@
-'use client'
-
 import Link from 'next/link'
 import { Badge, Card } from '@/components/ui'
-import { useLang } from '@/lib/lang-context'
+import { getLang, getT } from '@/lib/lang-server'
 import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from '@/app/(dashboard)/dashboard/page.module.css'
 
@@ -16,9 +14,12 @@ function formatDate(date: string, locale: string) {
 }
 
 export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
-  const { t, lang } = useLang()
+  const t = getT()
+  const lang = getLang()
   const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
   const latestHistory = data.executionHistory.slice(0, 4)
+  const pendingActions = data.pendingActions.slice(0, 6)
+  const integrationRows = data.integrations.slice(0, 6)
 
   return (
     <section className={styles.grid}>
@@ -28,13 +29,13 @@ export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
             <h2 className={styles.panelTitle}>{t.dashboard.approvalQueue}</h2>
             <p className={styles.panelSubtitle}>{t.dashboard.approvalQueueSub}</p>
           </div>
-          <Link href="/actions" className={styles.inlineLink} prefetch={false}>
+          <Link href="/actions" className={styles.inlineLink}>
             {t.dashboard.viewQueue}
           </Link>
         </div>
         <div className={styles.stack}>
-          {data.pendingActions.length > 0 ? (
-            data.pendingActions.map((action) => (
+          {pendingActions.length > 0 ? (
+            pendingActions.map((action) => (
               <div key={action.id} className={styles.row}>
                 <div>
                   <p className={styles.rowTitle}>{action.title}</p>
@@ -60,12 +61,12 @@ export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
             <h2 className={styles.panelTitle}>{t.dashboard.integrationHealth}</h2>
             <p className={styles.panelSubtitle}>{t.dashboard.integrationHealthSub}</p>
           </div>
-          <Link href="/integrations" className={styles.inlineLink} prefetch={false}>
+          <Link href="/integrations" className={styles.inlineLink}>
             {t.dashboard.manageApps}
           </Link>
         </div>
         <div className={styles.stack}>
-          {data.integrations.map((integration) => (
+          {integrationRows.map((integration) => (
             <div key={integration.id} className={styles.row}>
               <div>
                 <p className={styles.rowTitle}>{integration.name}</p>
@@ -84,7 +85,7 @@ export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
             <h2 className={styles.panelTitle}>{t.dashboard.recentLog}</h2>
             <p className={styles.panelSubtitle}>{t.dashboard.recentLogSub}</p>
           </div>
-          <Link href="/history" className={styles.inlineLink} prefetch={false}>
+          <Link href="/history" className={styles.inlineLink}>
             {t.dashboard.openHistory}
           </Link>
         </div>

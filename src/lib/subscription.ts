@@ -54,13 +54,51 @@ export async function getOrCreateSubscription(userId: string) {
   return getOrCreateSubscriptionTx(prisma, userId)
 }
 
+async function readSubscriptionForQuota(userId: string) {
+  let sub = await prisma.subscription.findUnique({
+    where: { userId },
+  })
+
+  if (!sub) {
+    sub = await prisma.subscription.create({
+      data: { userId, plan: "free", status: "active" },
+    })
+  }
+
+  const monthAnchor = getMonthlyResetAnchor()
+  if (needsMonthlyReset(new Date(sub.monthResetAt), monthAnchor)) {
+    await prisma.subscription.updateMany({
+      where: {
+        userId,
+        monthResetAt: {
+          lt: monthAnchor,
+        },
+      },
+      data: {
+        requestsUsedThisMonth: 0,
+        monthResetAt: monthAnchor,
+      },
+    })
+
+    const next = await prisma.subscription.findUnique({
+      where: { userId },
+    })
+
+    if (next) {
+      sub = next
+    }
+  }
+
+  return sub
+}
+
 export async function checkQuota(userId: string): Promise<{
   allowed: boolean
   plan: PlanKey
   used: number
   limit: number
 }> {
-  const sub = await getOrCreateSubscription(userId)
+  const sub = await readSubscriptionForQuota(userId)
   const plan = resolvePlanKey(sub.plan)
   const limit = PLANS[plan].requests
   const used = sub.requestsUsedThisMonth

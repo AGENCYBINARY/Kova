@@ -22,8 +22,6 @@
   min-height: 56px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   background: linear-gradient(180deg, rgba(10, 13, 18, 0.74), rgba(10, 13, 18, 0.32));
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 }
 
 .headerInner {

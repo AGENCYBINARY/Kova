@@ -1,14 +1,13 @@
-'use client'
-
 import Link from 'next/link'
 import { Badge, Button, Card } from '@/components/ui'
 import { DashboardOverviewGrid } from '@/components/dashboard/DashboardOverviewGrid'
-import { useLang } from '@/lib/lang-context'
+import { getLang, getT } from '@/lib/lang-server'
 import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from '@/app/(dashboard)/dashboard/page.module.css'
 
 export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
-  const { t, lang } = useLang()
+  const t = getT()
+  const lang = getLang()
   const healthyIntegrations = data.integrations.filter((integration) => integration.health === 'healthy').length
   const attentionCount = data.integrations.filter((integration) => integration.health !== 'healthy').length
   const topPending = data.pendingActions.slice(0, 2)
@@ -60,12 +59,12 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <Link href="/actions" prefetch={false}>
+          <Link href="/actions">
             <Button variant="secondary" size="sm">
               {t.dashboard.reviewQueue}
             </Button>
           </Link>
-          <Link href="/chat" prefetch={false}>
+          <Link href="/chat">
             <Button size="sm">{t.dashboard.openChat}</Button>
           </Link>
         </div>

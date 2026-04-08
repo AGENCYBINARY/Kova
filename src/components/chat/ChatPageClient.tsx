@@ -1,6 +1,5 @@
 'use client'
 
-import { useUser } from '@clerk/nextjs'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageBubble } from '@/components/chat/MessageBubble'
 import { ChatThinkingStatus } from '@/components/chat/ChatThinkingStatus'
@@ -37,6 +36,7 @@ type ExecutionMode = 'ask' | 'auto'
 interface ChatPageClientProps {
   initialMessages: Message[]
   initialProposals: ActionProposal[]
+  userFallback: string
 }
 
 const WELCOME_FR =
@@ -60,8 +60,7 @@ function buildDisambiguationReply(
   }
 }
 
-export function ChatPageClient({ initialMessages, initialProposals }: ChatPageClientProps) {
-  const { user } = useUser()
+export function ChatPageClient({ initialMessages, initialProposals, userFallback }: ChatPageClientProps) {
   const { t, lang } = useLang()
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [proposals, setProposals] = useState<ActionProposal[]>(initialProposals)
@@ -69,13 +68,16 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
   const [isStreaming, setIsStreaming] = useState(false)
   const [preferredExecutionMode, setPreferredExecutionMode] = useState<ExecutionMode>('ask')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const hasInitialScrollRef = useRef(false)
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
+    messagesEndRef.current?.scrollIntoView({ behavior })
   }, [])
 
   useEffect(() => {
-    scrollToBottom()
+    const behavior = hasInitialScrollRef.current ? 'smooth' : 'auto'
+    scrollToBottom(behavior)
+    hasInitialScrollRef.current = true
   }, [messages, isStreaming, scrollToBottom])
 
   const translateMessages = useCallback((items: Message[], currentLang: string) => (
@@ -252,8 +254,6 @@ export function ChatPageClient({ initialMessages, initialProposals }: ChatPageCl
       setIsLoading(false)
     }
   }, [appendSystemError])
-
-  const userFallback = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || 'User'
 
   return (
     <div className={styles.container}>

@@ -14,10 +14,13 @@ const LangContext = createContext<LangContextValue>({
   t: translations.fr,
 })
 
-export function LangProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>('fr')
+export function LangProvider({ children, initialLang = 'fr' }: { children: ReactNode; initialLang?: Lang }) {
+  const [lang, setLangState] = useState<Lang>(initialLang)
 
   useEffect(() => {
+    if (initialLang === 'fr' || initialLang === 'en') {
+      return
+    }
     const saved = document.cookie
       .split('; ')
       .find((row) => row.startsWith('lang='))
@@ -25,7 +28,7 @@ export function LangProvider({ children }: { children: ReactNode }) {
     if (saved === 'fr' || saved === 'en') {
       setLangState(saved)
     }
-  }, [])
+  }, [initialLang])
 
   const setLang = (l: Lang) => {
     setLangState(l)

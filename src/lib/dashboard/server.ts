@@ -311,11 +311,15 @@ export interface SidebarBundle {
     limit: number
     allowed: boolean
   }
+  user: {
+    name: string
+    email: string
+  }
   source: 'database'
 }
 
 export async function getSidebarBundle(): Promise<SidebarBundle> {
-  const { dbUserId, workspaceId } = await getAppContext()
+  const { dbUserId, workspaceId, userName, userEmail } = await getAppContext()
   const scopeWhere = buildDashboardScopeWhere({
     workspaceId,
     userId: dbUserId,
@@ -324,7 +328,7 @@ export async function getSidebarBundle(): Promise<SidebarBundle> {
     prisma.integration.findMany({
       where: scopeWhere,
       orderBy: [{ updatedAt: 'desc' }],
-      take: 20,
+      take: 8,
       select: {
         id: true,
         type: true,
@@ -343,6 +347,10 @@ export async function getSidebarBundle(): Promise<SidebarBundle> {
       used: quotaCheck.used,
       limit: quotaCheck.limit,
       allowed: quotaCheck.allowed,
+    },
+    user: {
+      name: userName,
+      email: userEmail,
     },
     source: 'database',
   }
@@ -369,11 +377,43 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
       workspacePreferences: workspaceRow?.preferences,
     })
   )
-  const [actions, integrations] = await Promise.all([
+  const now = new Date()
+  const todayStart = new Date(now)
+  todayStart.setHours(0, 0, 0, 0)
+  const tomorrowStart = new Date(todayStart)
+  tomorrowStart.setDate(todayStart.getDate() + 1)
+
+  const [pendingPreview, historyPreview, integrations, recentStatuses, pendingActionCount, completedTodayCount] = await Promise.all([
     prisma.action.findMany({
-      where: scopeWhere,
+      where: {
+        ...scopeWhere,
+        status: {
+          in: ['pending', 'retry_scheduled'],
+        },
+      },
       orderBy: [{ createdAt: 'desc' }],
-      take: 50,
+      take: 8,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        parameters: true,
+        status: true,
+        createdAt: true,
+        executedAt: true,
+        result: true,
+      },
+    }),
+    prisma.action.findMany({
+      where: {
+        ...scopeWhere,
+        status: {
+          notIn: ['pending', 'retry_scheduled'],
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 8,
       select: {
         id: true,
         type: true,
@@ -389,7 +429,7 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
     prisma.integration.findMany({
       where: scopeWhere,
       orderBy: [{ updatedAt: 'desc' }],
-      take: 20,
+      take: 8,
       select: {
         id: true,
         type: true,
@@ -398,19 +438,39 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
         lastSyncAt: true,
       },
     }),
+    prisma.action.findMany({
+      where: scopeWhere,
+      orderBy: [{ createdAt: 'desc' }],
+      take: 50,
+      select: {
+        status: true,
+      },
+    }),
+    prisma.action.count({
+      where: {
+        ...scopeWhere,
+        status: {
+          in: ['pending', 'retry_scheduled'],
+        },
+      },
+    }),
+    prisma.action.count({
+      where: {
+        ...scopeWhere,
+        status: 'completed',
+        executedAt: {
+          gte: todayStart,
+          lt: tomorrowStart,
+        },
+      },
+    }),
   ])
 
-  const mappedActions = actions.map(mapAction)
+  const mappedActions = [...pendingPreview.map(mapAction), ...historyPreview.map(mapAction)]
   const mappedIntegrations = mergeIntegrations(integrations)
   const pendingActions = mappedActions.filter((action) => action.status === 'pending' || action.status === 'retry_scheduled')
   const executionHistory = mappedActions.filter((action) => action.status !== 'pending' && action.status !== 'retry_scheduled')
-  const completedToday = mappedActions.filter((action) => {
-    if (action.status !== 'completed' || !action.executedAt) return false
-    const executed = new Date(action.executedAt)
-    const now = new Date()
-    return executed.toDateString() === now.toDateString()
-  }).length
-
+  const failedActionCount = recentStatuses.filter((action) => action.status === 'failed').length
   const approvalActivity = [
     ...pendingActions.slice(0, 2).map((action) => ({
       id: `pending-${action.id}`,
@@ -444,12 +504,12 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
     integrations: mappedIntegrations,
     approvalActivity,
     metrics: {
-      pending: pendingActions.length,
+      pending: pendingActionCount,
       connectedIntegrations: mappedIntegrations.filter((integration) => integration.status === 'connected').length,
-      completedToday,
+      completedToday: completedTodayCount,
       failureRate:
-        mappedActions.length > 0
-          ? Math.round((mappedActions.filter((action) => action.status === 'failed').length / mappedActions.length) * 100)
+        recentStatuses.length > 0
+          ? Math.round((failedActionCount / recentStatuses.length) * 100)
           : 0,
     },
     source: 'database',
@@ -518,7 +578,7 @@ export async function getIntegrationsPageData(): Promise<IntegrationsPageData> {
   const integrations = await prisma.integration.findMany({
     where: scopeWhere,
     orderBy: [{ updatedAt: 'desc' }],
-    take: 20,
+    take: 8,
     select: {
       id: true,
       type: true,
