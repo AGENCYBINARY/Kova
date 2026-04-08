@@ -1,4 +1,3 @@
-import { currentUser } from '@clerk/nextjs/server'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { getSidebarBundle } from '@/lib/dashboard/server'
 import { LangProvider } from '@/lib/lang-context'
@@ -10,20 +9,18 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const [sidebarData, user] = await Promise.all([getSidebarBundle(), currentUser()])
+  const sidebarData = await getSidebarBundle()
   const savedLang = cookies().get('lang')?.value
   const initialLang = savedLang === 'en' ? 'en' : 'fr'
-  const userName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
-    user?.username ||
-    user?.emailAddresses[0]?.emailAddress ||
-    'User'
-  const userEmail = user?.emailAddresses[0]?.emailAddress || ''
 
   return (
     <LangProvider initialLang={initialLang}>
       <div className={styles.container}>
-        <Sidebar initialData={sidebarData} userName={userName} userEmail={userEmail} />
+        <Sidebar
+          initialData={sidebarData}
+          userName={sidebarData.user.name}
+          userEmail={sidebarData.user.email}
+        />
         <main className={styles.main}>{children}</main>
       </div>
     </LangProvider>
