@@ -278,7 +278,13 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   const mentionsNotion = notionPattern.test(normalized)
   const asksForAvailability = availabilityPattern.test(normalized)
   const asksForPriorities = priorityPattern.test(normalized)
-  const explicitRead = readVerbPattern.test(normalized) || /\?$/.test(normalized)
+  const explicitRead =
+    readVerbPattern.test(normalized) ||
+    /\?$/.test(normalized) ||
+    todayPattern.test(normalized) ||
+    weekPattern.test(normalized) ||
+    availabilityPattern.test(normalized) ||
+    priorityPattern.test(normalized)
   const softActionVerb = /\b(faire|fais|fait|refais|refaire|recree|recreer|recr[eé]e)\b/.test(normalized)
   /** "cherche/trouve son mail dans gmail" is an execution workflow, not a mailbox summary. */
   const addressDiscoveryAction =
@@ -316,6 +322,10 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
   }
 
   if (sources.length === 0) {
+    return null
+  }
+
+  if (!explicitRead && !explicitAction) {
     return null
   }
 

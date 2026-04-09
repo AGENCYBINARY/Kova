@@ -85,6 +85,8 @@ const conversationalPattern =
   /^(bonjour|salut|hello|hey|coucou|bonsoir|hi|parle moi|parle-moi|on peut parler|tu peux m'aider|tu peux m’aider|j'ai une question|j’ai une question|comment ca va|comment ça va|qui es tu|qui es-tu|explique moi|explique-moi|ça va|ca va)\b/i
 const capabilityQuestionPattern =
   /^(est ce que tu peux|est-ce que tu peux|est ce que vous pouvez|est-ce que vous pouvez|tu peux|peux tu|peux-tu|vous pouvez|est ce que tu sais|est-ce que tu sais|tu sais|est ce que vous savez|est-ce que vous savez|vous savez|est ce possible|est-ce possible|possible de|possible d'|can you|could you|would you)\b/i
+const generalQuestionPattern =
+  /^(qui|que|quoi|quand|ou|où|pourquoi|comment|combien|quel|quelle|quels|quelles|who|what|when|where|why|how)\b/i
 
 function isPlaceholderRecipientEmail(value: string) {
   const normalized = value.trim().toLowerCase()
@@ -254,6 +256,9 @@ export function isConversationalInput(input: string) {
   const normalized = input.trim()
   if (!normalized) return true
   if (isGreetingOnly(normalized)) return true
+  if (!isActionRequest(normalized) && (generalQuestionPattern.test(normalizeInput(normalized)) || /\?$/.test(normalized))) {
+    return true
+  }
   return !isActionRequest(normalized) && conversationalPattern.test(normalized)
 }
 
@@ -401,7 +406,7 @@ export function isEmailCompositionAssistanceRequest(input: string): boolean {
   const recipient = extractRecipientName(input)
   if (
     recipient &&
-    (/\b(me redige|m redige|me rediger|redige un mail|redige le mail|envoie|envoyer|send (the )?(email|mail)|transmets|transmettre|forward)\b/.test(n) ||
+    (/\b(me redige|m redige|me rediger|redige un mail|redige le mail|ecrire un mail|ecris un mail|write (a |the )?(email|mail)|draft (a |the )?(email|mail)|compose (a |the )?(email|mail)|envoie|envoyer|send (the )?(email|mail)|transmets|transmettre|forward)\b/.test(n) ||
       /\s+lui\s+(envoie|envoyer)\b/.test(n))
   ) {
     return false

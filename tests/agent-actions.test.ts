@@ -635,6 +635,27 @@ test('simple greetings use the model when OpenAI is configured', async () => {
   }
 })
 
+test('general questions stay on the conversational model path when OpenAI is configured', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response: "Je peux te répondre directement, mais je n'ai pas accès à la météo temps réel sans source dédiée.",
+    proposals: [],
+    plan: [],
+  })
+
+  try {
+    const result = await runAgentTurn("Il fait quel temps aujourd'hui ?", [], [])
+    assert.equal(result.proposals.length, 0)
+    assert.match(result.response, /m[eé]t[eé]o|temps r[eé]el|source d[eé]di[eé]e/i)
+    assert.doesNotMatch(result.response, /Reformule en une phrase|Resume connecte en direct/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
 test('model-first path keeps valid multi-app proposals even when the model reply is terse', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   process.env.OPENAI_API_KEY = 'test-key'

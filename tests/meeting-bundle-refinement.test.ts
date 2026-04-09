@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildMeetingBundleRefinementFollowUp } from '@/lib/agent/follow-up'
-import { isMeetingDeliveryRefinementIntent, isEmailSendIntent } from '@/lib/workspace-context/intents'
+import { isMeetingDeliveryRefinementIntent, isEmailSendIntent, parseConnectedContextRequest } from '@/lib/workspace-context/intents'
+import { isEmailCompositionAssistanceRequest } from '@/lib/agent/v1-deterministic'
 
 test('isMeetingDeliveryRefinementIntent detects Meet + mail refinement', () => {
   assert.equal(
@@ -18,6 +19,22 @@ test('isMeetingDeliveryRefinementIntent stays false for a fresh meeting brief wi
       "peux-tu s'il te plaît écrire un mail à Maxime Neveu avec un lien Google meet en lui disant que il y a une grande visio demain mercredi à 19h30 pour les objectifs"
     ),
     false
+  )
+})
+
+test('direct email send request is not downgraded to simple composition help', () => {
+  assert.equal(
+    isEmailCompositionAssistanceRequest(
+      "peux-tu s'il te plaît écrire un mail à Maxime Neveu avec un lien Google Meet pour demain mercredi à 19h30"
+    ),
+    false
+  )
+})
+
+test('calendar nouns without a clear read or action verb do not trigger a connected-read summary', () => {
+  assert.equal(
+    parseConnectedContextRequest("salut boss ça va plus Maxime Neveu en lui disant que y'a une réunion demain donc vendredi à 11h"),
+    null
   )
 })
 
