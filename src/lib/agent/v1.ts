@@ -1,4 +1,5 @@
 import { analyzeUserRequest, isLowValueAssistantResponse, isOpenAiConfigured } from '@/lib/ai/client'
+import { synthesizeDeterministicAssistantNarration } from '@/lib/ai/narration'
 import {
   executiveAssistantSkills,
   resolveEnabledAssistantSkills,
@@ -549,13 +550,18 @@ function alignCalendarEmailBundleProposals(params: {
       return proposal
     }
 
+    const existingBody = typeof proposal.parameters.body === 'string' ? proposal.parameters.body : ''
+    const existingSubject = typeof proposal.parameters.subject === 'string' ? proposal.parameters.subject : ''
     const bodyHasMeetPlaceholder =
-      typeof proposal.parameters.body === 'string' &&
-      /\{\{\s*meet_?link\s*\}\}/i.test(proposal.parameters.body)
-    const shouldRealign =
-      bodyHasMeetPlaceholder || looksLikeCalendarEmailBundleIntent(params.input)
+      /\{\{\s*meet_?link\s*\}\}/i.test(existingBody)
+    const shouldPatchMeetPlaceholder = mentionsMeet && !bodyHasMeetPlaceholder
+    const subjectNeedsRepair = !existingSubject.trim() || looksLikeLiteralInstructionText(existingSubject)
+    const bodyNeedsFullRewrite =
+      !existingBody.trim() ||
+      looksLikeLiteralInstructionText(existingBody) ||
+      proposalHasTemporalMismatchWithRequest(params.input, [proposal])
 
-    if (!shouldRealign) {
+    if (!subjectNeedsRepair && !bodyNeedsFullRewrite && !shouldPatchMeetPlaceholder && !knownContact) {
       return proposal
     }
 
@@ -619,6 +625,28 @@ function alignCalendarEmailBundleProposals(params: {
               signature,
             ]
 
+    const rebuiltBody = bodyLines.join('\n')
+    const patchedBody =
+      bodyNeedsFullRewrite
+        ? rebuiltBody
+        : shouldPatchMeetPlaceholder
+          ? `${existingBody.trim()}\n\n${params.language === 'en' ? 'Here is the Google Meet link for the call:' : 'Voici le lien Google Meet pour la visio :'}\n{{meet_link}}`
+          : existingBody
+    const patchedSubject =
+      subjectNeedsRepair
+        ? params.language === 'en'
+          ? isReschedule
+            ? 'Reschedule our meeting'
+            : typeof calendarProposal.parameters.title === 'string' && calendarProposal.parameters.title.trim()
+              ? calendarProposal.parameters.title
+              : 'Meeting details'
+          : isReschedule
+            ? 'Report de notre réunion'
+            : typeof calendarProposal.parameters.title === 'string' && calendarProposal.parameters.title.trim()
+              ? calendarProposal.parameters.title
+              : 'Détails de notre réunion'
+        : existingSubject
+
     return {
       ...proposal,
       title:
@@ -639,19 +667,8 @@ function alignCalendarEmailBundleProposals(params: {
               resolvedContactName: knownContact.name,
             }
           : {}),
-        subject:
-          params.language === 'en'
-            ? isReschedule
-              ? 'Reschedule our meeting'
-              : typeof calendarProposal.parameters.title === 'string' && calendarProposal.parameters.title.trim()
-                ? calendarProposal.parameters.title
-                : 'Meeting details'
-            : isReschedule
-              ? 'Report de notre réunion'
-              : typeof calendarProposal.parameters.title === 'string' && calendarProposal.parameters.title.trim()
-                ? calendarProposal.parameters.title
-                : 'Détails de notre réunion',
-        body: bodyLines.join('\n'),
+        subject: patchedSubject,
+        body: patchedBody,
       },
       confidenceScore: Math.max(proposal.confidenceScore, knownContact ? 0.94 : 0.86),
     }
@@ -669,6 +686,35 @@ function buildProposalBackedNarration(params: {
   }
 
   return null
+}
+
+async function maybeEnrichGuardrailNarration(params: {
+  language: 'fr' | 'en'
+  input: string
+  draftResponse: string
+  proposals: AgentProposal[]
+  workspaceContext?: string
+  shouldEnrich: boolean
+}) {
+  if (!params.shouldEnrich || params.proposals.length === 0 || !isOpenAiConfigured()) {
+    return params.draftResponse
+  }
+
+  try {
+    return await synthesizeDeterministicAssistantNarration({
+      defaultLanguage: params.language,
+      userMessage: params.input,
+      draftResponse: params.draftResponse,
+      proposals: params.proposals.map((proposal) => ({
+        type: proposal.type,
+        title: proposal.title,
+        description: proposal.description,
+      })),
+      workspaceContext: params.workspaceContext,
+    })
+  } catch {
+    return params.draftResponse
+  }
 }
 
 export async function runAgentTurn(
@@ -1124,13 +1170,34 @@ export async function runAgentTurn(
         return aiResult.response
       }
 
+      const baseVisibleResponse = hasDisambiguation
+        ? buildDisambiguationResponse(disambiguations, assistantProfile)
+        : shouldAskCalendarTimingClarification
+          ? buildCalendarTimingClarificationResponse(language, input)
+          : pickVisibleResponse()
+
+      const shouldEnrichGuardrailResponse =
+        !hasDisambiguation &&
+        !shouldAskCalendarTimingClarification &&
+        finalExecutableProposals.length > 0 &&
+        (
+          usingFallbackExecutableProposals ||
+          Boolean(proposalBackedNarration) ||
+          shouldUsePlanBasedNarration ||
+          !keepModelVoice
+        )
+
+      const visibleResponse = await maybeEnrichGuardrailNarration({
+        language,
+        input,
+        draftResponse: baseVisibleResponse,
+        proposals: finalExecutableProposals,
+        workspaceContext: options.workspaceContext,
+        shouldEnrich: shouldEnrichGuardrailResponse,
+      })
+
       return {
-        response:
-          hasDisambiguation
-            ? buildDisambiguationResponse(disambiguations, assistantProfile)
-            : shouldAskCalendarTimingClarification
-              ? buildCalendarTimingClarificationResponse(language, input)
-            : pickVisibleResponse(),
+        response: visibleResponse,
         proposals: shouldAskCalendarTimingClarification ? [] : finalExecutableProposals,
         disambiguations,
         plan: shouldAskCalendarTimingClarification ? [] : aiResult.plan,

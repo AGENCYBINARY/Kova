@@ -35,6 +35,23 @@ function mockOpenAiStructuredTurn(payload: { response: string; proposals: unknow
   }
 }
 
+function mockOpenAiResponseSequence(payloads: unknown[]) {
+  const originalFetch = global.fetch
+  let index = 0
+  global.fetch = (async () => {
+    const payload = payloads[index]
+    index += 1
+    return {
+      ok: true,
+      json: async () => payload,
+    } as Response
+  }) as typeof fetch
+
+  return () => {
+    global.fetch = originalFetch
+  }
+}
+
 test('fallback routes Gmail unarchive to the right action', async () => {
   const previousKey = process.env.OPENAI_API_KEY
   delete process.env.OPENAI_API_KEY
@@ -722,6 +739,130 @@ test('calendar plus email bundles with a Meet placeholder use accurate sequence 
     assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'send_email'])
     assert.match(result.response, /d’abord l’invitation agenda|d'abord l'invitation agenda/i)
     assert.match(result.response, /puis le mail/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
+test('model-authored meeting emails are patched minimally instead of being replaced by a generic template', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiStructuredTurn({
+    response: 'Je prépare le mail et l’invitation.',
+    plan: [],
+    proposals: [
+      {
+        type: 'create_calendar_event',
+        title: 'Create calendar invite',
+        description: 'Create the calendar invite with Google Meet.',
+        confidenceScore: 0.93,
+        parameters_json: JSON.stringify({
+          title: 'Visio objectifs',
+          startTime: '2026-04-08T17:30:00.000Z',
+          endTime: '2026-04-08T18:00:00.000Z',
+          attendees: ['maxime.neveu@example.com'],
+          createMeetLink: true,
+        }),
+      },
+      {
+        type: 'send_email',
+        title: 'Send email to Maxime Neveu',
+        description: 'Send the email that shares the meeting link.',
+        confidenceScore: 0.92,
+        parameters_json: JSON.stringify({
+          to: ['maxime.neveu@example.com'],
+          subject: 'Visio objectifs',
+          body: 'Bonjour Maxime,\\n\\nOn cale une grande visio demain mercredi à 19h30 pour faire le point sur les objectifs.\\n\\nDis-moi si c’est bon pour toi.',
+          resolvedContactName: 'Maxime Neveu',
+        }),
+      },
+    ],
+  })
+
+  try {
+    const result = await runAgentTurn(
+      "peux-tu écrire un mail à Maxime Neveu avec un lien Google Meet en lui disant qu'il y a une grande visio demain mercredi à 19h30 pour les objectifs",
+      [],
+      [{ name: 'Maxime Neveu', email: 'maxime.neveu@example.com', aliases: ['Maxime', 'Neveu'] }]
+    )
+    const emailProposal = result.proposals.find((proposal) => proposal.type === 'send_email')
+    assert.ok(emailProposal)
+    const body = String(emailProposal?.parameters.body || '')
+    assert.match(body, /grande visio/i)
+    assert.match(body, /mercredi/i)
+    assert.match(body, /19h30/i)
+    assert.match(body, /\{\{\s*meet_?link\s*\}\}/i)
+    assert.doesNotMatch(body, /Je dois décaler notre réunion|Petit rappel/i)
+  } finally {
+    restoreFetch()
+    if (previousKey) process.env.OPENAI_API_KEY = previousKey
+    else delete process.env.OPENAI_API_KEY
+  }
+})
+
+test('guardrail responses are re-enriched with a lightweight LLM pass when the visible copy would otherwise be robotic', async () => {
+  const previousKey = process.env.OPENAI_API_KEY
+  process.env.OPENAI_API_KEY = 'test-key'
+  const restoreFetch = mockOpenAiResponseSequence([
+    {
+      output: [
+        {
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({
+                response: "C'est prêt.",
+                plan: [],
+                proposals: [
+                  {
+                    type: 'create_gmail_draft',
+                    title: 'Create draft for Maxime Neveu',
+                    description: 'Prepare a Gmail draft.',
+                    confidenceScore: 0.92,
+                    parameters_json: JSON.stringify({
+                      to: ['maxime.neveu@example.com'],
+                      subject: 'Visio objectifs',
+                      body: 'Bonjour Maxime,\\n\\nJe te propose une visio demain mercredi à 19h30 pour les objectifs.',
+                      resolvedContactName: 'Maxime Neveu',
+                    }),
+                  },
+                ],
+              }),
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    },
+    {
+      output: [
+        {
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({
+                message:
+                  "J’ai préparé le brouillon pour Maxime avec le bon créneau et l’objectif annoncé. Tu peux l’ouvrir tel quel, puis me dire si tu veux durcir ou adoucir le ton avant envoi.",
+              }),
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    },
+  ])
+
+  try {
+    const result = await runAgentTurn(
+      'Prépare un brouillon Gmail pour Maxime Neveu à propos de la visio demain mercredi à 19h30 sur les objectifs.',
+      [],
+      [{ name: 'Maxime Neveu', email: 'maxime.neveu@example.com', aliases: ['Maxime', 'Neveu'] }]
+    )
+    assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_gmail_draft'])
+    assert.match(result.response, /J’ai préparé le brouillon pour Maxime/i)
+    assert.doesNotMatch(result.response, /^C['’]est prêt\.$/i)
   } finally {
     restoreFetch()
     if (previousKey) process.env.OPENAI_API_KEY = previousKey

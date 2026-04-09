@@ -52,6 +52,7 @@ interface AnalyzeOptions {
     instructions: string
   }>
   workspaceContext?: string
+  routingHints?: string[]
   behaviorMode?: 'default' | 'conversation' | 'connected_read'
 }
 
@@ -838,7 +839,7 @@ type ResponsesApiResponse = {
 
 function buildNonEmptyResponse(userMessage: string, proposals: ActionProposal[]) {
   if (proposals.length > 0) {
-    return 'C’est prêt à relire.'
+    return 'Je t’ai préparé une version propre à relire.'
   }
 
   const normalized = userMessage.trim()
@@ -846,15 +847,11 @@ function buildNonEmptyResponse(userMessage: string, proposals: ActionProposal[])
     return 'Je suis là.'
   }
 
-  if (/^(bonjour|salut|hello|hey|hi|bonsoir|coucou)\b/i.test(normalized)) {
-    return 'Bonjour. Je suis là.'
-  }
-
   if (/[?]$/.test(normalized)) {
     return 'Il me manque un détail pour te répondre proprement.'
   }
 
-  return 'Donne-moi le sujet et je m’en occupe.'
+  return 'Je suis là. Donne-moi le sujet et je m’en occupe.'
 }
 
 export function isLowValueAssistantResponse(value: string) {
@@ -1055,8 +1052,12 @@ async function analyzeWithOpenAI(
       }
 
       const parsed = parseStructuredAnalysisResponse(JSON.parse(rawText))
+      const parsedResponse = parsed.response.trim()
+      if (!parsedResponse && parsed.proposals.length === 0 && parsed.plan.length === 0) {
+        throw new Error('OpenAI returned an empty structured reply.')
+      }
       return {
-        response: parsed.response.trim() || buildNonEmptyResponse(userMessage, parsed.proposals),
+        response: parsedResponse || buildNonEmptyResponse(userMessage, parsed.proposals),
         proposals: parsed.proposals,
         plan: parsed.plan,
       }
