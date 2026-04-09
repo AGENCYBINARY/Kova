@@ -1,7 +1,11 @@
 .container {
-  padding: 12px 14px 14px;
-  background: rgba(8, 11, 16, 0.76);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 14px 16px 16px;
+  background:
+    linear-gradient(180deg, rgba(9, 12, 18, 0.92), rgba(8, 11, 16, 0.82)),
+    radial-gradient(circle at top left, rgba(79, 169, 205, 0.06), transparent 32%);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .inputWrapper {
@@ -9,37 +13,50 @@
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.055);
-  border-radius: 18px;
-  padding: 12px 13px;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  min-height: 72px;
+  background:
+    linear-gradient(180deg, rgba(20, 24, 33, 0.9), rgba(15, 18, 25, 0.82)),
+    rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 22px;
+  padding: 14px 14px 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 16px 30px rgba(0, 0, 0, 0.18);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .inputWrapper:focus-within {
-  border-color: rgba(79, 169, 205, 0.36);
-  box-shadow: 0 0 0 3px rgba(79, 169, 205, 0.08);
+  border-color: rgba(79, 169, 205, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 3px rgba(79, 169, 205, 0.08),
+    0 18px 34px rgba(0, 0, 0, 0.2);
 }
 
 .textarea {
   flex: 1;
-  min-height: 48px;
+  min-height: 44px;
   max-height: 160px;
   resize: none;
   background: transparent;
   border: none !important;
   box-shadow: none !important;
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
   text-align: left;
   color: var(--text-primary);
-  padding: 0 !important;
+  padding: 2px 2px 0 2px !important;
   margin: 0;
   overflow-y: auto;
 }
 
 .textarea::placeholder {
-  color: var(--text-tertiary);
+  color: rgba(201, 208, 220, 0.42);
 }
 
 .textarea:focus {
@@ -52,27 +69,32 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   align-self: flex-end;
   flex-shrink: 0;
+  padding-bottom: 2px;
 }
 
 .micButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
   color: var(--text-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all var(--transition-fast);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    all var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .micButton:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
   color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .micButton:disabled {
@@ -101,13 +123,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(235, 241, 250, 0.96), rgba(214, 223, 235, 0.94));
-  color: #0c1017;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
-  transition: all var(--transition-fast);
+  background: linear-gradient(135deg, #d7e5f8, #a9cff3 58%, #8dc2ec);
+  color: #09101a;
+  box-shadow:
+    0 12px 30px rgba(72, 153, 206, 0.2),
+    0 8px 16px rgba(0, 0, 0, 0.18);
+  transition:
+    all var(--transition-fast),
+    transform var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -128,37 +154,40 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .modeSwitch {
   display: inline-flex;
-  padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.055);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.02);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
   gap: 4px;
 }
 
 .modeButton {
-  height: 30px;
-  padding: 0 12px;
+  height: 31px;
+  padding: 0 13px;
   border-radius: 999px;
   color: var(--text-secondary);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
 .modeButtonActive {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .hint {
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: rgba(201, 208, 220, 0.54);
   text-align: right;
+  line-height: 1.45;
 }
 
 @media (max-width: 720px) {
