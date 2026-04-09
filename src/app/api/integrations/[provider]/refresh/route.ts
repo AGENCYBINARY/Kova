@@ -14,6 +14,8 @@ import {
 import { getValidNotionAccessToken, probeNotionAccess } from '@/lib/integrations/notion'
 
 const GOOGLE_TYPES = ['gmail', 'calendar', 'google_docs', 'google_drive', 'google_photos'] as const
+const REFRESHABLE_TYPES = ['gmail', 'calendar', 'notion', 'google_docs', 'google_drive', 'google_photos', 'slack'] as const
+type RefreshableType = (typeof REFRESHABLE_TYPES)[number]
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -104,12 +106,18 @@ async function probeGoogleIntegration(record: {
   }
 }
 
+function isRefreshableType(value: unknown): value is RefreshableType {
+  return typeof value === 'string' && REFRESHABLE_TYPES.includes(value as RefreshableType)
+}
+
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: { provider: string } }
 ) {
   const { dbUserId, workspaceId } = await getAppContext()
-  const type = params.provider === 'google' ? 'gmail' : params.provider
+  const body = await request.json().catch(() => null) as { type?: unknown } | null
+  const requestedType = isRefreshableType(body?.type) ? body!.type : null
+  const type = requestedType || (params.provider === 'google' ? 'gmail' : params.provider)
   const integration = await prisma.integration.findUnique({
     where: {
       workspaceId_userId_type: {
@@ -130,7 +138,9 @@ export async function POST(
         userId: dbUserId,
         workspaceId,
         type: {
-          in: [...GOOGLE_TYPES],
+          in: requestedType && GOOGLE_TYPES.includes(requestedType as typeof GOOGLE_TYPES[number])
+            ? [requestedType as typeof GOOGLE_TYPES[number]]
+            : [...GOOGLE_TYPES],
         },
       },
       select: {

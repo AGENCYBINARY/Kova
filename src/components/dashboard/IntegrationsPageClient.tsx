@@ -161,6 +161,7 @@ export function IntegrationsPageClient({
                         ? 'notion'
                         : 'slack'
                   }
+                  integrationId={integration.id}
                   status={integration.status}
                   needsReconnect={integration.needsReconnect}
                 />
