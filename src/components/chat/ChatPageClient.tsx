@@ -41,9 +41,9 @@ interface ChatPageClientProps {
 }
 
 const WELCOME_FR =
-  "Je suis Kova — comme un ChatGPT orienté travail : tu parles en langage naturel, j’anticipe et je réponds comme une assistante humaine (pro ou perso). La différence : je peux **agir** dans tes outils connectés — Gmail, agenda, Docs, Drive, Notion, Photos, envois programmés — dès que tu valides ce qui est sensible."
+  "Dis-moi ce que tu veux faire — courrier, agenda, docs, Drive, Notion. Je réponds ici ; les actions passent par la file quand c’est sensible."
 const WELCOME_EN =
-  "I'm Kova — ChatGPT-level conversation for real work: natural language in, thoughtful assistant-style replies out. The difference: I can **take action** in your connected tools — inbox, calendar, Docs, Drive, Notion, Photos, scheduled sends — whenever you approve what matters."
+  "Tell me what you need — inbox, calendar, docs, Drive, Notion. I answer here; actions go through the queue when it matters."
 
 function buildProposalFallbackMessage(params: {
   proposals: ActionProposal[]
