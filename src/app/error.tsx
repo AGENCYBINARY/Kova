@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useEffect } from 'react'
 import { Button } from '@/components/ui'
-import { buttonClassNames } from '@/components/ui/button-classes'
 import styles from './error.module.css'
 
 export default function AppError({
@@ -27,12 +26,12 @@ export default function AppError({
         </p>
         <div className={styles.actions}>
           <Button onClick={() => reset()}>Réessayer</Button>
-          <Link href="/dashboard" className={buttonClassNames({ variant: 'secondary' })}>
-            Aller au dashboard
-          </Link>
-          <Link href="/" className={buttonClassNames({ variant: 'ghost' })}>
-            Retour à l’accueil
-          </Link>
+          <Button asChild variant="secondary">
+            <Link href="/dashboard">Aller au dashboard</Link>
+          </Button>
+          <Button asChild variant="ghost">
+            <Link href="/">Retour à l’accueil</Link>
+          </Button>
         </div>
       </div>
     </div>

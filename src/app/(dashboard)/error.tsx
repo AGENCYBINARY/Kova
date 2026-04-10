@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useEffect } from 'react'
 import { Button } from '@/components/ui'
-import { buttonClassNames } from '@/components/ui/button-classes'
 import styles from './error.module.css'
 
 export default function DashboardError({
@@ -23,14 +22,13 @@ export default function DashboardError({
         <p className={styles.eyebrow}>Workspace recovery</p>
         <h1 className={styles.title}>Une erreur a interrompu le dashboard.</h1>
         <p className={styles.copy}>
-          Le workspace a rencontré une exception côté client. Tu peux relancer l’écran immédiatement ou revenir à
-          l’accueil pendant que Kova recharge l’état courant.
+          Une erreur a interrompu cette page du workspace. Tu peux relancer l’écran ou revenir à l’accueil.
         </p>
         <div className={styles.actions}>
           <Button onClick={() => reset()}>Réessayer</Button>
-          <Link href="/" className={buttonClassNames({ variant: 'secondary' })}>
-            Retour à l’accueil
-          </Link>
+          <Button asChild variant="secondary">
+            <Link href="/">Retour à l’accueil</Link>
+          </Button>
         </div>
       </div>
     </div>

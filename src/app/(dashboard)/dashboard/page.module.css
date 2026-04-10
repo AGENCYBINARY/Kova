@@ -287,14 +287,13 @@
     padding-top: 0;
   }
 
-  .headerActions a {
-    display: block;
+  /* Links styled as buttons (Button asChild + Link): keep flex so pill layout matches desktop */
+  .headerActions > a {
+    display: inline-flex;
     width: 100%;
-  }
-
-  .headerActions a button {
-    width: 100%;
+    align-items: center;
     justify-content: center;
+    box-sizing: border-box;
   }
 
   .metrics {
