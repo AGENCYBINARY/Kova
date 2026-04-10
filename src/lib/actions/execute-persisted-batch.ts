@@ -25,6 +25,32 @@ function getConfidenceScore(parameters: Prisma.JsonValue) {
   return typeof actionParameters.confidenceScore === 'number' ? actionParameters.confidenceScore : 0.85
 }
 
+const MAX_SCHEDULE_AHEAD_MS = 1000 * 60 * 60 * 24 * 90
+
+/** If send_email should be deferred until scheduledSendAt (future, within horizon). */
+export function resolveSendEmailScheduledExecution(effectiveParameters: Record<string, unknown>) {
+  const raw = effectiveParameters.scheduledSendAt
+  if (raw === undefined || raw === null) {
+    return { defer: false as const }
+  }
+  const str = typeof raw === 'string' ? raw.trim() : ''
+  if (!str) {
+    return { defer: false as const }
+  }
+  const when = new Date(str)
+  if (Number.isNaN(when.getTime())) {
+    return { defer: false as const }
+  }
+  const now = Date.now()
+  if (when.getTime() <= now) {
+    return { defer: false as const }
+  }
+  if (when.getTime() > now + MAX_SCHEDULE_AHEAD_MS) {
+    return { defer: false as const }
+  }
+  return { defer: true as const, when }
+}
+
 async function rememberSuccessfulEmailRecipients(params: {
   action: PersistedActionRecord
   parameters: Record<string, unknown>
@@ -81,6 +107,26 @@ export async function executePersistedActionBatch(params: {
         throw new Error('Action not found.')
       }
 
+      if (action.type === 'send_email') {
+        const schedule = resolveSendEmailScheduledExecution(effectiveParameters as Record<string, unknown>)
+        if (schedule.defer) {
+          return {
+            details:
+              params.trigger === 'approval'
+                ? `Email programmé pour ${schedule.when.toISOString()} (UTC). Il part automatiquement à cette heure.`
+                : `Email mis en file pour ${schedule.when.toISOString()} (UTC).`,
+            output: {
+              provider: 'gmail',
+              toolName: 'send_email',
+              scheduled: true,
+              scheduledFor: schedule.when.toISOString(),
+              zeroDataMovement: true,
+              deterministic: true,
+            },
+          }
+        }
+      }
+
       return executePersistedAction({
         action: {
           id: persistedAction.id,
@@ -99,11 +145,49 @@ export async function executePersistedActionBatch(params: {
         throw new Error('Action not found.')
       }
 
+      const output = execution.output as Record<string, unknown>
+      const isScheduledDefer = output.scheduled === true && typeof output.scheduledFor === 'string'
+      const scheduledFor = isScheduledDefer ? new Date(output.scheduledFor as string) : null
+
+      if (isScheduledDefer && scheduledFor && !Number.isNaN(scheduledFor.getTime())) {
+        const { scheduledSendAt: _ss, ...paramsToSave } = effectiveParameters as Record<string, unknown>
+        await prisma.action.update({
+          where: { id: action.id },
+          data: {
+            status: 'scheduled',
+            scheduledFor,
+            parameters: paramsToSave as Prisma.JsonObject,
+            result: {
+              confidenceScore: getConfidenceScore(persistedAction.parameters),
+              details: execution.details,
+              output: execution.output as Prisma.JsonObject,
+              executionTrigger: params.trigger,
+              scheduled: true,
+            } as Prisma.JsonObject,
+          },
+        })
+
+        await createAuditLog({
+          actionType: persistedAction.type,
+          status: 'success',
+          actionId: persistedAction.id,
+          workspaceId: persistedAction.workspaceId,
+          userId: persistedAction.userId,
+          details: { scheduled: true, scheduledFor: scheduledFor.toISOString() },
+          provider: 'gmail',
+          toolName: 'send_email',
+          executionTrigger: params.trigger,
+        })
+
+        return
+      }
+
       await prisma.action.update({
         where: { id: action.id },
         data: {
           status: 'completed',
           executedAt: new Date(),
+          scheduledFor: null,
           parameters: effectiveParameters as Prisma.JsonObject,
           result: {
             confidenceScore: getConfidenceScore(persistedAction.parameters),

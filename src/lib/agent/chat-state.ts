@@ -211,7 +211,16 @@ export async function loadChatRuntimeState(context: ChatContext) {
         userId: context.userId,
         workspaceId: context.workspaceId,
         status: {
-          in: ['pending', 'waiting', 'retry_scheduled', 'rejected', 'completed', 'compensated', 'failed'],
+          in: [
+            'pending',
+            'waiting',
+            'retry_scheduled',
+            'scheduled',
+            'rejected',
+            'completed',
+            'compensated',
+            'failed',
+          ],
         },
       },
       orderBy: { updatedAt: 'desc' },

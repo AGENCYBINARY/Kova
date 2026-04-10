@@ -18,7 +18,6 @@ import {
   deleteGmailThreadPermanently,
   forwardGmailMessage,
   labelGmailThread,
-  readGmailMessageBody,
   removeGmailThreadLabels,
   replyToGmailMessage,
   sendGmailDraft,
@@ -66,6 +65,8 @@ const sendEmailSchema = z.object({
   bcc: z.array(z.string().email()).optional(),
   subject: z.string().min(1),
   body: z.string().min(1),
+  /** ISO 8601 — if in the future, Kova queues the send until then (after approval). Omit to send immediately. */
+  scheduledSendAt: z.string().min(1).optional(),
 }).passthrough()
 
 const createCalendarSchema = z.object({
@@ -290,7 +291,8 @@ export const tools: Array<McpToolDefinition> = [
     actionType: 'send_email',
     provider: 'gmail',
     title: 'Send email',
-    description: 'Send a Gmail message with validated recipients and deterministic payload.',
+    description:
+      'Send a Gmail message with validated recipients and deterministic payload. Optional scheduledSendAt (ISO 8601): if the user asked to send later, set it to that instant; the platform delivers after approval when the time is reached.',
     version: '2026-03-17',
     riskLevel: 'medium',
     deterministic: true,
@@ -301,6 +303,10 @@ export const tools: Array<McpToolDefinition> = [
         to: { type: 'array', items: { type: 'string', format: 'email' } },
         subject: { type: 'string' },
         body: { type: 'string' },
+        scheduledSendAt: {
+          type: 'string',
+          description: 'Optional ISO 8601 datetime for deferred send after user approval.',
+        },
       },
       required: ['to', 'subject', 'body'],
       additionalProperties: true,

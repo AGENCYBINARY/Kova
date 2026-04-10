@@ -117,6 +117,10 @@ export function deriveActionPlanStepStatus(actionStatuses: string[]): ActionPlan
     return 'waiting'
   }
 
+  if (actionStatuses.some((status) => status === 'scheduled')) {
+    return 'waiting'
+  }
+
   if (actionStatuses.every((status) => status === 'completed' || status === 'compensated')) {
     return 'completed'
   }
@@ -152,6 +156,10 @@ export function deriveActionPlanStatus(actionStatuses: string[]): ActionPlanLife
   }
 
   if (actionStatuses.some((status) => status === 'waiting')) {
+    return 'waiting'
+  }
+
+  if (actionStatuses.some((status) => status === 'scheduled')) {
     return 'waiting'
   }
 

@@ -73,6 +73,8 @@ model Action {
   status        String         @default("pending")
   result        Json?
   executedAt    DateTime?
+  /// When set, a cron job sends `send_email` at or after this time (user already approved).
+  scheduledFor  DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   workspaceId   String
@@ -89,6 +91,7 @@ model Action {
   @@index([workspaceId, userId, status, createdAt])
   @@index([workspaceId, userId, updatedAt])
   @@index([planId, planStepIndex])
+  @@index([status, scheduledFor])
 }
 
 model Integration {

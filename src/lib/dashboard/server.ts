@@ -20,6 +20,7 @@ function mapActionStatus(status: string): DashboardAction['status'] {
     status === 'pending' ||
     status === 'waiting' ||
     status === 'retry_scheduled' ||
+    status === 'scheduled' ||
     status === 'approved' ||
     status === 'rejected' ||
     status === 'expired' ||
@@ -227,6 +228,7 @@ function mapAction(record: {
   status: string
   createdAt: Date
   executedAt: Date | null
+  scheduledFor?: Date | null
   result: unknown
 }): DashboardAction {
   const type = record.type as DashboardAction['type']
@@ -246,6 +248,7 @@ function mapAction(record: {
     targetApp: targetAppForType(type),
     createdAt: record.createdAt.toISOString(),
     executedAt: record.executedAt?.toISOString(),
+    scheduledFor: record.scheduledFor != null ? record.scheduledFor.toISOString() : undefined,
     confidenceScore:
       typeof result.confidenceScore === 'number'
         ? result.confidenceScore
@@ -261,6 +264,8 @@ function mapAction(record: {
             ? 'Action staged in a multi-step workflow and waiting for its next execution window.'
             : record.status === 'retry_scheduled'
               ? 'Action hit a transient provider issue and has an automatic retry scheduled.'
+            : record.status === 'scheduled' && record.scheduledFor != null
+              ? `Approved send queued for ${record.scheduledFor.toISOString()} (UTC).`
           : undefined,
     error: typeof result.error === 'string' ? result.error : undefined,
   }
@@ -385,6 +390,7 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
         status: true,
         createdAt: true,
         executedAt: true,
+        scheduledFor: true,
         result: true,
       },
     }),
@@ -406,6 +412,7 @@ export async function getDashboardBundle(): Promise<DashboardBundle> {
         status: true,
         createdAt: true,
         executedAt: true,
+        scheduledFor: true,
         result: true,
       },
     }),

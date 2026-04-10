@@ -23,6 +23,11 @@ test('deriveActionPlanStatus surfaces waiting workflows', () => {
   assert.equal(deriveActionPlanStepStatus(['waiting']), 'waiting')
 })
 
+test('deriveActionPlanStatus treats deferred Gmail sends like waiting', () => {
+  assert.equal(deriveActionPlanStatus(['completed', 'scheduled']), 'waiting')
+  assert.equal(deriveActionPlanStepStatus(['scheduled']), 'waiting')
+})
+
 test('planUsesWorkflowControls detects waits, retries, and conditions', () => {
   assert.equal(planUsesWorkflowControls([{ title: 'A', detail: 'B' }]), false)
   assert.equal(planUsesWorkflowControls([{ title: 'A', detail: 'B', waitUntil: '2026-04-07T10:00:00.000Z' }]), true)

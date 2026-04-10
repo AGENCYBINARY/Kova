@@ -2,6 +2,7 @@ export type ActionStatus =
   | 'pending'
   | 'waiting'
   | 'retry_scheduled'
+  | 'scheduled'
   | 'approved'
   | 'rejected'
   | 'expired'
@@ -62,6 +63,8 @@ export interface DashboardAction {
   targetApp: 'Gmail' | 'Google Calendar' | 'Notion' | 'Google Docs' | 'Google Drive' | 'Google Photos'
   createdAt: string
   executedAt?: string
+  /** When a Gmail send is deferred after approval (ISO 8601). */
+  scheduledFor?: string
   confidenceScore: number
   details?: string
   error?: string
