@@ -227,7 +227,13 @@ export function Sidebar({
                 <span className={styles.integrationMiniName}>{app.name}</span>
               </span>
               <span
-                className={`${styles.integrationStatusDot} ${styles[app.status]}`}
+                className={`${styles.integrationDot} ${
+                  app.status === 'connected'
+                    ? styles.integrationDotConnected
+                    : app.status === 'error'
+                      ? styles.integrationDotError
+                      : styles.integrationDotDisconnected
+                }`}
                 title={`${app.name}: ${app.status}`}
                 aria-label={`${app.name}: ${app.status}`}
               />

@@ -25,6 +25,13 @@ export default function DashboardError({
         <p className={styles.copy}>
           Une erreur a interrompu cette page du workspace. Tu peux relancer l’écran ou revenir à l’accueil.
         </p>
+        {error?.message ? (
+          <details className={styles.technical}>
+            <summary>Détail technique</summary>
+            <pre className={styles.technicalPre}>{error.message}</pre>
+            {error.digest ? <p className={styles.digest}>digest: {error.digest}</p> : null}
+          </details>
+        ) : null}
         <div className={styles.actions}>
           <Button onClick={() => reset()}>Réessayer</Button>
           <Link href="/" className={buttonClassNames({ variant: 'secondary' })}>

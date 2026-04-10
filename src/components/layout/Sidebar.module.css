@@ -148,22 +148,23 @@
   color: rgba(255, 255, 255, 0.52);
 }
 
-.integrationStatusDot {
+.integrationDot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
 }
 
-.integrationStatusDot.connected {
+.integrationDotConnected {
   background: var(--accent-green);
 }
 
-.integrationStatusDot.disconnected {
+.integrationDotDisconnected {
   background: var(--accent-red);
 }
 
-.integrationStatusDot.error {
+.integrationDotError {
   background: var(--accent-amber);
 }
 

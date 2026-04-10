@@ -36,7 +36,12 @@ async function subscriptionFetcher(url: string): Promise<QuotaData | null> {
   if (!response.ok) {
     return null
   }
-  const payload = await response.json()
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    return null
+  }
   return isQuotaData(payload) ? payload : null
 }
 
