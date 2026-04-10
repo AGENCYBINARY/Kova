@@ -2247,6 +2247,16 @@ export function buildFallbackResponseWithContactsAndProfile(
   if (isEmailSendIntent(intentText)) {
     const matchedEmail = firstRealRecipientEmailFromInput(input)
     const ambiguousRecipients = contactMatchIsAmbiguous(contactCandidates)
+    const durationMinutes = assistantProfile?.meetingDefaultDurationMinutes || 30
+    const wantsMeetBundle = requestNeedsMeetLink(input) && hasResolvableCalendarSchedule(input, durationMinutes)
+    const fallbackResolvedContact =
+      matchedEmail && !knownContact
+        ? {
+            name: deriveNameFromEmail(matchedEmail) || matchedEmail,
+            email: matchedEmail,
+            aliases: [deriveNameFromEmail(matchedEmail) || matchedEmail],
+          }
+        : knownContact
 
     if (updateIntent && draftIntent) {
       return {
@@ -2342,6 +2352,28 @@ export function buildFallbackResponseWithContactsAndProfile(
             ? `No saved address for "${maybeRecipient}" in workspace contacts. I can resolve it from Gmail threads when connected, or paste their email.`
             : `Pas d’adresse enregistrée pour « ${maybeRecipient} » : je peux la retrouver dans tes mails Gmail si la connexion est active, ou colle son email.`,
         proposals: [],
+      }
+    }
+
+    if (wantsMeetBundle) {
+      const bundleContact = fallbackResolvedContact
+      if (!bundleContact) {
+        return {
+          response:
+            language === 'en'
+              ? 'I can prepare the calendar invite and the matching email with Google Meet, but I still need the recipient email before I lock the sequence.'
+              : "Je peux préparer l’invitation agenda et le mail associé avec Google Meet, mais il me manque encore l’adresse du destinataire avant de verrouiller la séquence.",
+          proposals: [],
+        }
+      }
+
+      const calProp = buildCalendarProposal(input, assistantProfile, bundleContact)
+      return {
+        response:
+          language === 'en'
+            ? 'I prepared the calendar invite with Google Meet and the matching email. Review both steps below and I’ll keep the sequence clean.'
+            : "J’ai préparé l’invitation agenda avec Google Meet et le mail associé. Vérifie les deux étapes ci-dessous et je garde la séquence propre.",
+        proposals: [calProp, buildMeetingEmailFollowupProposal(input, bundleContact, assistantProfile)],
       }
     }
 

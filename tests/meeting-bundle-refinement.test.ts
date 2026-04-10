@@ -72,14 +72,13 @@ test('resolved direct email request produces a polished subject and body instead
     [{ name: 'Neveu Maxime', email: 'neveu.maxime29@gmail.com', aliases: ['Maxime Neveu', 'Maxime'] }]
   )
 
-  assert.equal(result.proposals.length, 1)
-  const proposal = result.proposals[0]
-  assert.equal(proposal?.type, 'send_email')
+  assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'send_email'])
+  const proposal = result.proposals.find((item) => item.type === 'send_email')
   assert.equal(proposal?.parameters.to?.[0], 'neveu.maxime29@gmail.com')
   assert.match(String(proposal?.parameters.subject), /visio|réunion|objectifs/i)
   assert.doesNotMatch(String(proposal?.parameters.subject), /peux-tu|écrire un mail/i)
   assert.match(String(proposal?.parameters.body), /Bonjour/i)
-  assert.match(String(proposal?.parameters.body), /grande visio|vendredi|11h|objectifs/i)
+  assert.match(String(proposal?.parameters.body), /\{\{\s*meet_?link\s*\}\}/i)
   assert.doesNotMatch(String(proposal?.parameters.body), /peux-tu|écrire un mail/i)
 })
 
