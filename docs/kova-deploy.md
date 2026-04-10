@@ -10,6 +10,13 @@
 
 `NEXT_PUBLIC_APP_URL` en prod doit être l’URL **publique canonique** (souvent `https://kova.agencybinary.fr`, sans slash final) pour OAuth / Stripe return URLs.
 
+## Prisma / base de données (obligatoire sur Vercel)
+
+Le build Vercel exécute **`prisma migrate deploy`** avant `prisma generate` et `next build` (`vercel.json` + script `vercel-build`). Sans ça, le schéma Prisma peut être **en avance** sur la base → erreurs du type *column does not exist* au runtime.
+
+- **Variable requise au build :** `DATABASE_URL` (même valeur qu’en runtime pour la base cible du déploiement).
+- **Déjà en panne en prod :** après un push, le prochain déploiement applique les migrations manquantes. **À la main tout de suite :** dans le SQL editor Neon (ou `psql`), tu peux exécuter le fichier `prisma/migrations/20260405120000_action_scheduled_for/migration.sql` (il utilise `IF NOT EXISTS`).
+
 ## Vercel Crons — plan Hobby vs Pro
 
 Sur le **plan Hobby**, Vercel **refuse** tout cron qui s’exécute **plus d’une fois par jour** (ex. `*/5 * * * *` → échec au déploiement avec le message sur les limites Hobby).
