@@ -5,6 +5,7 @@ import { getErrorStatus } from '@/lib/http/errors'
 import { executeIdempotentJsonRequest, buildIdempotencyFingerprint } from '@/lib/http/idempotency'
 import { buildRateLimitHeaders, checkRequestRateLimit } from '@/lib/http/request-rate-limit'
 import { getChatPageData, orchestrateChatTurn } from '@/lib/agent/orchestrator'
+import { getChatRouteErrorPayload } from '@/lib/http/chat-route-errors'
 import { consumeQuota, refundQuota } from '@/lib/subscription'
 
 const requestSchema = z.object({
@@ -92,12 +93,13 @@ export async function POST(request: Request) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
     }
-    const { status, message } = getErrorStatus(error)
+
+    const { status, body } = getChatRouteErrorPayload(error)
 
     if (consumedQuotaForUserId && status >= 500) {
       await refundQuota(consumedQuotaForUserId)
     }
 
-    return NextResponse.json({ error: message }, { status })
+    return NextResponse.json(body, { status })
   }
 }

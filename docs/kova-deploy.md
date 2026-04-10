@@ -22,4 +22,4 @@
 
 ## Cible produit
 
-SaaS **agentique** : exécution d’actions sur intégrations (Gmail, Calendar, Meet, Docs, Drive, Notion, envois programmés, etc.) avec gouvernance / file d’approbation. Le comportement assistant est porté par le **modèle** (`systemPrompt` dans `src/lib/ai/client.ts`), pas par du texte marketing dans l’UI.
+SaaS **agentique** : exécution d’actions sur intégrations (Gmail, Calendar, Meet, Docs, Drive, Notion, envois programmés, etc.) avec gouvernance / file d’approbation. Le comportement assistant est porté par le **modèle** (`systemPrompt` dans `src/lib/ai/client.ts`), pas par du texte marketing dans l’UI. Message d’accueil vide : `src/lib/chat/welcome-copy.ts` (court, une seule source serveur + client). Erreurs tour chat : `getChatRouteErrorPayload` → JSON `messageFr` / `messageEn` pour éviter les dumps OpenAI bruts.

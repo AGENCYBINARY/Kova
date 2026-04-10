@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db/prisma'
+import { CHAT_WELCOME_EN, CHAT_WELCOME_FR } from '@/lib/chat/welcome-copy'
 import { expirePendingActions } from '@/lib/actions/pending-expiration'
 import { deferServerWork } from '@/lib/defer-server-work'
 import type { ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
@@ -50,32 +51,7 @@ export function toJsonValue(value: Record<string, unknown>) {
 }
 
 export function buildWelcomeMessage(defaultLanguage: 'fr' | 'en' = 'fr') {
-  const content =
-    defaultLanguage === 'en'
-      ? [
-          "I'm **Kova** — your **operational copilot** in this console. **You're talking to Kova's AI** (the same engine answers here and prepares work across your stack): it reasons about what you want, reads **connected apps** when linked, and turns requests into **actions** you can approve (or that run automatically if your workspace allows).",
-          '',
-          '**Apps I work across** (same judgment as a strong EA — not canned templates):',
-          '• **Gmail** — write, send, reply, forward, organize; if you only give a name, I pull from **threads + contacts** before asking once for a missing address.',
-          '• **Google Calendar** — events, attendees, **Google Meet** when a remote meeting makes sense (unless you opt out).',
-          '• **Google Docs & Drive** — real drafts, folders, moves, shares — deliverables where your team expects them.',
-          '• **Notion** — pages and **database properties** when context gives me the parent DB; archive when needed.',
-          '• **Google Photos** — **picker-first** so you choose media, then I act on that selection.',
-          '',
-          '**How we work together:** I explain my plan in plain language, package the right steps as proposals, and recap after things run. Say what you want in one shot or iterate — I’ll adapt. What should we tackle first?',
-        ].join('\n')
-      : [
-          'Je suis **Kova** — ton **copilote opérationnel** dans cette console. **Tu parles à l’IA de Kova** (c’est le même moteur qui répond ici et prépare le travail sur ton stack) : elle comprend ce que tu veux, lit tes **apps connectées** quand elles sont liées, et transforme ça en **actions** à valider (ou en exécution auto selon le workspace).',
-          '',
-          '**Où j’interviens** (comme une bonne EA — pas des modèles vides) :',
-          '• **Gmail** — rédaction, envoi, réponse, transfert, rangement ; avec un **seul prénom**, je m’appuie sur **threads + contacts** avant de te demander une seule précision si besoin.',
-          '• **Google Agenda** — événements, invités, **Google Meet** quand la visio a du sens (sauf si tu dis sans Meet).',
-          '• **Google Docs & Drive** — vrais contenus, dossiers, déplacements, partages.',
-          '• **Notion** — pages et **propriétés de bases** quand le contexte permet ; archivage si tu le demandes.',
-          '• **Google Photos** — je passe par un **sélecteur** : tu choisis, j’agis sur la sélection.',
-          '',
-          '**Ensemble :** je t’explique le plan clairement, je prépare les bonnes étapes sous forme de propositions, et je te fais un retour après exécution. Tu peux tout donner d’un coup ou affiner au fil de l’eau. Par quoi on commence ?',
-        ].join('\n')
+  const content = defaultLanguage === 'en' ? CHAT_WELCOME_EN : CHAT_WELCOME_FR
 
   return {
     id: 'welcome',

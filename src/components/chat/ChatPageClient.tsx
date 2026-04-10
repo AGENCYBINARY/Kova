@@ -6,6 +6,7 @@ import { ChatThinkingStatus } from '@/components/chat/ChatThinkingStatus'
 import { ChatDisambiguationCard, type ChatDisambiguation } from '@/components/chat/ChatDisambiguationCard'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { ActionProposalCard } from '@/components/actions/ActionProposalCard'
+import { CHAT_WELCOME_EN, CHAT_WELCOME_FR } from '@/lib/chat/welcome-copy'
 import { useLang } from '@/lib/lang-context'
 import styles from '@/app/(dashboard)/chat/page.module.css'
 
@@ -39,11 +40,6 @@ interface ChatPageClientProps {
   userFallback: string
   bootstrapFromApi?: boolean
 }
-
-const WELCOME_FR =
-  "Dis-moi ce que tu veux faire — courrier, agenda, docs, Drive, Notion. Je réponds ici ; les actions passent par la file quand c’est sensible."
-const WELCOME_EN =
-  "Tell me what you need — inbox, calendar, docs, Drive, Notion. I answer here; actions go through the queue when it matters."
 
 function buildProposalFallbackMessage(params: {
   proposals: ActionProposal[]
@@ -164,7 +160,7 @@ export function ChatPageClient({ initialMessages, initialProposals, userFallback
   const translateMessages = useCallback((items: Message[], currentLang: string) => (
     items.map((message) =>
       message.id === 'welcome'
-        ? { ...message, content: currentLang === 'fr' ? WELCOME_FR : WELCOME_EN }
+        ? { ...message, content: currentLang === 'fr' ? CHAT_WELCOME_FR : CHAT_WELCOME_EN }
         : message
     )
   ), [])
@@ -247,35 +243,47 @@ export function ChatPageClient({ initialMessages, initialProposals, userFallback
       })
 
       if (!response.ok) {
-        if (response.status === 429) {
-          const errData = await response.json().catch(() => ({}))
-          if (errData.error === 'quota_exceeded') {
-            const quota = errData.quota
-            const planLabel = quota?.plan === 'free' ? (lang === 'en' ? 'free' : 'gratuit') : (quota?.plan ?? 'free')
-            setMessages((previous) => [
-              ...previous,
-              {
-                id: String(Date.now()),
-                role: 'assistant',
-                content: lang === 'en'
+        const errData = (await response.json().catch(() => ({}))) as Record<string, unknown>
+
+        if (response.status === 429 && errData.error === 'quota_exceeded') {
+          const quota = errData.quota as { plan?: string; limit?: number } | undefined
+          const planLabel = quota?.plan === 'free' ? (lang === 'en' ? 'free' : 'gratuit') : (quota?.plan ?? 'free')
+          setMessages((previous) => [
+            ...previous,
+            {
+              id: String(Date.now()),
+              role: 'assistant',
+              content:
+                lang === 'en'
                   ? `You have reached your monthly limit of ${quota?.limit ?? 50} requests (${planLabel} plan). Upgrade your subscription from Settings to continue.`
                   : `Tu as atteint ta limite mensuelle de ${quota?.limit ?? 50} requêtes (plan ${planLabel}). Pour continuer, mets à niveau ton abonnement depuis les Paramètres.`,
-              },
-            ])
-            return
-          }
+            },
+          ])
+          return
+        }
 
-          if (errData.error === 'rate_limit_exceeded') {
-            setMessages((previous) => [
-              ...previous,
-              {
-                id: String(Date.now()),
-                role: 'assistant',
-                content: typeof errData.message === 'string' ? errData.message : t.chat.error,
-              },
-            ])
-            return
-          }
+        if (response.status === 429 && errData.error === 'rate_limit_exceeded') {
+          setMessages((previous) => [
+            ...previous,
+            {
+              id: String(Date.now()),
+              role: 'assistant',
+              content: typeof errData.message === 'string' ? errData.message : t.chat.error,
+            },
+          ])
+          return
+        }
+
+        const messageFr = typeof errData.messageFr === 'string' ? errData.messageFr : null
+        const messageEn = typeof errData.messageEn === 'string' ? errData.messageEn : null
+        if (messageFr || messageEn) {
+          const content =
+            lang === 'en' ? messageEn || messageFr || t.chat.error : messageFr || messageEn || t.chat.error
+          setMessages((previous) => [
+            ...previous,
+            { id: String(Date.now()), role: 'assistant', content },
+          ])
+          return
         }
 
         throw new Error('Failed to send message.')
