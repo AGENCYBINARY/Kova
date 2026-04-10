@@ -30,11 +30,27 @@ export function titleCaseContactValue(value: string) {
     .join(' ')
 }
 
-/** Single-token "names" produced by loose regexes (e.g. "mail a envoyer …") — not people. */
+/** Single-token "names" produced by loose regexes (e.g. "mail a envoyer …", "avec le lien") — not people. */
 const nonRecipientSingleTokens = new Set(
-  ['envoyer', 'envoie', 'rediger', 'redige', 'ecrire', 'ecris', 'formuler', 'ecrit'].map((w) =>
-    normalizeContactValue(w)
-  )
+  [
+    'envoyer',
+    'envoie',
+    'rediger',
+    'redige',
+    'ecrire',
+    'ecris',
+    'formuler',
+    'ecrit',
+    'le',
+    'la',
+    'les',
+    'un',
+    'une',
+    'lien',
+    'link',
+    'meet',
+    'visio',
+  ].map((w) => normalizeContactValue(w))
 )
 
 function sanitizeContactNameCandidate(value: string) {

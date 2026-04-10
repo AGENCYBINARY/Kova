@@ -12,6 +12,10 @@ import {
   findContactCandidatesByName,
   type KnownContact,
 } from '@/lib/contacts'
+import {
+  buildDemainWeekdayClarificationResponse,
+  inputHasDemainWeekdayConflict,
+} from '@/lib/agent/demain-weekday-conflict'
 import { canInferCalendarRangeFromUserText, inferCalendarRangeFromUserText } from '@/lib/scheduling/user-schedule'
 import { isEmailSendIntent, isReadOnlyWorkspaceQuestion } from '@/lib/workspace-context/intents'
 
@@ -1919,6 +1923,13 @@ export function buildFallbackResponseWithContactsAndProfile(
       }
     }
 
+    if (inputHasDemainWeekdayConflict(effectiveInput)) {
+      return {
+        response: buildDemainWeekdayClarificationResponse(language),
+        proposals: [],
+      }
+    }
+
     const calProp = buildCalendarProposal(input, assistantProfile, knownContact)
     const durationMinutes = assistantProfile?.meetingDefaultDurationMinutes || 30
     return {
@@ -1941,6 +1952,13 @@ export function buildFallbackResponseWithContactsAndProfile(
           language === 'en'
             ? `Yes. I can prepare it. I still need the date and exact time${attendeeEmails.length > 0 ? `, and I'll keep ${attendeeEmails.join(', ')} as attendee${attendeeEmails.length > 1 ? 's' : ''}` : ''}.`
             : `Oui. Je peux le préparer. Il me manque juste la date et l’heure exacte${attendeeEmails.length > 0 ? `, et je garde ${attendeeEmails.join(', ')} en invité${attendeeEmails.length > 1 ? 's' : ''}` : ''}.`,
+        proposals: [],
+      }
+    }
+
+    if (inputHasDemainWeekdayConflict(effectiveInput)) {
+      return {
+        response: buildDemainWeekdayClarificationResponse(language),
         proposals: [],
       }
     }
@@ -2363,6 +2381,13 @@ export function buildFallbackResponseWithContactsAndProfile(
             language === 'en'
               ? 'I can prepare the calendar invite and the matching email with Google Meet, but I still need the recipient email before I lock the sequence.'
               : "Je peux préparer l’invitation agenda et le mail associé avec Google Meet, mais il me manque encore l’adresse du destinataire avant de verrouiller la séquence.",
+          proposals: [],
+        }
+      }
+
+      if (inputHasDemainWeekdayConflict(effectiveInput)) {
+        return {
+          response: buildDemainWeekdayClarificationResponse(language),
           proposals: [],
         }
       }

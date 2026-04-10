@@ -68,7 +68,7 @@ test('meeting plus email bundle asks for the recipient address instead of emitti
 
 test('resolved direct email request produces a polished subject and body instead of echoing the raw instruction', () => {
   const result = buildFallbackResponseWithContactsAndProfile(
-    "peux-tu s'il te plaît écrire un mail à Maxime Neveu avec un lien Google Meet en lui disant qu'il y a une grande visio demain vendredi à 11h pour les objectifs",
+    "peux-tu s'il te plaît écrire un mail à Maxime Neveu avec un lien Google Meet en lui disant qu'il y a une grande visio vendredi 10 avril 2026 à 11h pour les objectifs",
     [{ name: 'Neveu Maxime', email: 'neveu.maxime29@gmail.com', aliases: ['Maxime Neveu', 'Maxime'] }]
   )
 

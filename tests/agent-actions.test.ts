@@ -804,7 +804,7 @@ test('model-authored meeting emails are patched minimally instead of being repla
 
   try {
     const result = await runAgentTurn(
-      "peux-tu écrire un mail à Maxime Neveu avec un lien Google Meet en lui disant qu'il y a une grande visio demain mercredi à 19h30 pour les objectifs",
+      "peux-tu écrire un mail à Maxime Neveu avec un lien Google Meet en lui disant qu'il y a une grande visio mercredi 8 avril 2026 à 19h30 pour les objectifs",
       [],
       [{ name: 'Maxime Neveu', email: 'maxime.neveu@example.com', aliases: ['Maxime', 'Neveu'] }]
     )
@@ -877,7 +877,7 @@ test('guardrail responses are re-enriched with a lightweight LLM pass when the v
 
   try {
     const result = await runAgentTurn(
-      'Prépare un brouillon Gmail pour Maxime Neveu à propos de la visio demain mercredi à 19h30 sur les objectifs.',
+      'Prépare un brouillon Gmail pour Maxime Neveu à propos de la visio mercredi 8 avril 2026 à 19h30 sur les objectifs.',
       [],
       [{ name: 'Maxime Neveu', email: 'maxime.neveu@example.com', aliases: ['Maxime', 'Neveu'] }]
     )

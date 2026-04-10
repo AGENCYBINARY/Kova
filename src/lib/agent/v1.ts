@@ -32,6 +32,10 @@ import {
 } from '@/lib/contacts'
 import { getToolByActionType, listMcpTools } from '@/lib/mcp/registry'
 import { canInferCalendarRangeFromUserText } from '@/lib/scheduling/user-schedule'
+import {
+  buildDemainWeekdayClarificationResponse,
+  inputHasDemainWeekdayConflict,
+} from '@/lib/agent/demain-weekday-conflict'
 
 export {
   agentActionTypeSchema,
@@ -107,10 +111,18 @@ function needsCalendarTimingClarification(input: string, proposals: AgentProposa
     return false
   }
 
+  if (inputHasDemainWeekdayConflict(input)) {
+    return true
+  }
+
   return !hasConcreteCalendarSchedule(input) && !canInferCalendarRangeFromUserText(input, 30)
 }
 
 function buildCalendarTimingClarificationResponse(language: 'fr' | 'en', input: string) {
+  if (inputHasDemainWeekdayConflict(input)) {
+    return buildDemainWeekdayClarificationResponse(language)
+  }
+
   const bundle = looksLikeCalendarEmailBundleIntent(input)
   if (language === 'en') {
     return bundle
@@ -544,9 +556,19 @@ function alignCalendarEmailBundleProposals(params: {
     'Kova'
   const isReschedule =
     /\b(reporter|reporte|report|reschedule|decaler|décaler|annuler|cancel|move|postpone)\b/.test(normalizedInput)
-  const mentionsMeet = Boolean(calendarProposal.parameters.createMeetLink)
+  const forceMeetOff = requestForcesMeetLinkOff(params.input)
+  const inputWantsMeet = requestNeedsMeetLink(params.input)
+  const preBundleEmailHasMeetToken = params.proposals.some(
+    (p) =>
+      (p.type === 'send_email' || p.type === 'create_gmail_draft') &&
+      typeof p.parameters.body === 'string' &&
+      /\{\{\s*meet_?link\s*\}\}/i.test(p.parameters.body)
+  )
+  const mentionsMeetForCopy =
+    !forceMeetOff &&
+    (Boolean(calendarProposal.parameters.createMeetLink) || inputWantsMeet || preBundleEmailHasMeetToken)
 
-  return params.proposals.map((proposal) => {
+  const aligned = params.proposals.map((proposal) => {
     if (proposal.type !== 'send_email' && proposal.type !== 'create_gmail_draft') {
       return proposal
     }
@@ -555,7 +577,7 @@ function alignCalendarEmailBundleProposals(params: {
     const existingSubject = typeof proposal.parameters.subject === 'string' ? proposal.parameters.subject : ''
     const bodyHasMeetPlaceholder =
       /\{\{\s*meet_?link\s*\}\}/i.test(existingBody)
-    const shouldPatchMeetPlaceholder = mentionsMeet && !bodyHasMeetPlaceholder
+    const shouldPatchMeetPlaceholder = mentionsMeetForCopy && !bodyHasMeetPlaceholder
     const subjectNeedsRepair = !existingSubject.trim() || looksLikeLiteralInstructionText(existingSubject)
     const bodyNeedsFullRewrite =
       !existingBody.trim() ||
@@ -579,8 +601,8 @@ function alignCalendarEmailBundleProposals(params: {
               '',
               'I need to move our meeting.',
               scheduleLabel ? `I’m proposing ${scheduleLabel} instead.` : 'I’m proposing an updated slot instead.',
-              mentionsMeet ? 'Here is the Google Meet link for the call:' : 'I’m sharing the updated invite here.',
-              ...(mentionsMeet ? ['{{meet_link}}'] : []),
+              mentionsMeetForCopy ? 'Here is the Google Meet link for the call:' : 'I’m sharing the updated invite here.',
+              ...(mentionsMeetForCopy ? ['{{meet_link}}'] : []),
               '',
               'Let me know if this works for you.',
               '',
@@ -591,8 +613,8 @@ function alignCalendarEmailBundleProposals(params: {
               greeting,
               '',
               scheduleLabel ? `Here is the proposed slot: ${scheduleLabel}.` : 'Here is the proposed slot.',
-              mentionsMeet ? 'Here is the Google Meet link for the call:' : 'I’m sharing the invite here.',
-              ...(mentionsMeet ? ['{{meet_link}}'] : []),
+              mentionsMeetForCopy ? 'Here is the Google Meet link for the call:' : 'I’m sharing the invite here.',
+              ...(mentionsMeetForCopy ? ['{{meet_link}}'] : []),
               '',
               'Let me know if this works for you.',
               '',
@@ -605,8 +627,8 @@ function alignCalendarEmailBundleProposals(params: {
               '',
               'Je dois décaler notre réunion.',
               scheduleLabel ? `Je te propose ${scheduleLabel} à la place.` : 'Je te propose un créneau mis à jour.',
-              mentionsMeet ? 'Voici le lien Google Meet pour la visio :' : 'Je te partage l’invitation mise à jour ici.',
-              ...(mentionsMeet ? ['{{meet_link}}'] : []),
+              mentionsMeetForCopy ? 'Voici le lien Google Meet pour la visio :' : 'Je te partage l’invitation mise à jour ici.',
+              ...(mentionsMeetForCopy ? ['{{meet_link}}'] : []),
               '',
               'Dis-moi si ça te convient.',
               '',
@@ -617,8 +639,8 @@ function alignCalendarEmailBundleProposals(params: {
               greeting,
               '',
               scheduleLabel ? `Je te propose ce créneau : ${scheduleLabel}.` : 'Je te propose ce créneau.',
-              mentionsMeet ? 'Voici le lien Google Meet pour la visio :' : 'Je te partage l’invitation ici.',
-              ...(mentionsMeet ? ['{{meet_link}}'] : []),
+              mentionsMeetForCopy ? 'Voici le lien Google Meet pour la visio :' : 'Je te partage l’invitation ici.',
+              ...(mentionsMeetForCopy ? ['{{meet_link}}'] : []),
               '',
               'Dis-moi si ça te convient.',
               '',
@@ -672,6 +694,29 @@ function alignCalendarEmailBundleProposals(params: {
         body: patchedBody,
       },
       confidenceScore: Math.max(proposal.confidenceScore, knownContact ? 0.94 : 0.86),
+    }
+  })
+
+  const postBundleEmailHasMeetToken = aligned.some(
+    (p) =>
+      (p.type === 'send_email' || p.type === 'create_gmail_draft') &&
+      typeof p.parameters.body === 'string' &&
+      /\{\{\s*meet_?link\s*\}\}/i.test(p.parameters.body)
+  )
+  const calendarMustEnableMeet =
+    !forceMeetOff &&
+    (Boolean(calendarProposal.parameters.createMeetLink) || inputWantsMeet || postBundleEmailHasMeetToken)
+
+  return aligned.map((proposal) => {
+    if (proposal.type !== 'create_calendar_event') {
+      return proposal
+    }
+    return {
+      ...proposal,
+      parameters: {
+        ...proposal.parameters,
+        createMeetLink: calendarMustEnableMeet,
+      },
     }
   })
 }
