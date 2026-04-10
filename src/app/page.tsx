@@ -52,6 +52,9 @@ const features = [
   },
 ]
 
+/** Marketing landing: cacheable at the edge (middleware sends signed-in users to /dashboard). */
+export const dynamic = 'force-static'
+
 export default function HomePage() {
   return (
     <div className={styles.root}>

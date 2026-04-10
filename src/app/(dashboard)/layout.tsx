@@ -4,6 +4,9 @@ import { LangProvider } from '@/lib/lang-context'
 import { cookies } from 'next/headers'
 import styles from './layout.module.css'
 
+/** Logged-in shell: fresh sidebar + lang; keep marketing/legal static at root. */
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardLayout({
   children,
 }: {

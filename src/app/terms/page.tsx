@@ -2,6 +2,8 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import styles from '../legal.module.css'
 
+export const dynamic = 'force-static'
+
 export const metadata: Metadata = {
   title: 'Terms of Use — Kova',
   description: 'Terms governing access to and use of Kova by AGENCY BINARY.',

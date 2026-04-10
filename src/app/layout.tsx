@@ -4,9 +4,6 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 
-/** Never statically prerender the tree: Clerk (SignIn, layout, etc.) needs keys at build time for SSG. */
-export const dynamic = 'force-dynamic'
-
 const manrope = Manrope({
   subsets: ['latin'],
   display: 'swap',
