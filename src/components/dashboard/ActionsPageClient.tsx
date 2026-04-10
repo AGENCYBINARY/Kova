@@ -4,13 +4,9 @@ import { useEffect, useState } from 'react'
 import { Badge, Button, Card } from '@/components/ui'
 import { useLang } from '@/lib/lang-context'
 import type { ActionsPageData } from '@/lib/dashboard/server'
+import { ActionParametersPreview, getProposalDisplayCopy, formatDateTimeParis } from '@/components/actions/action-parameter-previews'
+import { iconForActionType } from '@/components/actions/action-type-icons'
 import styles from '@/app/(dashboard)/actions/page.module.css'
-
-const actionIcons: Record<string, JSX.Element> = {
-  send_email: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>,
-  create_calendar_event: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>,
-  create_google_drive_file: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3h6l5 9-5 9H9l-5-9 5-9z" /><path d="M9 3 4 12M15 3l5 9M7 16h10" /></svg>,
-}
 
 export function ActionsPageClient({ data }: { data: ActionsPageData }) {
   const { t, lang } = useLang()
@@ -162,15 +158,27 @@ export function ActionsPageClient({ data }: { data: ActionsPageData }) {
           </div>
         ) : (
           <div className={styles.list}>
-            {pendingActions.map((action) => (
-              <Card key={action.id} variant="bordered" className={styles.card}>
+            {pendingActions.map((action) => {
+              const display = getProposalDisplayCopy({
+                type: action.type,
+                title: action.title,
+                description: action.description,
+                parameters: action.parameters,
+                lang,
+              })
+              const scheduledHint =
+                action.type === 'send_email' && typeof action.parameters.scheduledSendAt === 'string' && action.parameters.scheduledSendAt.trim()
+                  ? formatDateTimeParis(action.parameters.scheduledSendAt, lang)
+                  : null
+              return (
+                <Card key={action.id} variant="bordered" className={styles.card}>
                 <div className={styles.cardHeader}>
                   <div className={styles.iconWrapper}>
-                    {actionIcons[action.type] || actionIcons.send_email}
+                    {iconForActionType(action.type)}
                   </div>
                   <div className={styles.cardInfo}>
-                    <h3 className={styles.cardTitle}>{action.title}</h3>
-                    <p className={styles.cardDescription}>{action.description}</p>
+                    <h3 className={styles.cardTitle}>{display.title}</h3>
+                    <p className={styles.cardDescription}>{display.description}</p>
                     <div className={styles.meta}>
                       <span className={styles.cardTime}>
                         {t.actions.proposed} {new Date(action.createdAt).toLocaleString(locale)}
@@ -188,9 +196,14 @@ export function ActionsPageClient({ data }: { data: ActionsPageData }) {
                     </Badge>
                   </div>
                 </div>
+                {scheduledHint ? (
+                  <p className={styles.scheduleLine}>
+                    {t.proposal.scheduledSend}: {scheduledHint}
+                  </p>
+                ) : null}
                 {action.details ? <p className={styles.details}>{action.details}</p> : null}
                 <div className={styles.parameters}>
-                  <pre>{JSON.stringify(action.parameters, null, 2)}</pre>
+                  <ActionParametersPreview type={action.type} parameters={action.parameters} showRawJson />
                 </div>
                 <div className={styles.cardActions}>
                   <Button variant="ghost" size="sm" disabled>{t.actions.modify}</Button>
@@ -211,8 +224,9 @@ export function ActionsPageClient({ data }: { data: ActionsPageData }) {
                     {t.actions.approve}
                   </Button>
                 </div>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>

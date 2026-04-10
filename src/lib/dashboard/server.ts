@@ -7,6 +7,20 @@ import { getGoogleIntegrationCapabilityState } from '@/lib/integrations/google-a
 import { expirePendingActions } from '@/lib/actions/pending-expiration'
 import { deferServerWork } from '@/lib/defer-server-work'
 
+/** Human-readable wall time for deferred Gmail sends (matches proposal preview TZ). */
+function formatScheduledForDetail(scheduledFor: Date): string {
+  try {
+    const wall = new Intl.DateTimeFormat('en-GB', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Europe/Paris',
+    }).format(scheduledFor)
+    return `Approved send queued for ${wall} (Europe/Paris).`
+  } catch {
+    return `Approved send queued for ${scheduledFor.toISOString()} (UTC).`
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as Record<string, unknown>
@@ -265,7 +279,7 @@ function mapAction(record: {
             : record.status === 'retry_scheduled'
               ? 'Action hit a transient provider issue and has an automatic retry scheduled.'
             : record.status === 'scheduled' && record.scheduledFor != null
-              ? `Approved send queued for ${record.scheduledFor.toISOString()} (UTC).`
+              ? formatScheduledForDetail(record.scheduledFor)
           : undefined,
     error: typeof result.error === 'string' ? result.error : undefined,
   }
