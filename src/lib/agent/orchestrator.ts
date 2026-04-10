@@ -19,12 +19,12 @@ import {
 } from '@/lib/agent/meeting-invite-repeat'
 import {
   type ChatContext,
-  buildWelcomeMessage,
   extractConnectedContextSeed,
   loadChatPageState,
   loadChatRuntimeState,
   toJsonValue,
 } from '@/lib/agent/chat-state'
+import { formatAgentRuntimeBrief } from '@/lib/agent/runtime-brief'
 import { getWorkspaceGovernance } from '@/lib/agent/governance'
 import { inferRiskLevel, resolveExecutionDecision } from '@/lib/agent/policy'
 import { listKnownContacts } from '@/lib/contacts'
@@ -39,14 +39,11 @@ import { resolveConnectedWorkspaceContext } from '@/lib/workspace-context/servic
 export type ChatExecutionMode = 'ask' | 'auto'
 
 export async function getChatPageData(context: ChatContext) {
-  const [pageState, assistantProfile] = await Promise.all([
-    loadChatPageState(context),
-    getAssistantProfile(context.workspaceId),
-  ])
+  const pageState = await loadChatPageState(context)
   const { messages, proposals } = pageState
 
   return {
-    messages: messages.length > 0 ? messages : [buildWelcomeMessage(assistantProfile.defaultLanguage)],
+    messages,
     proposals,
   }
 }
@@ -67,13 +64,24 @@ export async function orchestrateChatTurn(params: {
     userId,
   })
   const chatRuntimeStatePromise = loadChatRuntimeState(params.context)
+  const integrationRowsPromise = prisma.integration.findMany({
+    where: { workspaceId, userId },
+    select: { type: true, status: true },
+    orderBy: { type: 'asc' },
+  })
 
-  const [knownContacts, assistantProfile, governance, chatRuntimeState] = await Promise.all([
+  const [knownContacts, assistantProfile, governance, chatRuntimeState, integrationRows] = await Promise.all([
     knownContactsPromise,
     assistantProfilePromise,
     governancePromise,
     chatRuntimeStatePromise,
+    integrationRowsPromise,
   ])
+  const agentRuntimeBrief = formatAgentRuntimeBrief({
+    role: governance.role,
+    allowedActionTypes: governance.allowedActionTypes,
+    integrations: integrationRows,
+  })
   const { previousMessages, pendingActions, recentActions } = chatRuntimeState
 
   await createToolVisibilityAuditLog({
@@ -121,6 +129,7 @@ export async function orchestrateChatTurn(params: {
       governanceRole: governance.role,
       assistantProfile,
       connectedContextResult,
+      agentRuntimeBrief,
     })
   }
 
@@ -251,9 +260,19 @@ export async function orchestrateChatTurn(params: {
         {
           workspaceContext: connectedContextResult?.workspaceContext,
           connectedContextMetadata: connectedContextResult?.metadata,
+          agentRuntimeBrief,
         }
       )
   const agentDisambiguations = agentResult.disambiguations || []
+
+  const assistantReplyBody =
+    agentResult.response?.trim() ||
+    (agentResult.proposals.length > 0
+      ? agentResult.proposals
+          .map((proposal) => proposal.title?.trim() || proposal.type)
+          .filter(Boolean)
+          .join('\n')
+      : '')
 
   const executionDecision = resolveExecutionDecision({
     requestedMode: params.executionMode,
@@ -285,7 +304,7 @@ export async function orchestrateChatTurn(params: {
     }),
     prisma.message.create({
       data: {
-        content: agentResult.response,
+        content: assistantReplyBody,
         role: 'assistant',
         metadata: assistantMetadata,
         userId,
@@ -317,7 +336,7 @@ export async function orchestrateChatTurn(params: {
     workspaceId,
     defaultLanguage: assistantProfile.defaultLanguage,
     userTurnContent: params.content,
-    assistantPlanContent: agentResult.response,
+    assistantPlanContent: assistantReplyBody,
   })
 
   return {
@@ -348,6 +367,7 @@ async function orchestrateConnectedReadTurn(params: {
   governanceRole: string
   assistantProfile: Awaited<ReturnType<typeof getAssistantProfile>>
   connectedContextResult: NonNullable<Awaited<ReturnType<typeof resolveConnectedWorkspaceContext>>>
+  agentRuntimeBrief: string
 }) {
   const { workspaceId, userId } = params.context
   let liveResponse = ''
@@ -360,6 +380,7 @@ async function orchestrateConnectedReadTurn(params: {
       {
         assistantProfile: params.assistantProfile,
         workspaceContext: params.connectedContextResult.workspaceContext,
+        agentRuntimeBrief: params.agentRuntimeBrief,
         behaviorMode: 'connected_read',
       }
     )

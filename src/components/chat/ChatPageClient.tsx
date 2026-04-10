@@ -6,7 +6,6 @@ import { ChatThinkingStatus } from '@/components/chat/ChatThinkingStatus'
 import { ChatDisambiguationCard, type ChatDisambiguation } from '@/components/chat/ChatDisambiguationCard'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { ActionProposalCard } from '@/components/actions/ActionProposalCard'
-import { CHAT_WELCOME_EN, CHAT_WELCOME_FR } from '@/lib/chat/welcome-copy'
 import { useLang } from '@/lib/lang-context'
 import styles from '@/app/(dashboard)/chat/page.module.css'
 
@@ -39,85 +38,6 @@ interface ChatPageClientProps {
   initialProposals: ActionProposal[]
   userFallback: string
   bootstrapFromApi?: boolean
-}
-
-function buildProposalFallbackMessage(params: {
-  proposals: ActionProposal[]
-  lang: 'fr' | 'en'
-  executionMode: ExecutionMode
-}) {
-  const proposalCount = params.proposals.length
-  const hasCalendar = params.proposals.some((proposal) => proposal.type === 'create_calendar_event' || proposal.type === 'update_calendar_event')
-  const hasEmail = params.proposals.some((proposal) =>
-    ['send_email', 'create_gmail_draft', 'update_gmail_draft', 'reply_to_email', 'forward_email'].includes(proposal.type)
-  )
-  const hasDocs = params.proposals.some((proposal) =>
-    ['create_google_doc', 'update_google_doc', 'create_notion_page', 'update_notion_page', 'update_notion_page_properties'].includes(proposal.type)
-  )
-  const hasDrive = params.proposals.some((proposal) =>
-    ['create_google_drive_file', 'create_google_drive_folder', 'move_google_drive_file', 'rename_google_drive_file', 'share_google_drive_file', 'copy_google_drive_file'].includes(proposal.type)
-  )
-
-  if (params.lang === 'en') {
-    if (hasCalendar && hasEmail) {
-      return params.executionMode === 'auto'
-        ? 'I lined up the calendar invite and the matching email as one sequence, so the handoff stays coherent.'
-        : 'I lined up the calendar invite and the matching email as one sequence. Review both just below and I’ll handle the rest cleanly.'
-    }
-    if (hasDocs && hasDrive) {
-      return params.executionMode === 'auto'
-        ? 'I prepared the document work and the related Drive organization together.'
-        : 'I prepared the document work and the related Drive organization together. Review the actions just below and I’ll execute the sequence cleanly.'
-    }
-    if (hasEmail) {
-      return params.executionMode === 'auto'
-        ? 'The email is lined up and ready.'
-        : 'The email is lined up. Review the draft below and I’ll take care of the send.'
-    }
-    if (hasCalendar) {
-      return params.executionMode === 'auto'
-        ? 'The calendar move is ready.'
-        : 'The calendar move is ready. Check the invite below and I’ll execute it cleanly.'
-    }
-    if (hasDrive) {
-      return params.executionMode === 'auto'
-        ? 'The Drive action is ready.'
-        : 'The Drive action is ready. Review it below and I’ll execute it cleanly.'
-    }
-    return params.executionMode === 'auto'
-      ? `I lined up ${proposalCount} action${proposalCount > 1 ? 's' : ''}.`
-      : `I lined up ${proposalCount} action${proposalCount > 1 ? 's' : ''} for review just below.`
-  }
-
-  if (hasCalendar && hasEmail) {
-    return params.executionMode === 'auto'
-      ? "J’ai cadré l’invitation agenda et le mail associé comme une seule séquence propre."
-      : "J’ai cadré l’invitation agenda et le mail associé comme une seule séquence. Vérifie les deux juste en dessous et je gère la suite."
-  }
-  if (hasDocs && hasDrive) {
-    return params.executionMode === 'auto'
-      ? "J’ai préparé le travail documentaire et le rangement Drive associé."
-      : "J’ai préparé le travail documentaire et le rangement Drive associé. Vérifie les actions juste en dessous et j’exécute ça proprement."
-  }
-  if (hasEmail) {
-    return params.executionMode === 'auto'
-      ? "Le mail est prêt."
-      : "Le mail est prêt. Vérifie le brouillon juste en dessous et je m’occupe de l’envoi."
-  }
-  if (hasCalendar) {
-    return params.executionMode === 'auto'
-      ? "L’action agenda est prête."
-      : "L’action agenda est prête. Vérifie l’invitation juste en dessous et je gère l’exécution."
-  }
-  if (hasDrive) {
-    return params.executionMode === 'auto'
-      ? "L’action Drive est prête."
-      : "L’action Drive est prête. Vérifie-la juste en dessous et j’exécute ça proprement."
-  }
-
-  return params.executionMode === 'auto'
-    ? `J’ai préparé ${proposalCount} action${proposalCount > 1 ? 's' : ''}.`
-    : `J’ai préparé ${proposalCount} action${proposalCount > 1 ? 's' : ''} à valider juste en dessous.`
 }
 
 function buildDisambiguationReply(
@@ -157,17 +77,9 @@ export function ChatPageClient({ initialMessages, initialProposals, userFallback
     hasInitialScrollRef.current = true
   }, [messages, isStreaming, scrollToBottom])
 
-  const translateMessages = useCallback((items: Message[], currentLang: string) => (
-    items.map((message) =>
-      message.id === 'welcome'
-        ? { ...message, content: currentLang === 'fr' ? CHAT_WELCOME_FR : CHAT_WELCOME_EN }
-        : message
-    )
-  ), [])
-
   useEffect(() => {
-    setMessages((previous) => translateMessages(previous, lang))
-  }, [lang, translateMessages])
+    setMessages((previous) => previous.filter((message) => message.id !== 'welcome'))
+  }, [])
 
   const appendSystemError = useCallback(() => {
     setMessages((previous) => [
@@ -294,20 +206,6 @@ export function ChatPageClient({ initialMessages, initialProposals, userFallback
         setMessages((previous) => [...previous, data.assistantMessage])
       }
       if (Array.isArray(data.proposals) && data.proposals.length > 0) {
-        if (!data.assistantMessage) {
-          setMessages((previous) => [
-            ...previous,
-            {
-              id: `review-${Date.now()}`,
-              role: 'assistant',
-              content: buildProposalFallbackMessage({
-                proposals: data.proposals,
-                lang,
-                executionMode: (data.effectiveExecutionMode || params.executionMode) as ExecutionMode,
-              }),
-            },
-          ])
-        }
         setProposals((previous) => [...previous, ...data.proposals])
       }
       if (Array.isArray(data.executionMessages) && data.executionMessages.length > 0) {

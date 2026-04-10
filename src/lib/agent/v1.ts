@@ -772,6 +772,7 @@ export async function runAgentTurn(
   options: {
     workspaceContext?: string
     connectedContextMetadata?: Record<string, unknown>
+    agentRuntimeBrief?: string
   } = {}
 ): Promise<AgentTurnResult> {
   const effectiveInput = stripConversationalLeadIn(input)
@@ -792,6 +793,7 @@ export async function runAgentTurn(
             assistantProfile,
             skills: enabledSkills,
             workspaceContext: options.workspaceContext,
+            agentRuntimeBrief: options.agentRuntimeBrief,
             behaviorMode: 'conversation',
           }
         )
@@ -836,6 +838,7 @@ export async function runAgentTurn(
           assistantProfile,
           skills: enabledSkills,
           workspaceContext: options.workspaceContext,
+          agentRuntimeBrief: options.agentRuntimeBrief,
           behaviorMode: 'conversation',
         })
 
@@ -869,6 +872,7 @@ export async function runAgentTurn(
           skills: enabledSkills,
           tools: availableTools,
           workspaceContext: options.workspaceContext,
+          agentRuntimeBrief: options.agentRuntimeBrief,
         }
       )
 

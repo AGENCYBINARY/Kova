@@ -38,7 +38,7 @@ Voir [docs Vercel — Cron Hobby limits](https://vercel.com/docs/cron-jobs/usage
 
 ## Cible produit
 
-SaaS **agentique** : exécution d’actions sur intégrations (Gmail, Calendar, Meet, Docs, Drive, Notion, envois programmés, etc.) avec gouvernance / file d’approbation. Le comportement assistant est porté par le **modèle** (`systemPrompt` dans `src/lib/ai/client.ts`), pas par du texte marketing dans l’UI. Message d’accueil vide : `src/lib/chat/welcome-copy.ts` (court, une seule source serveur + client). Erreurs tour chat : `getChatRouteErrorPayload` → JSON `messageFr` / `messageEn` pour éviter les dumps OpenAI bruts.
+SaaS **agentique** : exécution d’actions sur intégrations (Gmail, Calendar, Meet, Docs, Drive, Notion, envois programmés, etc.) avec gouvernance / file d’approbation. Le comportement assistant est porté par le **modèle** (`systemPrompt` dans `src/lib/ai/client.ts`), pas par du texte marketing dans l’UI. Chat sans message d’accueil figé : l’historique vient de la base ; le premier message est celui du modèle après envoi. Erreurs tour chat : `getChatRouteErrorPayload` → JSON `messageFr` / `messageEn` pour éviter les dumps OpenAI bruts.
 
 ## Recommandations Vercel (panneau « Recommendations »)
 

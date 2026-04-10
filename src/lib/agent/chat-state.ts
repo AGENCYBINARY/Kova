@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/db/prisma'
-import { CHAT_WELCOME_EN, CHAT_WELCOME_FR } from '@/lib/chat/welcome-copy'
 import { expirePendingActions } from '@/lib/actions/pending-expiration'
 import { deferServerWork } from '@/lib/defer-server-work'
 import type { ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
@@ -48,16 +47,6 @@ export function asRecord(value: unknown): Record<string, unknown> {
 
 export function toJsonValue(value: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
-}
-
-export function buildWelcomeMessage(defaultLanguage: 'fr' | 'en' = 'fr') {
-  const content = defaultLanguage === 'en' ? CHAT_WELCOME_EN : CHAT_WELCOME_FR
-
-  return {
-    id: 'welcome',
-    role: 'assistant' as const,
-    content,
-  }
 }
 
 export function extractConnectedContextSeed(messages: PersistedMessageRecord[]): ConnectedContextSeed | null {

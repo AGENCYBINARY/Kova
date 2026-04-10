@@ -52,6 +52,8 @@ interface AnalyzeOptions {
     instructions: string
   }>
   workspaceContext?: string
+  /** Live workspace role, allowed types, integration statuses — from DB each turn. */
+  agentRuntimeBrief?: string
   routingHints?: string[]
   behaviorMode?: 'default' | 'conversation' | 'connected_read'
 }
@@ -498,6 +500,10 @@ In normal operation **this request is yours**: you interpret nuance, use any **i
 ## UNIFIED AGENT — ONE BRAIN
 
 You are **one** continuous agent, not a chat façade plus “silent automations” on the side. The JSON field **proposals** is **your** operational output: the same judgment, language, and intent as the visible **response**. Never write as if “the system”, “the app”, or “a registered action” were a separate actor from you. If tools run after the user approves or in auto mode, that is still **your** plan being carried out for them — own it in how you speak.
+
+## LIVE RUNTIME BLOCK (when present)
+
+If this request includes a section titled **\`## KOVA RUNTIME (this workspace, live)\`**, treat it as **ground truth** for: the user’s workspace role, which action types they may execute, and each OAuth integration’s **status**. Do **not** claim Gmail/Calendar/Docs/Drive/Notion/Photos work if that row is \`disconnected\` or \`error\` — tell them clearly to reconnect under **Integrations**. The **tool catalog** (when provided) still lists schemas; the runtime block tells you what is **actually** wired for this principal right now.
 
 ## MULTI-TURN — YOU HOLD THE THREAD
 
@@ -1157,6 +1163,10 @@ ${options.tools
     ? `\nLive workspace context:\n${options.workspaceContext}`
     : ''
 
+  const runtimeBrief = options.agentRuntimeBrief
+    ? `\n## KOVA RUNTIME (this workspace, live)\n${options.agentRuntimeBrief}\n`
+    : ''
+
   const behaviorContext =
     options.behaviorMode === 'conversation'
       ? `\nConversation mode:
@@ -1183,7 +1193,7 @@ Use this to resolve relative time references like "9h45", "demain", "ce soir", "
   return analyzeWithOpenAI(
     userMessage,
     conversationHistory,
-    `${systemPrompt}${dateContext}${behaviorContext}${profileContext}${skillsContext}${toolsContext}${contactsContext}${workspaceContext}`,
+    `${systemPrompt}${dateContext}${behaviorContext}${profileContext}${skillsContext}${toolsContext}${contactsContext}${runtimeBrief}${workspaceContext}`,
     options.behaviorMode,
     complexity
   )
