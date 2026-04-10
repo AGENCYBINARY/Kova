@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/internal/maintenance/scheduled-sends",
-      "schedule": "*/5 * * * *"
+      "schedule": "30 7 * * *"
     },
     {
       "path": "/api/internal/maintenance/workflows",
