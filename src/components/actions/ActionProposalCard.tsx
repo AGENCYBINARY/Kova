@@ -43,14 +43,132 @@ interface ActionProposalCardProps {
   loading?: boolean
 }
 
-function renderEmailPreview(parameters: Record<string, unknown>, t: ReturnType<typeof useLang>['t']) {
-  const recipients = Array.isArray(parameters.to) ? parameters.to.join(', ') : ''
+function isPlaceholderRecipient(value: string) {
+  const normalized = value.trim().toLowerCase()
+  return normalized === 'recipient@example.com' || normalized.endsWith('@example.com')
+}
+
+function formatConfidenceLabel(score: unknown, lang: Lang) {
+  if (typeof score !== 'number') {
+    return null
+  }
+
+  return lang === 'en' ? `${Math.round(score * 100)}% confidence` : `${Math.round(score * 100)}% de confiance`
+}
+
+function renderDisplayBody(body: string, lang: Lang) {
+  if (!body) {
+    return body
+  }
+
+  return body.replace(
+    /\{\{\s*meet_?link\s*\}\}/gi,
+    lang === 'en'
+      ? '[The Google Meet link will be inserted automatically after the event is created.]'
+      : "[Le lien Google Meet sera inséré automatiquement après la création de l'événement.]"
+  )
+}
+
+function getProposalDisplayCopy(params: {
+  type: string
+  title: string
+  description: string
+  parameters: Record<string, unknown>
+  lang: Lang
+}) {
+  const { type, title, description, parameters, lang } = params
+  const resolvedContactName =
+    typeof parameters.resolvedContactName === 'string' && parameters.resolvedContactName.trim()
+      ? parameters.resolvedContactName.trim()
+      : null
+  const emailRecipients = Array.isArray(parameters.to)
+    ? parameters.to.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : []
+  const hasPlaceholderRecipient = emailRecipients.some(isPlaceholderRecipient)
+  const hasMeetPlaceholder =
+    typeof parameters.body === 'string' && /\{\{\s*meet_?link\s*\}\}/i.test(parameters.body)
+
+  if (type === 'send_email' || type === 'create_gmail_draft' || type === 'update_gmail_draft') {
+    if (lang === 'en') {
+      return {
+        title:
+          type === 'create_gmail_draft'
+            ? resolvedContactName
+              ? `Prepare draft for ${resolvedContactName}`
+              : 'Prepare email draft'
+            : resolvedContactName
+              ? `Send email to ${resolvedContactName}`
+              : 'Prepare the email',
+        description: hasPlaceholderRecipient
+          ? 'Recipient still needs confirmation before this can be sent cleanly.'
+          : hasMeetPlaceholder
+            ? 'The message will carry the real Google Meet link once the calendar event exists.'
+            : 'Review the message details before execution.',
+      }
+    }
+
+    return {
+      title:
+        type === 'create_gmail_draft'
+          ? resolvedContactName
+            ? `Préparer le brouillon pour ${resolvedContactName}`
+            : 'Préparer le brouillon email'
+          : resolvedContactName
+            ? `Envoyer le mail à ${resolvedContactName}`
+            : 'Préparer le mail',
+      description: hasPlaceholderRecipient
+        ? "Le destinataire doit encore être confirmé avant envoi."
+        : hasMeetPlaceholder
+          ? "Le message reprendra le vrai lien Google Meet dès que l'événement agenda sera créé."
+          : 'Vérifie le contenu avant exécution.',
+    }
+  }
+
+  if (type === 'create_calendar_event' || type === 'update_calendar_event') {
+    const calendarTitle =
+      typeof parameters.title === 'string' && parameters.title.trim()
+        ? parameters.title.trim()
+        : lang === 'en'
+          ? 'Calendar invite'
+          : 'Invitation agenda'
+
+    return {
+      title: calendarTitle,
+      description:
+        lang === 'en'
+          ? 'Review the event details before it reaches Google Calendar.'
+          : "Vérifie les détails avant envoi dans Google Calendar.",
+    }
+  }
+
+  if (type === 'create_notion_page' || type === 'update_notion_page' || type === 'update_notion_page_properties') {
+    return {
+      title:
+        typeof parameters.title === 'string' && parameters.title.trim()
+          ? parameters.title.trim()
+          : lang === 'en'
+            ? 'Prepare the Notion update'
+            : 'Préparer la mise à jour Notion',
+      description:
+        lang === 'en'
+          ? 'Structured Notion update prepared for review.'
+          : 'Mise à jour Notion structurée, prête à vérifier.',
+    }
+  }
+
+  return { title, description }
+}
+
+function renderEmailPreview(parameters: Record<string, unknown>, t: ReturnType<typeof useLang>['t'], lang: Lang) {
+  const recipients = Array.isArray(parameters.to)
+    ? parameters.to
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => (isPlaceholderRecipient(value) ? t.proposal.noRecipient : value))
+        .join(', ')
+    : ''
   const subject = typeof parameters.subject === 'string' ? parameters.subject : ''
   const body = typeof parameters.body === 'string' ? parameters.body : ''
-  const confidenceScore =
-    typeof parameters.confidenceScore === 'number'
-      ? `${Math.round(parameters.confidenceScore * 100)}% confidence`
-      : null
+  const confidenceScore = formatConfidenceLabel(parameters.confidenceScore, lang)
   return (
     <div className={styles.previewBlock}>
       <div className={styles.previewRow}>
@@ -62,7 +180,7 @@ function renderEmailPreview(parameters: Record<string, unknown>, t: ReturnType<t
         <span className={styles.previewValue}>{subject || t.proposal.noSubject}</span>
       </div>
       {confidenceScore ? <div className={styles.previewMeta}>{confidenceScore}</div> : null}
-      <div className={styles.previewBody}>{body || t.proposal.emptyBody}</div>
+      <div className={styles.previewBody}>{renderDisplayBody(body, lang) || t.proposal.emptyBody}</div>
     </div>
   )
 }
@@ -285,10 +403,11 @@ const actionIcons: Record<string, JSX.Element> = {
 
 export function ActionProposalCard({ id, type, title, description, parameters, onApprove, onReject, loading }: ActionProposalCardProps) {
   const { t, lang } = useLang()
+  const displayCopy = getProposalDisplayCopy({ type, title, description, parameters, lang })
 
   const renderPreview = () => {
     if (type === 'send_email' || type === 'create_gmail_draft' || type === 'update_gmail_draft' || type === 'reply_to_email' || type === 'forward_email') {
-      return renderEmailPreview(parameters, t)
+      return renderEmailPreview(parameters, t, lang)
     }
     if (type === 'create_calendar_event' || type === 'update_calendar_event') return renderCalendarPreview(parameters, t, lang)
     if (type === 'create_google_drive_file') return renderDrivePreview(parameters, t)
@@ -308,11 +427,11 @@ export function ActionProposalCard({ id, type, title, description, parameters, o
           {actionIcons[type] || actionIcons.send_email}
         </div>
         <div className={styles.headerContent}>
-          <h3 className={styles.title}>{title}</h3>
+          <h3 className={styles.title}>{displayCopy.title}</h3>
           <Badge variant="warning" size="sm">{t.proposal.pendingApproval}</Badge>
         </div>
       </div>
-      <p className={styles.description}>{description}</p>
+      <p className={styles.description}>{displayCopy.description}</p>
       {renderPreview()}
       <div className={styles.actions}>
         <Button variant="danger" size="sm" onClick={() => onReject(id)} disabled={loading}>

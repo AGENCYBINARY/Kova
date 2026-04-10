@@ -56,6 +56,16 @@ test('implicit workflow briefs get a targeted clarification instead of the gener
   assert.doesNotMatch(result.response, /Je n’ai pas relié ça à une suite claire/i)
 })
 
+test('meeting plus email bundle asks for the recipient address instead of emitting a placeholder email proposal', () => {
+  const result = buildFallbackResponseWithContactsAndProfile(
+    "prépare l'invitation demain vendredi à 11h et envoie aussi le mail à Maxime Neveu avec le lien Google Meet",
+    []
+  )
+
+  assert.equal(result.proposals.length, 0)
+  assert.match(result.response, /adresse|email|gmail/i)
+})
+
 test('isEmailSendIntent is false for refinement (avoids literal instruction email)', () => {
   assert.equal(
     isEmailSendIntent('je te demande de mettre un liens dans le mail et l evenement calendrier'),

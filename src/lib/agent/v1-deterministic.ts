@@ -1838,6 +1838,30 @@ export function buildFallbackResponseWithContactsAndProfile(
     (mentionsEmailWork || /(send|envoie|envoyer|lien|link)/.test(intentText)) &&
     explicitlyWantsSeparateEmail
   ) {
+    const matchedEmail = firstRealRecipientEmailFromInput(input)
+    const ambiguousRecipients = contactMatchIsAmbiguous(contactCandidates)
+
+    if (!matchedEmail && ambiguousRecipients) {
+      return {
+        response:
+          language === 'en'
+            ? 'Several contacts match that recipient. Pick the right person before I prepare the mail.'
+            : 'Plusieurs contacts correspondent à ce destinataire. Choisis la bonne personne avant que je prépare le mail.',
+        proposals: [],
+        disambiguations: [buildContactRecipientDisambiguation(contactCandidates, 'send_email', language)],
+      }
+    }
+
+    if (!matchedEmail && maybeRecipient && !knownContact) {
+      return {
+        response:
+          language === 'en'
+            ? `I can prepare the calendar invite, but I still need the email address for "${maybeRecipient}" before I build the message cleanly. Paste the email, or I can match it from Gmail history if that contact exists there.`
+            : `Je peux préparer l’invitation agenda, mais il me manque encore l’adresse de « ${maybeRecipient} » avant de rédiger le mail proprement. Colle son email, ou je peux la retrouver dans Gmail si ce contact existe dans tes échanges.`,
+        proposals: [],
+      }
+    }
+
     if (!hasResolvableCalendarSchedule(input, assistantProfile?.meetingDefaultDurationMinutes || 30)) {
       const attendeeEmails = getCalendarAttendeesFromInput(input, knownContact)
       return {
