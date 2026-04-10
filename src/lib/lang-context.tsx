@@ -35,8 +35,10 @@ export function LangProvider({ children, initialLang = 'fr' }: { children: React
     document.cookie = `lang=${l};path=/;max-age=31536000;SameSite=Lax`
   }
 
+  const t = (translations[lang] ?? translations.fr) as Translations
+
   return (
-    <LangContext.Provider value={{ lang, setLang, t: translations[lang] as Translations }}>
+    <LangContext.Provider value={{ lang, setLang, t }}>
       {children}
     </LangContext.Provider>
   )

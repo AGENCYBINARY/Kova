@@ -95,7 +95,8 @@ export function UsageBadge({ quota: quotaProp, loading = false }: UsageBadgeProp
     if (data.url) window.location.href = data.url
   }
 
-  const normalizedPlan = quota.plan.trim()
+  const rawPlan = typeof quota.plan === 'string' ? quota.plan : ''
+  const normalizedPlan = rawPlan.trim()
   const planLabel = normalizedPlan ? normalizedPlan.charAt(0).toUpperCase() + normalizedPlan.slice(1) : 'Plan'
 
   return (

@@ -18,7 +18,14 @@ export function ActionsPageClient({ data }: { data: ActionsPageData }) {
   const highRiskCount = pendingActions.filter((action) => action.riskLevel === 'high').length
   const averageConfidence =
     pendingActions.length > 0
-      ? Math.round((pendingActions.reduce((sum, action) => sum + action.confidenceScore, 0) / pendingActions.length) * 100)
+      ? Math.round(
+          (pendingActions.reduce((sum, action) => {
+            const c = action.confidenceScore
+            return sum + (typeof c === 'number' && !Number.isNaN(c) ? c : 0)
+          }, 0) /
+            pendingActions.length) *
+            100
+        )
       : 0
 
   useEffect(() => {

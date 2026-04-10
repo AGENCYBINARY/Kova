@@ -5,12 +5,23 @@ import type { DashboardBundle } from '@/lib/dashboard/server'
 import styles from '@/app/(dashboard)/dashboard/page.module.css'
 
 function formatDate(date: string, locale: string) {
-  return new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(date))
+  if (!date || typeof date !== 'string') {
+    return '—'
+  }
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) {
+    return '—'
+  }
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(d)
+  } catch {
+    return '—'
+  }
 }
 
 export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
@@ -40,7 +51,11 @@ export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
                 <div>
                   <p className={styles.rowTitle}>{action.title}</p>
                   <p className={styles.rowMeta}>
-                    {action.targetApp} · {t.dashboard.confidence} {Math.round(action.confidenceScore * 100)}%
+                    {action.targetApp} · {t.dashboard.confidence}{' '}
+                    {typeof action.confidenceScore === 'number' && !Number.isNaN(action.confidenceScore)
+                      ? Math.round(action.confidenceScore * 100)
+                      : 0}
+                    %
                   </p>
                 </div>
                 <Badge variant={action.riskLevel === 'high' ? 'danger' : action.riskLevel === 'medium' ? 'warning' : 'success'}>

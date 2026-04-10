@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import styles from './Avatar.module.css'
 
 interface AvatarProps {
@@ -8,6 +7,7 @@ interface AvatarProps {
   fallback?: string
 }
 
+/** Plain <img>: OAuth avatars (Google, GitHub, etc.) use many hostnames; next/image would require each in remotePatterns and still break on new IdPs. */
 export function Avatar({ src, alt = 'Avatar', size = 'md', fallback }: AvatarProps) {
   const initials = fallback
     ? fallback
@@ -21,7 +21,7 @@ export function Avatar({ src, alt = 'Avatar', size = 'md', fallback }: AvatarPro
   if (src) {
     return (
       <div className={`${styles.avatar} ${styles[size]}`}>
-        <Image src={src} alt={alt} fill sizes={size === 'lg' ? '48px' : size === 'md' ? '36px' : '28px'} className={styles.image} />
+        <img src={src} alt={alt} className={styles.image} referrerPolicy="no-referrer" />
       </div>
     )
   }
