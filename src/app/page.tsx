@@ -52,8 +52,12 @@ const features = [
   },
 ]
 
-/** Served from the edge cache; auth users are redirected in `middleware.ts`. */
-export const dynamic = 'force-static'
+/**
+ * Dynamic: root layout uses ClerkProvider; static prerender requires NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ * at build time. Vercel/GitHub checks often build without that env → force-dynamic avoids prerender failure.
+ * Logged-in users still hit `/dashboard` via `middleware.ts` before this page renders.
+ */
+export const dynamic = 'force-dynamic'
 
 export default function HomePage() {
   return (
