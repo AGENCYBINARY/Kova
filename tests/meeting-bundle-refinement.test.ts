@@ -66,6 +66,23 @@ test('meeting plus email bundle asks for the recipient address instead of emitti
   assert.match(result.response, /adresse|email|gmail/i)
 })
 
+test('resolved direct email request produces a polished subject and body instead of echoing the raw instruction', () => {
+  const result = buildFallbackResponseWithContactsAndProfile(
+    "peux-tu s'il te plaît écrire un mail à Maxime Neveu avec un lien Google Meet en lui disant qu'il y a une grande visio demain vendredi à 11h pour les objectifs",
+    [{ name: 'Neveu Maxime', email: 'neveu.maxime29@gmail.com', aliases: ['Maxime Neveu', 'Maxime'] }]
+  )
+
+  assert.equal(result.proposals.length, 1)
+  const proposal = result.proposals[0]
+  assert.equal(proposal?.type, 'send_email')
+  assert.equal(proposal?.parameters.to?.[0], 'neveu.maxime29@gmail.com')
+  assert.match(String(proposal?.parameters.subject), /visio|réunion|objectifs/i)
+  assert.doesNotMatch(String(proposal?.parameters.subject), /peux-tu|écrire un mail/i)
+  assert.match(String(proposal?.parameters.body), /Bonjour/i)
+  assert.match(String(proposal?.parameters.body), /grande visio|vendredi|11h|objectifs/i)
+  assert.doesNotMatch(String(proposal?.parameters.body), /peux-tu|écrire un mail/i)
+})
+
 test('isEmailSendIntent is false for refinement (avoids literal instruction email)', () => {
   assert.equal(
     isEmailSendIntent('je te demande de mettre un liens dans le mail et l evenement calendrier'),

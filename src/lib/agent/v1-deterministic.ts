@@ -592,6 +592,7 @@ export function buildConversationalResponse(input: string, profile?: AssistantPr
 }
 
 function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
+  const language = profile?.defaultLanguage === 'en' ? 'en' : 'fr'
   const looksLikePromptInstruction =
     isEmailCompositionAssistanceRequest(input) ||
     /\b(trouve son adresse|find (her|his|their) address|prepare l['’]invitation|prepare the invite|sur le meme modele|same as before|meme objectif|same objective)\b/i.test(
@@ -600,41 +601,86 @@ function buildExecutiveEmailBody(input: string, profile?: AssistantProfile) {
 
   if (looksLikePromptInstruction) {
     const signature = profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova'
-    return profile?.defaultLanguage === 'en'
+    return language === 'en'
       ? ['Hello,', '', '[Message body will be drafted after you confirm recipient and purpose.]', '', 'Best regards,', signature].join('\n')
       : ['Bonjour,', '', '[Le corps du mail sera rédigé après confirmation du destinataire et de l’objectif.]', '', 'Merci,', signature].join('\n')
   }
 
-  const signature = profile?.signatureBlock?.trim()
+  const messageInstruction =
+    input.match(/\b(?:en lui disant que|pour lui dire que|lui dire que|dis[- ]?lui que|saying that|to tell (?:him|her|them) that)\s+(.+)$/i)?.[1]?.trim() ||
+    null
+  const cleanedInstruction = messageInstruction
+    ? messageInstruction.replace(/\s+(?:stp|svp|please|pls)\s*$/i, '').trim().replace(/^[“"'`]+|[”"'`]+$/g, '')
+    : null
+  const signature = profile?.signatureBlock?.trim() || profile?.signatureName || 'Kova'
+  const directMessage =
+    cleanedInstruction && cleanedInstruction.length > 0
+      ? `${cleanedInstruction.charAt(0).toUpperCase()}${cleanedInstruction.slice(1).replace(/\s+/g, ' ').trim().replace(/[.!?]?$/, '.')}`
+      : /(meeting|meet|visio|réunion|reunion|rendez-vous|rdv|objectif)/i.test(normalizeInput(input))
+        ? summarizeMeetingReminderFromInput(input, language)
+        : null
+
+  if (directMessage) {
+    return language === 'en'
+      ? ['Hello,', '', directMessage, '', 'Best regards,', signature].join('\n')
+      : ['Bonjour,', '', directMessage, '', 'Bien à toi,', signature].join('\n')
+  }
+
   const body = [
     'Bonjour,',
     '',
     input.trim(),
     '',
     'Merci,',
-    signature || profile?.signatureName || 'Kova',
+    signature,
   ].join('\n')
 
-  return profile?.defaultLanguage === 'en'
+  return language === 'en'
     ? [
         'Hello,',
         '',
         input.trim(),
         '',
         'Best regards,',
-        signature || profile?.signatureName || 'Kova',
+        signature,
       ].join('\n')
     : body
 }
 
 function buildEmailSubject(input: string, profile?: AssistantProfile) {
+  const normalized = normalizeInput(input)
   if (
     isEmailCompositionAssistanceRequest(input) ||
     /\b(trouve son adresse|find (her|his|their) address|prepare l['’]invitation|prepare the invite|sur le meme modele|same as before|meme objectif|same objective)\b/i.test(
-      normalizeInput(input)
+      normalized
     )
   ) {
     return profile?.defaultLanguage === 'en' ? 'Follow-up' : 'Suivi'
+  }
+
+  if (/(meeting|meet|visio|réunion|reunion|rendez-vous|rdv|objectif)/i.test(normalized)) {
+    const weekdayMentions = extractWeekdayMentions(input)
+    const dayLabel = weekdayMentions.length > 0 ? weekdayMentions[weekdayMentions.length - 1] : null
+    const timeLabel = extractTimeLabel(input)
+    const objectiveLabel =
+      /objectif/.test(normalized)
+        ? profile?.defaultLanguage === 'en'
+          ? 'objectives'
+          : 'objectifs'
+        : null
+    const parts = [
+      /visio|meet|google meet/.test(normalized)
+        ? profile?.defaultLanguage === 'en'
+          ? 'Video call'
+          : 'Visio'
+        : profile?.defaultLanguage === 'en'
+          ? 'Meeting'
+          : 'Réunion',
+      objectiveLabel,
+      dayLabel,
+      timeLabel ? (profile?.defaultLanguage === 'en' ? timeLabel.replace('h', ':') : timeLabel) : null,
+    ].filter(Boolean)
+    return parts.join(' — ')
   }
 
   const cleaned = input.trim().replace(/\s+/g, ' ')
