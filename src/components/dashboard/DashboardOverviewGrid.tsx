@@ -24,13 +24,28 @@ function formatDate(date: string, locale: string) {
   }
 }
 
+function safeText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value == null) return ''
+  try {
+    return String(value)
+  } catch {
+    return ''
+  }
+}
+
 export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
   const t = getT()
   const lang = getLang()
   const locale = lang === 'fr' ? 'fr-FR' : 'en-US'
-  const latestHistory = data.executionHistory.slice(0, 4)
-  const pendingActions = data.pendingActions.slice(0, 6)
-  const integrationRows = data.integrations.slice(0, 6)
+  const executionHistory = Array.isArray(data.executionHistory) ? data.executionHistory : []
+  const pendingActionsRaw = Array.isArray(data.pendingActions) ? data.pendingActions : []
+  const integrations = Array.isArray(data.integrations) ? data.integrations : []
+  const approvalActivity = Array.isArray(data.approvalActivity) ? data.approvalActivity : []
+
+  const latestHistory = executionHistory.slice(0, 4)
+  const pendingActions = pendingActionsRaw.slice(0, 6)
+  const integrationRows = integrations.slice(0, 6)
 
   return (
     <section className={styles.grid}>
@@ -49,7 +64,7 @@ export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
             pendingActions.map((action) => (
               <div key={action.id} className={styles.row}>
                 <div>
-                  <p className={styles.rowTitle}>{action.title}</p>
+                  <p className={styles.rowTitle}>{safeText(action.title)}</p>
                   <p className={styles.rowMeta}>
                     {action.targetApp} · {t.dashboard.confidence}{' '}
                     {typeof action.confidenceScore === 'number' && !Number.isNaN(action.confidenceScore)
@@ -109,8 +124,8 @@ export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
             latestHistory.map((item) => (
               <div key={item.id} className={styles.row}>
                 <div>
-                  <p className={styles.rowTitle}>{item.title}</p>
-                  <p className={styles.rowMeta}>{item.details}</p>
+                  <p className={styles.rowTitle}>{safeText(item.title)}</p>
+                  <p className={styles.rowMeta}>{safeText(item.details)}</p>
                 </div>
                 <Badge
                   variant={
@@ -142,12 +157,12 @@ export function DashboardOverviewGrid({ data }: { data: DashboardBundle }) {
           </div>
         </div>
         <div className={styles.activityList}>
-          {data.approvalActivity.map((item) => (
+          {approvalActivity.map((item) => (
             <div key={item.id} className={styles.activityItem}>
               <span className={styles.activityDot} />
               <div>
-                <p className={styles.rowTitle}>{item.label}</p>
-                <p className={styles.rowMeta}>{item.description}</p>
+                <p className={styles.rowTitle}>{safeText(item.label)}</p>
+                <p className={styles.rowMeta}>{safeText(item.description)}</p>
                 <span className={styles.timestamp}>{formatDate(item.at, locale)}</span>
               </div>
             </div>

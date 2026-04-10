@@ -285,15 +285,7 @@
     flex-direction: column;
     align-items: stretch;
     padding-top: 0;
-  }
-
-  /* Links styled as buttons (Button asChild + Link): keep flex so pill layout matches desktop */
-  .headerActions > a {
-    display: inline-flex;
-    width: 100%;
-    align-items: center;
-    justify-content: center;
-    box-sizing: border-box;
+    gap: var(--space-sm);
   }
 
   .metrics {

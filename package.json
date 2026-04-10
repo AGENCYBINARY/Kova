@@ -34,7 +34,6 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@clerk/nextjs": "^5.7.0",
     "@prisma/client": "^6.19.2",
-    "@radix-ui/react-slot": "^1.2.4",
     "@stripe/stripe-js": "^8.11.0",
     "@vercel/functions": "^2.2.13",
     "@vercel/speed-insights": "^2.0.0",

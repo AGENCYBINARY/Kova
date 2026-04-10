@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Badge, Button, Card } from '@/components/ui'
+import { Badge, Card } from '@/components/ui'
+import { buttonClassNames } from '@/components/ui/button-classes'
 import { DashboardOverviewGrid } from '@/components/dashboard/DashboardOverviewGrid'
 import { getLang, getT } from '@/lib/lang-server'
 import type { DashboardBundle } from '@/lib/dashboard/server'
@@ -14,10 +15,14 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
     completedToday: 0,
     failureRate: 0,
   }
-  const healthyIntegrations = data.integrations.filter((integration) => integration.health === 'healthy').length
-  const attentionCount = data.integrations.filter((integration) => integration.health !== 'healthy').length
-  const topPending = data.pendingActions.slice(0, 2)
-  const latestHistory = data.executionHistory.slice(0, 4)
+  const integrations = Array.isArray(data.integrations) ? data.integrations : []
+  const pendingActions = Array.isArray(data.pendingActions) ? data.pendingActions : []
+  const executionHistory = Array.isArray(data.executionHistory) ? data.executionHistory : []
+
+  const healthyIntegrations = integrations.filter((i) => i.health === 'healthy').length
+  const attentionCount = integrations.filter((i) => i.health !== 'healthy').length
+  const topPending = pendingActions.slice(0, 2)
+  const latestHistory = executionHistory.slice(0, 4)
 
   return (
     <div className={styles.container}>
@@ -65,12 +70,12 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/actions">{t.dashboard.reviewQueue}</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/chat">{t.dashboard.openChat}</Link>
-          </Button>
+          <Link href="/actions" className={buttonClassNames({ variant: 'secondary', size: 'sm' })}>
+            {t.dashboard.reviewQueue}
+          </Link>
+          <Link href="/chat" className={buttonClassNames({ variant: 'primary', size: 'sm' })}>
+            {t.dashboard.openChat}
+          </Link>
         </div>
       </header>
       <section className={styles.metrics}>
