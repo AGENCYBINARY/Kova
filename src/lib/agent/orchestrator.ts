@@ -261,6 +261,7 @@ export async function orchestrateChatTurn(params: {
           workspaceContext: connectedContextResult?.workspaceContext,
           connectedContextMetadata: connectedContextResult?.metadata,
           agentRuntimeBrief,
+          emailDraftAssistanceMode: emailCompositionHelp,
         }
       )
   const agentDisambiguations = agentResult.disambiguations || []

@@ -773,14 +773,21 @@ export async function runAgentTurn(
     workspaceContext?: string
     connectedContextMetadata?: Record<string, unknown>
     agentRuntimeBrief?: string
+    /** Help drafting email the user will send — strip calendar tools and bundle coercion. */
+    emailDraftAssistanceMode?: boolean
   } = {}
 ): Promise<AgentTurnResult> {
   const effectiveInput = stripConversationalLeadIn(input)
   const enabledSkillIds = resolveEnabledAssistantSkills(assistantProfile?.enabledSkills)
   const enabledSkills = executiveAssistantSkills.filter((skill) => enabledSkillIds.includes(skill.id))
-  const availableTools = listMcpTools().filter((tool) =>
-    allowedActionTypes.includes(tool.actionType as AgentActionType)
-  )
+  const calendarActionTypes: AgentActionType[] = ['create_calendar_event', 'update_calendar_event', 'delete_calendar_event']
+  const emailDraftMode = Boolean(options.emailDraftAssistanceMode)
+  const availableTools = listMcpTools().filter((tool) => {
+    const t = tool.actionType as AgentActionType
+    if (!allowedActionTypes.includes(t)) return false
+    if (emailDraftMode && calendarActionTypes.includes(t)) return false
+    return true
+  })
   const language = assistantProfile?.defaultLanguage ?? 'fr'
 
   if (isConversationalInput(effectiveInput)) {
@@ -863,18 +870,19 @@ export async function runAgentTurn(
 
   if (isOpenAiConfigured()) {
     try {
-      const aiResult = await analyzeUserRequest(
-        effectiveInput,
-        conversationHistory,
-        {
-          knownContacts: knownContacts.map((contact) => ({ name: contact.name, email: contact.email })),
-          assistantProfile,
-          skills: enabledSkills,
-          tools: availableTools,
-          workspaceContext: options.workspaceContext,
-          agentRuntimeBrief: options.agentRuntimeBrief,
-        }
-      )
+        const aiResult = await analyzeUserRequest(
+          effectiveInput,
+          conversationHistory,
+          {
+            knownContacts: knownContacts.map((contact) => ({ name: contact.name, email: contact.email })),
+            assistantProfile,
+            skills: enabledSkills,
+            tools: availableTools,
+            workspaceContext: options.workspaceContext,
+            agentRuntimeBrief: options.agentRuntimeBrief,
+            emailDraftAssistanceMode: emailDraftMode,
+          }
+        )
 
       const proposals = aiResult.proposals
         .map((proposal) => {
@@ -1062,30 +1070,39 @@ export async function runAgentTurn(
         assistantProfile,
       })
 
+      const proposalsAfterDraftAssistFilter = emailDraftMode
+        ? presentationAlignedProposals.filter((proposal) => !calendarActionTypes.includes(proposal.type))
+        : presentationAlignedProposals
+
       const allowProposals = isActionOrWorkflowRequest(effectiveInput)
       const modelClaimsActionReadyWithoutProposal =
         allowProposals &&
         aiResult.proposals.length === 0 &&
-        presentationAlignedProposals.length === 0 &&
+        proposalsAfterDraftAssistFilter.length === 0 &&
         responseClaimsActionReady(aiResult.response)
       const lowValueActionResponse =
         allowProposals &&
-        presentationAlignedProposals.length === 0 &&
+        proposalsAfterDraftAssistFilter.length === 0 &&
         isLowValueAssistantResponse(aiResult.response)
       const onlyWeakCalendarProposalsRemain =
-        presentationAlignedProposals.length > 0 &&
-        presentationAlignedProposals.every(
+        proposalsAfterDraftAssistFilter.length > 0 &&
+        proposalsAfterDraftAssistFilter.every(
           (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
         )
-      const literalInstructionLeakDetected = presentationAlignedProposals.some(proposalLeaksLiteralUserInstruction)
-      const temporalBundleMismatchDetected = proposalHasTemporalMismatchWithRequest(effectiveInput, presentationAlignedProposals)
+      const literalInstructionLeakDetected = proposalsAfterDraftAssistFilter.some(proposalLeaksLiteralUserInstruction)
+      const temporalBundleMismatchDetected = proposalHasTemporalMismatchWithRequest(
+        effectiveInput,
+        proposalsAfterDraftAssistFilter
+      )
       const modelMissedCalendarEmailBundle =
+        !emailDraftMode &&
         looksLikeCalendarEmailBundleIntent(effectiveInput) &&
         (!presentationAlignedProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
           !presentationAlignedProposals.some(
             (proposal) => proposal.type === 'send_email' || proposal.type === 'create_gmail_draft'
           ))
       const brokenMeetingBundleDetected =
+        !emailDraftMode &&
         looksLikeMeetingEmailBundleRequest(effectiveInput) &&
         (
           !presentationAlignedProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
@@ -1098,7 +1115,7 @@ export async function runAgentTurn(
       const shouldRunFallbackResolution = shouldFallbackForModelFailure({
         allowProposals,
         aiProposalCount: aiResult.proposals.length,
-        safeProposalCount: presentationAlignedProposals.length,
+        safeProposalCount: proposalsAfterDraftAssistFilter.length,
         modelClaimsActionReadyWithoutProposal,
         lowValueActionResponse,
         brokenMeetingBundleDetected: brokenMeetingBundleDetected || modelMissedCalendarEmailBundle,
@@ -1108,9 +1125,12 @@ export async function runAgentTurn(
         shouldRunFallbackResolution
         ? resolveActionReferencesDetailed({
             proposals: (() => {
-              const raw = deterministicFallback.proposals.filter(
-                (proposal) => allowedActionTypes.includes(proposal.type)
+              let raw = deterministicFallback.proposals.filter((proposal) =>
+                allowedActionTypes.includes(proposal.type)
               )
+              if (emailDraftMode) {
+                raw = raw.filter((proposal) => !calendarActionTypes.includes(proposal.type))
+              }
               if (isEmailCompositionAssistanceRequest(effectiveInput)) {
                 const hasCalendarProposal = raw.some((proposal) => proposal.type === 'create_calendar_event')
                 if (!hasCalendarProposal) {
@@ -1141,7 +1161,7 @@ export async function runAgentTurn(
       const shouldUseFallbackResponse =
         allowProposals &&
         !hasDisambiguation &&
-        ((presentationAlignedProposals.length === 0 && (fallbackForMissingOrInvalidModelProposal.length > 0 ||
+        ((proposalsAfterDraftAssistFilter.length === 0 && (fallbackForMissingOrInvalidModelProposal.length > 0 ||
           modelClaimsActionReadyWithoutProposal ||
           lowValueActionResponse ||
           onlyWeakCalendarProposalsRemain)) ||
@@ -1150,17 +1170,21 @@ export async function runAgentTurn(
         allowProposals &&
         !hasDisambiguation &&
         fallbackForMissingOrInvalidModelProposal.length > 0 &&
-        (brokenMeetingBundleDetected || modelMissedCalendarEmailBundle || presentationAlignedProposals.length === 0)
+        (brokenMeetingBundleDetected || modelMissedCalendarEmailBundle || proposalsAfterDraftAssistFilter.length === 0)
 
       const finalExecutableProposals =
         allowProposals && !hasDisambiguation
           ? (brokenMeetingBundleDetected || modelMissedCalendarEmailBundle) && fallbackForMissingOrInvalidModelProposal.length > 0
-            ? fallbackForMissingOrInvalidModelProposal
-            : presentationAlignedProposals.length > 0
-              ? presentationAlignedProposals.filter(
+            ? fallbackForMissingOrInvalidModelProposal.filter(
+                (proposal) => !emailDraftMode || !calendarActionTypes.includes(proposal.type)
+              )
+            : proposalsAfterDraftAssistFilter.length > 0
+              ? proposalsAfterDraftAssistFilter.filter(
                   (proposal) => !(proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35)
                 )
-              : fallbackForMissingOrInvalidModelProposal
+              : fallbackForMissingOrInvalidModelProposal.filter(
+                  (proposal) => !emailDraftMode || !calendarActionTypes.includes(proposal.type)
+                )
           : []
       const shouldAskCalendarTimingClarification =
         allowProposals &&
@@ -1215,7 +1239,7 @@ export async function runAgentTurn(
         if (shouldUseFallbackResponse) {
           return deterministicFallback.response
         }
-        if (!allowProposals && presentationAlignedProposals.length > 0) {
+        if (!allowProposals && proposalsAfterDraftAssistFilter.length > 0) {
           return buildConversationalResponse(effectiveInput, assistantProfile)
         }
         return aiResult.response

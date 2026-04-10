@@ -246,6 +246,10 @@ export function extractRecipientName(input: string) {
   const nameWords = '([A-Za-zÀ-ÿ\'-]+(?:\\s+[A-Za-zÀ-ÿ\'-]+)*?)'
   const patterns: RegExp[] = [
     new RegExp(
+      `(?:un\\s+)?(?:mail|email|courriel|message)\\s+pour\\s+([A-Za-zÀ-ÿ\\'-]+(?:\\s+[A-Za-zÀ-ÿ\\'-]+){0,3}?)(?=\\s+s\\s*'il|\\s+je\\s+voudrais|\\s+j\\s*voudrais|\\s+pour\\s+que\\s+je\\s|$|[.,;:!?])`,
+      'i'
+    ),
+    new RegExp(
       `(?:pour\\s+)?(?:envoyer|envoie|send(?:ing)?)\\s+(?:à|a|to)\\s+${nameWords}${recipientNameFollowPattern}`,
       'i'
     ),

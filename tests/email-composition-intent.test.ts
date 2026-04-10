@@ -37,3 +37,12 @@ test('detects j aimerais bien que tu m aide a rediger un mail', () => {
     true
   )
 })
+
+test('je lui envoie stays composition: user sends themselves after draft help', () => {
+  assert.equal(
+    isEmailCompositionAssistanceRequest(
+      "Tu peux me rediger un mail pour maxime neveu je voudrais lui dire qu'il y a un evenement lundi a 10h au palais de tokyo, mail pro pour que je lui envoie"
+    ),
+    true
+  )
+})

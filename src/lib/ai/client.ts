@@ -56,6 +56,11 @@ interface AnalyzeOptions {
   agentRuntimeBrief?: string
   routingHints?: string[]
   behaviorMode?: 'default' | 'conversation' | 'connected_read'
+  /**
+   * User asked for help drafting email copy they will send themselves — no calendar/Meet workflow
+   * unless they explicitly want an invite.
+   */
+  emailDraftAssistanceMode?: boolean
 }
 
 const OPENAI_REQUEST_TIMEOUT_MS = Number(process.env.KOVA_OPENAI_TIMEOUT_MS) || 45_000
@@ -1183,6 +1188,16 @@ ${options.tools
 - If a source needs reconnect or data is missing, say that plainly in one or two clear sentences — still sound human, not robotic.`
         : ''
 
+  const emailDraftAssistContext =
+    options.emailDraftAssistanceMode && options.tools && options.tools.length > 0
+      ? `\nEmail draft assistance mode (this turn):
+- The user wants **help writing or polishing email text** they will send **themselves** (e.g. French: "rédige-moi un mail", "formulation pro", "pour que je lui envoie").
+- **Do not** propose Google Calendar events, holds, or Google Meet / visio workflows unless they **explicitly** ask to block time or send a calendar invitation.
+- Mentioning a **date, time, or in-person venue** (e.g. Palais de Tokyo) belongs in the **email body**, not as a separate calendar action.
+- Prefer a single \`create_gmail_draft\` with subject + body when appropriate. If you only have a recipient **name** and no email, draft the message anyway and briefly tell them to fill the To: line before sending.
+- You may return **no proposals** and put the full email only in **response** if a Gmail draft is not useful.`
+      : ''
+
   const now = new Date()
   const dateContext = `\nCurrent date and time: ${now.toISOString()}
 Day: ${now.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -1193,7 +1208,7 @@ Use this to resolve relative time references like "9h45", "demain", "ce soir", "
   return analyzeWithOpenAI(
     userMessage,
     conversationHistory,
-    `${systemPrompt}${dateContext}${behaviorContext}${profileContext}${skillsContext}${toolsContext}${contactsContext}${runtimeBrief}${workspaceContext}`,
+    `${systemPrompt}${dateContext}${behaviorContext}${emailDraftAssistContext}${profileContext}${skillsContext}${toolsContext}${contactsContext}${runtimeBrief}${workspaceContext}`,
     options.behaviorMode,
     complexity
   )

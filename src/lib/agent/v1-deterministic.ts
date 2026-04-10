@@ -410,10 +410,18 @@ export function isEmailCompositionAssistanceRequest(input: string): boolean {
   }
 
   const recipient = extractRecipientName(input)
+  /** "je lui envoie" / "pour que je lui envoie" = user sends themselves; still composition help. */
+  const userSaysTheyWillSendToThem =
+    /\b(je|j')\s+lui\s+(envoie|envoies|envoyez|envoyer)\b/.test(n) ||
+    /\bque\s+je\s+lui\s+(envoie|envoies|envoyez|envoyer)\b/.test(n) ||
+    /\b(pour|afin)\s+que\s+je\s+lui\s+(envoie|envoies|envoyez|envoyer)\b/.test(n)
+  const agentDirectedLuiSend =
+    /\s+lui\s+(envoie|envoies|envoyez|envoyer)\b/.test(n) && !userSaysTheyWillSendToThem
+
   if (
     recipient &&
-    (/\b(me redige|m redige|me rediger|redige un mail|redige le mail|ecrire un mail|ecris un mail|write (a |the )?(email|mail)|draft (a |the )?(email|mail)|compose (a |the )?(email|mail)|envoie|envoyer|send (the )?(email|mail)|transmets|transmettre|forward)\b/.test(n) ||
-      /\s+lui\s+(envoie|envoyer)\b/.test(n))
+    (/\b(redige un mail|redige le mail|ecrire un mail|ecris un mail|write (a |the )?(email|mail)|draft (a |the )?(email|mail)|compose (a |the )?(email|mail)|(?:envoie|envoyez)\s+un\s+(mail|email|courriel)|send (the )?(email|mail)|transmets|transmettre|forward)\b/.test(n) ||
+      agentDirectedLuiSend)
   ) {
     return false
   }
