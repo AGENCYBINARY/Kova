@@ -33,6 +33,10 @@ export default clerkMiddleware((auth, req) => {
   }
 })
 
+// Skip Clerk entirely for /api/internal/* so Authorization: Bearer <CRON_SECRET> is not parsed as a Clerk JWT
+// (Vercel Cron + curl). Next.js matchers do not support /api/(?!internal) — exclude via single-path lookahead.
 export const config = {
-  matcher: ['/((?!_next|[^?]*\\.(?:css|js|json|jpg|jpeg|png|gif|svg|ico|woff2?|ttf|map)).*)', '/(api|trpc)(.*)'],
+  matcher: [
+    '/((?!api/internal|_next|[^?]*\\.(?:css|js|json|jpg|jpeg|png|gif|svg|ico|woff2?|ttf|map)).*)',
+  ],
 }
