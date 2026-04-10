@@ -130,6 +130,111 @@ function renderDrivePreview(parameters: Record<string, unknown>, t: ReturnType<t
   )
 }
 
+function renderDriveFolderPreview(parameters: Record<string, unknown>, t: ReturnType<typeof useLang>['t']) {
+  const folderName =
+    typeof parameters.name === 'string'
+      ? parameters.name
+      : typeof parameters.folderName === 'string'
+        ? parameters.folderName
+        : 'Untitled folder'
+  const parentLabel =
+    typeof parameters.parentFolderName === 'string'
+      ? parameters.parentFolderName
+      : typeof parameters.folderPath === 'string'
+        ? parameters.folderPath
+        : ''
+
+  return (
+    <div className={styles.previewBlock}>
+      <div className={styles.previewRow}>
+        <span className={styles.previewLabel}>{t.proposal.folder}</span>
+        <span className={styles.previewValue}>{folderName}</span>
+      </div>
+      {parentLabel ? (
+        <div className={styles.previewRow}>
+          <span className={styles.previewLabel}>{t.proposal.location}</span>
+          <span className={styles.previewValue}>{parentLabel}</span>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function renderDocPreview(parameters: Record<string, unknown>, docLabel: string) {
+  const title =
+    typeof parameters.title === 'string'
+      ? parameters.title
+      : typeof parameters.name === 'string'
+        ? parameters.name
+        : docLabel
+  const content =
+    typeof parameters.content === 'string'
+      ? parameters.content
+      : typeof parameters.body === 'string'
+        ? parameters.body
+        : typeof parameters.prompt === 'string'
+          ? parameters.prompt
+          : ''
+
+  return (
+    <div className={styles.previewBlock}>
+      <div className={styles.previewRow}>
+        <span className={styles.previewLabel}>Titre</span>
+        <span className={styles.previewValue}>{title}</span>
+      </div>
+      {content ? <div className={styles.previewBody}>{content}</div> : null}
+    </div>
+  )
+}
+
+function renderNotionPreview(parameters: Record<string, unknown>) {
+  const title =
+    typeof parameters.title === 'string'
+      ? parameters.title
+      : typeof parameters.pageTitle === 'string'
+        ? parameters.pageTitle
+        : typeof parameters.databaseTitle === 'string'
+          ? parameters.databaseTitle
+          : 'Page Notion'
+  const body =
+    typeof parameters.content === 'string'
+      ? parameters.content
+      : typeof parameters.body === 'string'
+        ? parameters.body
+        : typeof parameters.summary === 'string'
+          ? parameters.summary
+          : ''
+
+  return (
+    <div className={styles.previewBlock}>
+      <div className={styles.previewRow}>
+        <span className={styles.previewLabel}>Notion</span>
+        <span className={styles.previewValue}>{title}</span>
+      </div>
+      {body ? <div className={styles.previewBody}>{body}</div> : null}
+    </div>
+  )
+}
+
+function renderGenericActionSummary(parameters: Record<string, unknown>) {
+  const visibleEntries = Object.entries(parameters)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .slice(0, 5)
+
+  return (
+    <div className={styles.previewBlock}>
+      {visibleEntries.map(([key, value]) => (
+        <div key={key} className={styles.previewRow}>
+          <span className={styles.previewLabel}>{key}</span>
+          <span className={styles.previewValue}>
+            {Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? JSON.stringify(value) : String(value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function renderGooglePhotosPickerPreview() {
   return (
     <div className={styles.previewBlock}>
@@ -187,12 +292,13 @@ export function ActionProposalCard({ id, type, title, description, parameters, o
     }
     if (type === 'create_calendar_event' || type === 'update_calendar_event') return renderCalendarPreview(parameters, t, lang)
     if (type === 'create_google_drive_file') return renderDrivePreview(parameters, t)
+    if (type === 'create_google_drive_folder') return renderDriveFolderPreview(parameters, t)
+    if (type === 'create_google_doc' || type === 'update_google_doc') return renderDocPreview(parameters, 'Google Doc')
+    if (type === 'create_notion_page' || type === 'update_notion_page' || type === 'update_notion_page_properties' || type === 'archive_notion_page') {
+      return renderNotionPreview(parameters)
+    }
     if (type === 'create_google_photos_picker_session') return renderGooglePhotosPickerPreview()
-    return (
-      <div className={styles.parametersCompact}>
-        <pre className={styles.paramsJson}>{JSON.stringify(parameters, null, 2)}</pre>
-      </div>
-    )
+    return renderGenericActionSummary(parameters)
   }
 
   return (

@@ -157,13 +157,13 @@ export function buildConnectedContextFallbackResponse(
 
   if (lines.length === 0) {
     return language === 'en'
-      ? 'I collected live app context, but I could not summarize it cleanly.'
-      : "J'ai recupere du contexte live, mais je n'ai pas pu le resumer proprement."
+      ? 'I checked the connected apps live, but I could not summarise them cleanly yet.'
+      : "J’ai vérifié les apps connectées en direct, mais je n’ai pas encore pu les résumer proprement."
   }
 
   return language === 'en'
-    ? `Live connected summary: ${lines.join('; ')}.`
-    : `Resume connecte en direct: ${lines.join('; ')}.`
+    ? `I checked the connected apps live: ${lines.join('; ')}.`
+    : `J’ai vérifié les applications connectées en direct : ${lines.join('; ')}.`
 }
 
 function truncateSnippet(snippet: string) {

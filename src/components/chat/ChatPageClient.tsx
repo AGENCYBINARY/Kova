@@ -45,6 +45,84 @@ const WELCOME_FR =
 const WELCOME_EN =
   "I'm Kova — this product's AI, built like an admin / executive assistant: inbox, calendar, files, docs, Notion, Photos. I answer here and prepare actions in your apps (approval when it matters)."
 
+function buildProposalFallbackMessage(params: {
+  proposals: ActionProposal[]
+  lang: 'fr' | 'en'
+  executionMode: ExecutionMode
+}) {
+  const hasCalendar = params.proposals.some((proposal) => proposal.type === 'create_calendar_event' || proposal.type === 'update_calendar_event')
+  const hasEmail = params.proposals.some((proposal) =>
+    ['send_email', 'create_gmail_draft', 'update_gmail_draft', 'reply_to_email', 'forward_email'].includes(proposal.type)
+  )
+  const hasDocs = params.proposals.some((proposal) =>
+    ['create_google_doc', 'update_google_doc', 'create_notion_page', 'update_notion_page', 'update_notion_page_properties'].includes(proposal.type)
+  )
+  const hasDrive = params.proposals.some((proposal) =>
+    ['create_google_drive_file', 'create_google_drive_folder', 'move_google_drive_file', 'rename_google_drive_file', 'share_google_drive_file', 'copy_google_drive_file'].includes(proposal.type)
+  )
+
+  if (params.lang === 'en') {
+    if (hasCalendar && hasEmail) {
+      return params.executionMode === 'auto'
+        ? 'I prepared the calendar invite and the matching email as one clean sequence.'
+        : 'I prepared the calendar invite and the matching email as one clean sequence. Review both before I send anything.'
+    }
+    if (hasDocs && hasDrive) {
+      return params.executionMode === 'auto'
+        ? 'I prepared the document work and the related Drive organization together.'
+        : 'I prepared the document work and the related Drive organization together. Review it and I’ll execute it cleanly.'
+    }
+    if (hasEmail) {
+      return params.executionMode === 'auto'
+        ? 'I prepared the email cleanly.'
+        : 'I prepared the email cleanly. Review it and I’ll handle the send.'
+    }
+    if (hasCalendar) {
+      return params.executionMode === 'auto'
+        ? 'I prepared the calendar action.'
+        : 'I prepared the calendar action. Review it and I’ll handle the execution.'
+    }
+    if (hasDrive) {
+      return params.executionMode === 'auto'
+        ? 'I prepared the Drive action.'
+        : 'I prepared the Drive action. Review it and I’ll execute it cleanly.'
+    }
+    return params.executionMode === 'auto'
+      ? 'I prepared the action.'
+      : 'I prepared the action for review.'
+  }
+
+  if (hasCalendar && hasEmail) {
+    return params.executionMode === 'auto'
+      ? "J’ai préparé l’invitation agenda et le mail associé comme une seule séquence propre."
+      : "J’ai préparé l’invitation agenda et le mail associé comme une seule séquence propre. Vérifie les deux avant exécution."
+  }
+  if (hasDocs && hasDrive) {
+    return params.executionMode === 'auto'
+      ? "J’ai préparé le travail documentaire et le rangement Drive associé."
+      : "J’ai préparé le travail documentaire et le rangement Drive associé. Vérifie-le et j’exécute ça proprement."
+  }
+  if (hasEmail) {
+    return params.executionMode === 'auto'
+      ? "J’ai préparé le mail proprement."
+      : "J’ai préparé le mail proprement. Vérifie-le et je m’occupe de l’envoi."
+  }
+  if (hasCalendar) {
+    return params.executionMode === 'auto'
+      ? "J’ai préparé l’action agenda."
+      : "J’ai préparé l’action agenda. Vérifie-la et je gère l’exécution."
+  }
+  if (hasDrive) {
+    return params.executionMode === 'auto'
+      ? "J’ai préparé l’action Drive."
+      : "J’ai préparé l’action Drive. Vérifie-la et j’exécute ça proprement."
+  }
+
+  return params.executionMode === 'auto'
+    ? "J’ai préparé l’action."
+    : "J’ai préparé l’action pour validation."
+}
+
 function buildDisambiguationReply(
   item: ChatDisambiguation,
   option: ChatDisambiguation['options'][number],
@@ -213,18 +291,11 @@ export function ChatPageClient({ initialMessages, initialProposals, userFallback
             {
               id: `review-${Date.now()}`,
               role: 'assistant',
-              content:
-                (data.effectiveExecutionMode || params.executionMode) === 'ask'
-                  ? params.executionMode === 'auto'
-                    ? lang === 'en'
-                      ? 'I prepared the action for review because a manual check is still required.'
-                      : "J'ai préparé l'action pour révision car une vérification manuelle est encore requise."
-                    : lang === 'en'
-                      ? 'Ready for review.'
-                      : 'Prêt à valider.'
-                  : lang === 'en'
-                    ? 'Done. The action was executed automatically.'
-                    : "Fait. L'action a été exécutée automatiquement.",
+              content: buildProposalFallbackMessage({
+                proposals: data.proposals,
+                lang,
+                executionMode: (data.effectiveExecutionMode || params.executionMode) as ExecutionMode,
+              }),
             },
           ])
         }
