@@ -123,11 +123,19 @@ export function HistoryPageClient({ data }: { data: HistoryPageData }) {
                 </div>
                 <div className={styles.cardInfo}>
                   <h3 className={styles.cardTitle}>{item.title}</h3>
-                  <p className={styles.cardDetails}>{item.details}</p>
+                  {typeof item.details === 'string' && item.details.trim() ? (
+                    <p className={styles.cardDetails}>{item.details}</p>
+                  ) : null}
                   <div className={styles.meta}>
                     <span>{item.targetApp}</span>
                     <span className={styles.metaDivider} />
-                    <span>{t.history.confidence} {Math.round(item.confidenceScore * 100)}%</span>
+                    <span>
+                      {t.history.confidence}{' '}
+                      {typeof item.confidenceScore === 'number' && !Number.isNaN(item.confidenceScore)
+                        ? Math.round(item.confidenceScore * 100)
+                        : 0}
+                      %
+                    </span>
                   </div>
                   {item.error ? <p className={styles.cardError}>{item.error}</p> : null}
                 </div>

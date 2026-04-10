@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Badge, Button, Card } from '@/components/ui'
+import { Badge, Card } from '@/components/ui'
+import { buttonClassNames } from '@/components/ui/button-classes'
 import { DashboardOverviewGrid } from '@/components/dashboard/DashboardOverviewGrid'
 import { getLang, getT } from '@/lib/lang-server'
 import type { DashboardBundle } from '@/lib/dashboard/server'
@@ -59,13 +60,11 @@ export function DashboardOverviewClient({ data }: { data: DashboardBundle }) {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <Link href="/actions">
-            <Button variant="secondary" size="sm">
-              {t.dashboard.reviewQueue}
-            </Button>
+          <Link href="/actions" className={buttonClassNames({ variant: 'secondary', size: 'sm' })}>
+            {t.dashboard.reviewQueue}
           </Link>
-          <Link href="/chat">
-            <Button size="sm">{t.dashboard.openChat}</Button>
+          <Link href="/chat" className={buttonClassNames({ variant: 'primary', size: 'sm' })}>
+            {t.dashboard.openChat}
           </Link>
         </div>
       </header>

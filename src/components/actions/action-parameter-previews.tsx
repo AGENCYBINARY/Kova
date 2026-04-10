@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { useLang } from '@/lib/lang-context'
 import type { Lang } from '@/lib/i18n'
 import type { Translations } from '@/lib/i18n'
@@ -7,6 +8,14 @@ import styles from './ActionProposalCard.module.css'
 
 /** Matches server-side calendar default (Europe/Paris). */
 const CALENDAR_PREVIEW_TZ = 'Europe/Paris'
+
+function safeJsonStringify(value: unknown, space?: number): string {
+  try {
+    return space !== undefined ? JSON.stringify(value, null, space) : JSON.stringify(value)
+  } catch {
+    return '[serialization error]'
+  }
+}
 
 export function formatDateTimeParis(iso: unknown, lang: Lang): string {
   if (typeof iso !== 'string' || !iso.trim()) {
@@ -574,7 +583,7 @@ function renderGenericActionSummary(parameters: Record<string, unknown>) {
         <div key={key} className={styles.previewRow}>
           <span className={styles.previewLabel}>{key}</span>
           <span className={styles.previewValue}>
-            {Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? JSON.stringify(value) : String(value)}
+            {Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? safeJsonStringify(value) : String(value)}
           </span>
         </div>
       ))}
@@ -592,7 +601,7 @@ export interface ActionParametersPreviewProps {
 export function ActionParametersPreview({ type, parameters, showRawJson = false }: ActionParametersPreviewProps) {
   const { t, lang } = useLang()
 
-  const renderPreview = () => {
+  const renderPreview = (): ReactNode => {
     if (type === 'send_email' || type === 'create_gmail_draft' || type === 'update_gmail_draft' || type === 'reply_to_email' || type === 'forward_email') {
       return renderEmailPreview(parameters, t.proposal, lang)
     }
@@ -626,13 +635,28 @@ export function ActionParametersPreview({ type, parameters, showRawJson = false 
     return renderGenericActionSummary(parameters)
   }
 
+  let preview: ReactNode
+  try {
+    preview = renderPreview()
+  } catch {
+    preview = (
+      <div className={styles.previewBlock}>
+        <p className={styles.previewBody}>
+          {lang === 'en'
+            ? 'This preview could not be rendered safely. Use the technical JSON block below if enabled.'
+            : 'Cet aperçu n’a pas pu être affiché correctement. Utilise le bloc JSON technique ci-dessous si activé.'}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <>
-      {renderPreview()}
+      {preview}
       {showRawJson ? (
         <div className={styles.parametersCompact}>
           <p className={styles.paramsTitle}>{t.proposal.technicalJson}</p>
-          <pre className={styles.paramsJson}>{JSON.stringify(parameters, null, 2)}</pre>
+          <pre className={styles.paramsJson}>{safeJsonStringify(parameters, 2)}</pre>
         </div>
       ) : null}
     </>

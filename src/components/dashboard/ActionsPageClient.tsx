@@ -193,7 +193,13 @@ export function ActionsPageClient({ data }: { data: ActionsPageData }) {
                       <span className={styles.metaDivider} />
                       <span className={styles.metaText}>{action.targetApp}</span>
                       <span className={styles.metaDivider} />
-                      <span className={styles.metaText}>{t.actions.confidence} {Math.round(action.confidenceScore * 100)}%</span>
+                      <span className={styles.metaText}>
+                        {t.actions.confidence}{' '}
+                        {typeof action.confidenceScore === 'number' && !Number.isNaN(action.confidenceScore)
+                          ? Math.round(action.confidenceScore * 100)
+                          : 0}
+                        %
+                      </span>
                     </div>
                   </div>
                   <div className={styles.badges}>
