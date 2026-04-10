@@ -111,52 +111,6 @@ export function extractConnectedContextSeed(messages: PersistedMessageRecord[]):
         }
       }
     }
-
-    const content = String(message.content || '')
-    if (/gmail:/i.test(content)) {
-      return {
-        sources: ['gmail'],
-        timeframe: /aujourd'hui|today/i.test(content) ? 'today' : 'recent',
-        asksForAvailability: false,
-        asksForPriorities: false,
-      }
-    }
-
-    if (/calendar:/i.test(content) || /creneaux libres|free windows/i.test(content)) {
-      return {
-        sources: ['calendar'],
-        timeframe: /cette semaine|this week/i.test(content) ? 'week' : 'today',
-        asksForAvailability: /creneaux libres|free windows/i.test(content),
-        asksForPriorities: false,
-      }
-    }
-
-    if (/drive:/i.test(content) || /fichiers drive|drive files/i.test(content)) {
-      return {
-        sources: ['google_drive'],
-        timeframe: 'recent',
-        asksForAvailability: false,
-        asksForPriorities: false,
-      }
-    }
-
-    if (/photos:/i.test(content) || /google photos|photos recentes|recent photos/i.test(content)) {
-      return {
-        sources: ['google_photos'],
-        timeframe: 'recent',
-        asksForAvailability: false,
-        asksForPriorities: false,
-      }
-    }
-
-    if (/notion:/i.test(content) || /pages notion|notion pages/i.test(content)) {
-      return {
-        sources: ['notion'],
-        timeframe: 'recent',
-        asksForAvailability: false,
-        asksForPriorities: false,
-      }
-    }
   }
 
   return null

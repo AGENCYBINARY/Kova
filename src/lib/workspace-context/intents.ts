@@ -168,6 +168,25 @@ function extractSearchQuery(normalized: string) {
   return tokens.slice(0, 6).join(' ')
 }
 
+function looksLikeImplicitWorkflowRequest(normalized: string) {
+  const mentionsRecipient =
+    /\b(a|à|pour)\s+[a-z][a-z-]+(?:\s+[a-z][a-z-]+){0,2}\b/.test(normalized) ||
+    /\b(lui|leur)\b/.test(normalized) ||
+    /@/.test(normalized)
+  const mentionsMeetingOrMailSurface =
+    gmailPattern.test(normalized) ||
+    calendarPattern.test(normalized) ||
+    /\b(google meet|meet|visio|invitation|invite|rdv|rendez-vous|rendez vous)\b/.test(normalized)
+  const mentionsConcreteTiming =
+    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(
+      normalized
+    ) ||
+    /\b\d{1,2}\s*h(?:\d{2})?\b/.test(normalized) ||
+    /\b\d{1,2}:\d{2}\b/.test(normalized)
+
+  return mentionsRecipient && mentionsMeetingOrMailSurface && mentionsConcreteTiming
+}
+
 /**
  * User is adjusting an existing calendar+email / Meet workflow (add link, fix invite),
  * not asking for a brand-new email whose body should be their instruction text.
@@ -284,17 +303,20 @@ export function parseConnectedContextRequest(input: string): ConnectedContextReq
     todayPattern.test(normalized) ||
     weekPattern.test(normalized) ||
     availabilityPattern.test(normalized) ||
-    priorityPattern.test(normalized)
+    priorityPattern.test(normalized) ||
+    mailboxCountPattern.test(normalized)
   const softActionVerb = /\b(faire|fais|fait|refais|refaire|recree|recreer|recr[eé]e)\b/.test(normalized)
   /** "cherche/trouve son mail dans gmail" is an execution workflow, not a mailbox summary. */
   const addressDiscoveryAction =
     (/\b(cherche|chercher|trouve|trouver|retrouve|retrouver|regarde|regarder)\b/.test(normalized) &&
       /\b(mail|email|courriel|adresse|gmail)\b/.test(normalized)) ||
     /\b(son|sa|leur)\s+(mail|email|adresse)\b/.test(normalized)
+  const implicitWorkflowAction = looksLikeImplicitWorkflowRequest(normalized)
   const explicitAction =
     explicitActionPattern.test(normalized) ||
     emailActionPattern.test(normalized) ||
     addressDiscoveryAction ||
+    implicitWorkflowAction ||
     (softActionVerb && !readVerbPattern.test(normalized))
   const referencesAllApps = allAppsPattern.test(normalized)
   const wantsMailboxListing =

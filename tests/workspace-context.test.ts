@@ -73,6 +73,20 @@ test('calendar action phrasing with faire stays out of read-only mode', () => {
   })
 })
 
+test('natural meeting request with recipient and time stays in action mode even without an explicit action verb', () => {
+  assert.deepEqual(
+    parseConnectedContextRequest("pour Maxime Neveu il y a une réunion demain vendredi à 11h avec Google Meet"),
+    {
+      mode: 'action',
+      sources: ['calendar'],
+      timeframe: 'recent',
+      asksForAvailability: false,
+      asksForPriorities: false,
+      searchQuery: 'maxime neveu une reunion demain vendredi',
+    }
+  )
+})
+
 test('calendar capability questions are not treated as read-only summaries', () => {
   assert.equal(isReadOnlyWorkspaceQuestion('est ce que tu sais faire des evenement calendrier google ?'), false)
 })

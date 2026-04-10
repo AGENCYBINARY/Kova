@@ -31,11 +31,10 @@ test('direct email send request is not downgraded to simple composition help', (
   )
 })
 
-test('calendar nouns without a clear read or action verb do not trigger a connected-read summary', () => {
-  assert.equal(
-    parseConnectedContextRequest("salut boss ça va plus Maxime Neveu en lui disant que y'a une réunion demain donc vendredi à 11h"),
-    null
-  )
+test('calendar nouns without a read verb do not get hijacked into connected-read mode', () => {
+  const parsed = parseConnectedContextRequest("salut boss ça va plus Maxime Neveu en lui disant que y'a une réunion demain donc vendredi à 11h")
+  assert.equal(parsed?.mode, 'action')
+  assert.ok(parsed?.sources.includes('calendar'))
 })
 
 test('isEmailSendIntent is false for refinement (avoids literal instruction email)', () => {
