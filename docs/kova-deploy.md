@@ -22,4 +22,4 @@
 
 ## Cible produit
 
-SaaS **agentique** : exécution d’actions sur intégrations (Gmail, Calendar, Meet, Docs, Drive, Notion, envois programmés, etc.) avec gouvernance / file d’approbation. L’écart « promesse marketing » vs « tout est implémenté au même niveau de polish » se pilote via issues priorisées, pas en un seul déploiement.
+SaaS **agentique** : exécution d’actions sur intégrations (Gmail, Calendar, Meet, Docs, Drive, Notion, envois programmés, etc.) avec gouvernance / file d’approbation. Positionnement côté modèle : **qualité de conversation type assistant grand public**, plus la capacité d’**agir** dans les outils connectés (voir `systemPrompt` dans `src/lib/ai/client.ts` et accueil chat dans `ChatPageClient.tsx`).
