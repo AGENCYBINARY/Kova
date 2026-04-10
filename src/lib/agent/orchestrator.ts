@@ -10,6 +10,7 @@ import {
 import { getAssistantProfile } from '@/lib/assistant/store'
 import { runAgentTurn } from '@/lib/agent/v1'
 import { isEmailCompositionAssistanceRequest } from '@/lib/agent/v1-deterministic'
+import { stripConversationalLeadIn } from '@/lib/agent/input-normalization'
 import { buildCalendarRedoFollowUp, buildMeetingBundleRefinementFollowUp } from '@/lib/agent/follow-up'
 import { expirePendingActionsAsSuperseded } from '@/lib/actions/supersede-pending'
 import {
@@ -96,16 +97,17 @@ export async function orchestrateChatTurn(params: {
     }),
     previousMessages: conversationHistory,
   })
+  const normalizedAgentRoutingContent = stripConversationalLeadIn(agentRoutingContent)
 
   const connectedContextSeed = extractConnectedContextSeed(previousMessages)
-  const emailCompositionHelp = isEmailCompositionAssistanceRequest(params.content)
+  const emailCompositionHelp = isEmailCompositionAssistanceRequest(normalizedAgentRoutingContent)
   // Skip connected-workspace resolution for drafting help: avoids mistaken read-only
   // summaries ("Résumé connecté…") and unnecessary Gmail/Calendar prefetch; the agent
   // still sees the full user text and can use tools when the user asks to search Gmail.
   const connectedContextResult = emailCompositionHelp
     ? null
     : await resolveConnectedWorkspaceContext({
-        content: agentRoutingContent,
+        content: normalizedAgentRoutingContent,
         userId,
         workspaceId,
         contextSeed: connectedContextSeed,
@@ -123,7 +125,7 @@ export async function orchestrateChatTurn(params: {
   }
 
   const correctedContact = await resolveCorrectedContactFromChatInput({
-    content: params.content,
+    content: normalizedAgentRoutingContent,
     previousMessages,
     pendingActions,
     knownContacts,
@@ -191,7 +193,7 @@ export async function orchestrateChatTurn(params: {
   const googleResolvedContact =
     assistantProfile.autoResolveKnownContacts
       ? await resolveEmailContactFromGoogle({
-          content: agentRoutingContent,
+          content: normalizedAgentRoutingContent,
           knownContacts: contactsAfterCorrection,
           userId,
           workspaceId,
@@ -206,7 +208,7 @@ export async function orchestrateChatTurn(params: {
     : contactsAfterCorrection
 
   const meetingBundleRefinement = buildMeetingBundleRefinementFollowUp({
-    input: params.content,
+    input: normalizedAgentRoutingContent,
     pendingActions,
     recentActions,
     conversationHistory,
@@ -214,7 +216,7 @@ export async function orchestrateChatTurn(params: {
   })
 
   const calendarRedoFollowUp = buildCalendarRedoFollowUp({
-    input: params.content,
+    input: normalizedAgentRoutingContent,
     recentActions,
     language: assistantProfile.defaultLanguage,
   })
@@ -241,7 +243,7 @@ export async function orchestrateChatTurn(params: {
           disambiguations: [],
         }
       : await runAgentTurn(
-        agentRoutingContent,
+        normalizedAgentRoutingContent,
         conversationHistory,
         effectiveKnownContacts,
         assistantProfile,

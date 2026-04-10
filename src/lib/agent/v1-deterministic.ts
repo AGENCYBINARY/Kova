@@ -2,9 +2,11 @@ import { z } from 'zod'
 import type { AgentPlanStep } from '@/lib/agent/planning'
 import type { AssistantProfile } from '@/lib/assistant/profile'
 import type { ReferenceDisambiguation } from '@/lib/agent/reference-resolution'
+import { stripConversationalLeadIn } from '@/lib/agent/input-normalization'
 import {
   deriveNameFromEmail,
   extractEmailAddresses,
+  extractGmailLookupNameQuery,
   extractRecipientName,
   extractStrictGmailAddressLookupName,
   findContactCandidatesByName,
@@ -369,7 +371,7 @@ function proposalNeedsClarification(proposal: AgentProposal, input: string) {
  * Covers FR: "redige un mail" / "me redige un mail" / "j'aimerais... aider à rédiger" (word order varies).
  */
 export function isEmailCompositionAssistanceRequest(input: string): boolean {
-  const n = normalizeInput(input)
+  const n = normalizeInput(stripConversationalLeadIn(input))
   if (!/\b(mail|email|courriel|gmail|message)\b/.test(n)) {
     return false
   }
@@ -1541,6 +1543,66 @@ export function buildDisambiguationResponse(
     : `J’ai trouvé plusieurs correspondances possibles.\n${lines.join('\n')}\nRéponds avec la bonne option ou donne-moi le nom exact.`
 }
 
+function buildImplicitWorkflowClarification(
+  input: string,
+  language: 'fr' | 'en',
+  contact?: KnownContact | null
+) {
+  const normalized = normalizeInput(input)
+  const recipient =
+    contact?.name ||
+    extractRecipientName(input) ||
+    extractGmailLookupNameQuery(input)
+
+  const mentionsCalendarSurface =
+    /(calendar|calendrier|meeting|reunion|réunion|rdv|rendez vous|rendez-vous|agenda|google meet|meet|visio|invite|invitation)/.test(
+      normalized
+    )
+  const mentionsMailSurface = /(gmail|mail|email|courriel|brouillon|draft|message)/.test(normalized)
+  const mentionsTiming =
+    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(
+      normalized
+    ) ||
+    /\b\d{1,2}\s*h(?:\d{2})?\b/.test(normalized) ||
+    /\b\d{1,2}:\d{2}\b/.test(normalized)
+
+  if (!recipient || !mentionsTiming || (!mentionsCalendarSurface && !mentionsMailSurface)) {
+    return null
+  }
+
+  const weekdayMatch = normalized.match(
+    /\b(demain|tomorrow|aujourd'hui|aujourdhui|today|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/
+  )?.[0]
+  const timeMatch =
+    normalized.match(/\b\d{1,2}\s*h(?:\d{2})?\b/)?.[0] ||
+    normalized.match(/\b\d{1,2}:\d{2}\b/)?.[0] ||
+    ''
+  const timingLabel = [weekdayMatch, timeMatch].filter(Boolean).join(' ')
+  const wantsBoth = mentionsCalendarSurface && mentionsMailSurface
+
+  if (language === 'en') {
+    if (wantsBoth) {
+      return `I understand this as a workflow for ${recipient}${timingLabel ? ` (${timingLabel})` : ''}. I can prepare the email, the calendar invite, or both as one sequence — tell me which version you want me to launch.`
+    }
+
+    if (mentionsCalendarSurface) {
+      return `I understand this as a meeting workflow for ${recipient}${timingLabel ? ` (${timingLabel})` : ''}. I can prepare the invite cleanly, but I want to confirm whether you want just the calendar event or the full email + invite sequence.`
+    }
+
+    return `I understand this as an email workflow for ${recipient}${timingLabel ? ` (${timingLabel})` : ''}. I can draft the message cleanly — tell me if you want only the email or the email plus calendar invite.`
+  }
+
+  if (wantsBoth) {
+    return `Je comprends ça comme un workflow pour ${recipient}${timingLabel ? ` (${timingLabel})` : ''}. Je peux préparer le mail, l’invitation agenda, ou les deux dans une seule séquence — dis-moi juste ce que tu veux que je lance.`
+  }
+
+  if (mentionsCalendarSurface) {
+    return `Je comprends ça comme une organisation de réunion pour ${recipient}${timingLabel ? ` (${timingLabel})` : ''}. Je peux te préparer l’invitation proprement, mais je veux juste confirmer si tu veux uniquement l’agenda ou le pack mail + invitation.`
+  }
+
+  return `Je comprends ça comme un mail pour ${recipient}${timingLabel ? ` (${timingLabel})` : ''}. Je peux te rédiger ça proprement — dis-moi si tu veux seulement le mail ou le mail plus l’invitation agenda.`
+}
+
 function buildFallbackResponse(input: string): AgentTurnResult {
   return buildFallbackResponseWithContacts(input, [])
 }
@@ -1554,14 +1616,15 @@ export function buildFallbackResponseWithContactsAndProfile(
   knownContacts: KnownContact[],
   assistantProfile?: AssistantProfile
 ): AgentTurnResult {
-  const normalized = normalizeInput(input)
+  const effectiveInput = stripConversationalLeadIn(input)
+  const normalized = normalizeInput(effectiveInput)
   const intentText = normalized
     .replace(emailPattern, ' ')
     .replace(/\[\[kova-ref:[^\]]+\]\]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   const language = assistantProfile?.defaultLanguage || 'fr'
-  const maybeRecipient = extractRecipientName(input)
+  const maybeRecipient = extractRecipientName(effectiveInput)
   const contactCandidates = maybeRecipient ? findContactCandidatesByName(maybeRecipient, knownContacts) : []
   const knownContact = pickContactFromCandidates(contactCandidates)
   const isExplicitNotionRequest = /(notion|wiki|database|base de donnees|base de données|workspace|page)/.test(intentText)
@@ -2239,6 +2302,18 @@ export function buildFallbackResponseWithContactsAndProfile(
         language === 'en'
           ? 'Who should receive this? Share an email or a person’s name (I’ll match Gmail + contacts).'
           : 'À qui part ce mail ? Donne une adresse ou un nom (je croise Gmail et tes contacts).',
+      proposals: [],
+    }
+  }
+
+  const implicitWorkflowClarification = buildImplicitWorkflowClarification(
+    effectiveInput,
+    language,
+    knownContact
+  )
+  if (implicitWorkflowClarification) {
+    return {
+      response: implicitWorkflowClarification,
       proposals: [],
     }
   }

@@ -6,6 +6,7 @@ import {
   type AssistantProfile,
 } from '@/lib/assistant/profile'
 import { prepareActionParameters } from '@/lib/agent/data-prep'
+import { stripConversationalLeadIn } from '@/lib/agent/input-normalization'
 import {
   agentActionTypeSchema,
   buildCapabilityResponse,
@@ -728,6 +729,7 @@ export async function runAgentTurn(
     connectedContextMetadata?: Record<string, unknown>
   } = {}
 ): Promise<AgentTurnResult> {
+  const effectiveInput = stripConversationalLeadIn(input)
   const enabledSkillIds = resolveEnabledAssistantSkills(assistantProfile?.enabledSkills)
   const enabledSkills = executiveAssistantSkills.filter((skill) => enabledSkillIds.includes(skill.id))
   const availableTools = listMcpTools().filter((tool) =>
@@ -735,11 +737,11 @@ export async function runAgentTurn(
   )
   const language = assistantProfile?.defaultLanguage ?? 'fr'
 
-  if (isConversationalInput(input)) {
+  if (isConversationalInput(effectiveInput)) {
     if (isOpenAiConfigured()) {
       try {
         const aiResult = await analyzeUserRequest(
-          input,
+          effectiveInput,
           conversationHistory,
           {
             assistantProfile,
@@ -761,7 +763,7 @@ export async function runAgentTurn(
     }
 
     return {
-      response: buildConversationalResponse(input, assistantProfile),
+      response: buildConversationalResponse(effectiveInput, assistantProfile),
       proposals: [],
       disambiguations: [],
       plan: [],
@@ -780,12 +782,12 @@ export async function runAgentTurn(
     }
   }
 
-  const deterministicFallback = buildFallbackResponseWithContactsAndProfile(input, knownContacts, assistantProfile)
+  const deterministicFallback = buildFallbackResponseWithContactsAndProfile(effectiveInput, knownContacts, assistantProfile)
 
-  if (isCapabilityQuestion(input, deterministicFallback.proposals)) {
+  if (isCapabilityQuestion(effectiveInput, deterministicFallback.proposals)) {
     if (isOpenAiConfigured()) {
       try {
-        const aiResult = await analyzeUserRequest(input, conversationHistory, {
+        const aiResult = await analyzeUserRequest(effectiveInput, conversationHistory, {
           assistantProfile,
           skills: enabledSkills,
           workspaceContext: options.workspaceContext,
@@ -804,7 +806,7 @@ export async function runAgentTurn(
     }
 
     return {
-      response: buildCapabilityResponse(input, deterministicFallback.proposals, assistantProfile),
+      response: buildCapabilityResponse(effectiveInput, deterministicFallback.proposals, assistantProfile),
       proposals: [],
       disambiguations: [],
       plan: [],
@@ -814,7 +816,7 @@ export async function runAgentTurn(
   if (isOpenAiConfigured()) {
     try {
       const aiResult = await analyzeUserRequest(
-        input,
+        effectiveInput,
         conversationHistory,
         {
           knownContacts: knownContacts.map((contact) => ({ name: contact.name, email: contact.email })),
@@ -855,7 +857,7 @@ export async function runAgentTurn(
 
       const resolvedReferenceResult = resolveActionReferencesDetailed({
         proposals,
-        userInput: input,
+        userInput: effectiveInput,
         connectedContextMetadata: options.connectedContextMetadata,
       })
       const resolvedReferenceProposals = resolvedReferenceResult.proposals
@@ -865,12 +867,12 @@ export async function runAgentTurn(
           const attendees = Array.isArray(proposal.parameters.attendees)
             ? proposal.parameters.attendees.filter((value): value is string => typeof value === 'string' && value.includes('@'))
             : []
-          const explicitInputEmails = extractEmailAddresses(input)
-          const maybeRecipient = extractRecipientName(input) || extractGmailLookupNameQuery(input)
+          const explicitInputEmails = extractEmailAddresses(effectiveInput)
+          const maybeRecipient = extractRecipientName(effectiveInput) || extractGmailLookupNameQuery(effectiveInput)
           const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
 
-          const forceMeetOff = requestForcesMeetLinkOff(input)
-          const wantsMeet = requestNeedsMeetLink(input)
+          const forceMeetOff = requestForcesMeetLinkOff(effectiveInput)
+          const wantsMeet = requestNeedsMeetLink(effectiveInput)
 
           return {
             ...proposal,
@@ -914,7 +916,7 @@ export async function runAgentTurn(
           return proposal
         }
 
-        const maybeRecipient = extractRecipientName(input) || extractGmailLookupNameQuery(input)
+        const maybeRecipient = extractRecipientName(effectiveInput) || extractGmailLookupNameQuery(effectiveInput)
         const knownContact = maybeRecipient ? findContactByName(maybeRecipient, knownContacts) : null
         if (!knownContact) {
           return proposal
@@ -966,8 +968,8 @@ export async function runAgentTurn(
       const safeProposals = enrichedWithMeet.map((proposal) => {
         if (
           proposal.type === 'create_calendar_event' &&
-          !hasConcreteCalendarSchedule(input) &&
-          !canInferCalendarRangeFromUserText(input, defaultMeetingDuration)
+          !hasConcreteCalendarSchedule(effectiveInput) &&
+          !canInferCalendarRangeFromUserText(effectiveInput, defaultMeetingDuration)
         ) {
           return {
             ...proposal,
@@ -1004,14 +1006,14 @@ export async function runAgentTurn(
         }
       })
       const presentationAlignedProposals = alignCalendarEmailBundleProposals({
-        input,
+        input: effectiveInput,
         language,
         proposals: safeProposals,
         knownContacts,
         assistantProfile,
       })
 
-      const allowProposals = isActionOrWorkflowRequest(input)
+      const allowProposals = isActionOrWorkflowRequest(effectiveInput)
       const modelClaimsActionReadyWithoutProposal =
         allowProposals &&
         aiResult.proposals.length === 0 &&
@@ -1027,15 +1029,15 @@ export async function runAgentTurn(
           (proposal) => proposal.type === 'create_calendar_event' && proposal.confidenceScore <= 0.35
         )
       const literalInstructionLeakDetected = presentationAlignedProposals.some(proposalLeaksLiteralUserInstruction)
-      const temporalBundleMismatchDetected = proposalHasTemporalMismatchWithRequest(input, presentationAlignedProposals)
+      const temporalBundleMismatchDetected = proposalHasTemporalMismatchWithRequest(effectiveInput, presentationAlignedProposals)
       const modelMissedCalendarEmailBundle =
-        looksLikeCalendarEmailBundleIntent(input) &&
+        looksLikeCalendarEmailBundleIntent(effectiveInput) &&
         (!presentationAlignedProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
           !presentationAlignedProposals.some(
             (proposal) => proposal.type === 'send_email' || proposal.type === 'create_gmail_draft'
           ))
       const brokenMeetingBundleDetected =
-        looksLikeMeetingEmailBundleRequest(input) &&
+        looksLikeMeetingEmailBundleRequest(effectiveInput) &&
         (
           !presentationAlignedProposals.some((proposal) => proposal.type === 'create_calendar_event') ||
           !presentationAlignedProposals.some(
@@ -1060,7 +1062,7 @@ export async function runAgentTurn(
               const raw = deterministicFallback.proposals.filter(
                 (proposal) => allowedActionTypes.includes(proposal.type)
               )
-              if (isEmailCompositionAssistanceRequest(input)) {
+              if (isEmailCompositionAssistanceRequest(effectiveInput)) {
                 const hasCalendarProposal = raw.some((proposal) => proposal.type === 'create_calendar_event')
                 if (!hasCalendarProposal) {
                   return raw.filter(
@@ -1073,7 +1075,7 @@ export async function runAgentTurn(
               }
               return raw
             })(),
-            userInput: input,
+            userInput: effectiveInput,
             connectedContextMetadata: options.connectedContextMetadata,
           })
         : { proposals: [], disambiguations: [] }
@@ -1115,7 +1117,7 @@ export async function runAgentTurn(
         allowProposals &&
         !hasDisambiguation &&
         finalExecutableProposals.length > 0 &&
-        needsCalendarTimingClarification(input, finalExecutableProposals)
+        needsCalendarTimingClarification(effectiveInput, finalExecutableProposals)
 
       /** Prefer the model’s wording whenever it said something substantive — deterministic text is only a safety net. */
       const keepModelVoice =
@@ -1165,7 +1167,7 @@ export async function runAgentTurn(
           return deterministicFallback.response
         }
         if (!allowProposals && presentationAlignedProposals.length > 0) {
-          return buildConversationalResponse(input, assistantProfile)
+          return buildConversationalResponse(effectiveInput, assistantProfile)
         }
         return aiResult.response
       }
@@ -1173,7 +1175,7 @@ export async function runAgentTurn(
       const baseVisibleResponse = hasDisambiguation
         ? buildDisambiguationResponse(disambiguations, assistantProfile)
         : shouldAskCalendarTimingClarification
-          ? buildCalendarTimingClarificationResponse(language, input)
+          ? buildCalendarTimingClarificationResponse(language, effectiveInput)
           : pickVisibleResponse()
 
       const shouldEnrichGuardrailResponse =
@@ -1189,7 +1191,7 @@ export async function runAgentTurn(
 
       const visibleResponse = await maybeEnrichGuardrailNarration({
         language,
-        input,
+        input: effectiveInput,
         draftResponse: baseVisibleResponse,
         proposals: finalExecutableProposals,
         workspaceContext: options.workspaceContext,
@@ -1204,7 +1206,7 @@ export async function runAgentTurn(
       }
     } catch {
       return buildResolvedDeterministicTurn({
-        input,
+        input: effectiveInput,
         knownContacts,
         assistantProfile,
         allowedActionTypes,
@@ -1214,7 +1216,7 @@ export async function runAgentTurn(
   }
 
   return buildResolvedDeterministicTurn({
-    input,
+    input: effectiveInput,
     knownContacts,
     assistantProfile,
     allowedActionTypes,

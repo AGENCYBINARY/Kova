@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildMeetingBundleRefinementFollowUp } from '@/lib/agent/follow-up'
 import { isMeetingDeliveryRefinementIntent, isEmailSendIntent, parseConnectedContextRequest } from '@/lib/workspace-context/intents'
-import { isEmailCompositionAssistanceRequest } from '@/lib/agent/v1-deterministic'
+import { buildFallbackResponseWithContactsAndProfile, isEmailCompositionAssistanceRequest } from '@/lib/agent/v1-deterministic'
 
 test('isMeetingDeliveryRefinementIntent detects Meet + mail refinement', () => {
   assert.equal(
@@ -31,10 +31,29 @@ test('direct email send request is not downgraded to simple composition help', (
   )
 })
 
+test('greeting-prefixed direct email send request is still treated as a real action intent', () => {
+  assert.equal(
+    isEmailCompositionAssistanceRequest(
+      "salut boss ça va peux-tu s'il te plaît écrire un mail à Maxime Neveu avec un lien Google Meet pour demain mercredi à 19h30"
+    ),
+    false
+  )
+})
+
 test('calendar nouns without a read verb do not get hijacked into connected-read mode', () => {
   const parsed = parseConnectedContextRequest("salut boss ça va plus Maxime Neveu en lui disant que y'a une réunion demain donc vendredi à 11h")
   assert.equal(parsed?.mode, 'action')
   assert.ok(parsed?.sources.includes('calendar'))
+})
+
+test('implicit workflow briefs get a targeted clarification instead of the generic fallback', () => {
+  const result = buildFallbackResponseWithContactsAndProfile(
+    "salut boss ça va plus Maxime Neveu en lui disant que y'a une réunion demain donc vendredi à 11h",
+    []
+  )
+
+  assert.ok(result.response.trim().length > 0)
+  assert.doesNotMatch(result.response, /Je n’ai pas relié ça à une suite claire/i)
 })
 
 test('isEmailSendIntent is false for refinement (avoids literal instruction email)', () => {

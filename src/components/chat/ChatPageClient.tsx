@@ -50,6 +50,7 @@ function buildProposalFallbackMessage(params: {
   lang: 'fr' | 'en'
   executionMode: ExecutionMode
 }) {
+  const proposalCount = params.proposals.length
   const hasCalendar = params.proposals.some((proposal) => proposal.type === 'create_calendar_event' || proposal.type === 'update_calendar_event')
   const hasEmail = params.proposals.some((proposal) =>
     ['send_email', 'create_gmail_draft', 'update_gmail_draft', 'reply_to_email', 'forward_email'].includes(proposal.type)
@@ -64,63 +65,63 @@ function buildProposalFallbackMessage(params: {
   if (params.lang === 'en') {
     if (hasCalendar && hasEmail) {
       return params.executionMode === 'auto'
-        ? 'I prepared the calendar invite and the matching email as one clean sequence.'
-        : 'I prepared the calendar invite and the matching email as one clean sequence. Review both before I send anything.'
+        ? 'I lined up the calendar invite and the matching email as one sequence, so the handoff stays coherent.'
+        : 'I lined up the calendar invite and the matching email as one sequence. Review both just below and I’ll handle the rest cleanly.'
     }
     if (hasDocs && hasDrive) {
       return params.executionMode === 'auto'
         ? 'I prepared the document work and the related Drive organization together.'
-        : 'I prepared the document work and the related Drive organization together. Review it and I’ll execute it cleanly.'
+        : 'I prepared the document work and the related Drive organization together. Review the actions just below and I’ll execute the sequence cleanly.'
     }
     if (hasEmail) {
       return params.executionMode === 'auto'
-        ? 'I prepared the email cleanly.'
-        : 'I prepared the email cleanly. Review it and I’ll handle the send.'
+        ? 'The email is lined up and ready.'
+        : 'The email is lined up. Review the draft below and I’ll take care of the send.'
     }
     if (hasCalendar) {
       return params.executionMode === 'auto'
-        ? 'I prepared the calendar action.'
-        : 'I prepared the calendar action. Review it and I’ll handle the execution.'
+        ? 'The calendar move is ready.'
+        : 'The calendar move is ready. Check the invite below and I’ll execute it cleanly.'
     }
     if (hasDrive) {
       return params.executionMode === 'auto'
-        ? 'I prepared the Drive action.'
-        : 'I prepared the Drive action. Review it and I’ll execute it cleanly.'
+        ? 'The Drive action is ready.'
+        : 'The Drive action is ready. Review it below and I’ll execute it cleanly.'
     }
     return params.executionMode === 'auto'
-      ? 'I prepared the action.'
-      : 'I prepared the action for review.'
+      ? `I lined up ${proposalCount} action${proposalCount > 1 ? 's' : ''}.`
+      : `I lined up ${proposalCount} action${proposalCount > 1 ? 's' : ''} for review just below.`
   }
 
   if (hasCalendar && hasEmail) {
     return params.executionMode === 'auto'
-      ? "J’ai préparé l’invitation agenda et le mail associé comme une seule séquence propre."
-      : "J’ai préparé l’invitation agenda et le mail associé comme une seule séquence propre. Vérifie les deux avant exécution."
+      ? "J’ai cadré l’invitation agenda et le mail associé comme une seule séquence propre."
+      : "J’ai cadré l’invitation agenda et le mail associé comme une seule séquence. Vérifie les deux juste en dessous et je gère la suite."
   }
   if (hasDocs && hasDrive) {
     return params.executionMode === 'auto'
       ? "J’ai préparé le travail documentaire et le rangement Drive associé."
-      : "J’ai préparé le travail documentaire et le rangement Drive associé. Vérifie-le et j’exécute ça proprement."
+      : "J’ai préparé le travail documentaire et le rangement Drive associé. Vérifie les actions juste en dessous et j’exécute ça proprement."
   }
   if (hasEmail) {
     return params.executionMode === 'auto'
-      ? "J’ai préparé le mail proprement."
-      : "J’ai préparé le mail proprement. Vérifie-le et je m’occupe de l’envoi."
+      ? "Le mail est prêt."
+      : "Le mail est prêt. Vérifie le brouillon juste en dessous et je m’occupe de l’envoi."
   }
   if (hasCalendar) {
     return params.executionMode === 'auto'
-      ? "J’ai préparé l’action agenda."
-      : "J’ai préparé l’action agenda. Vérifie-la et je gère l’exécution."
+      ? "L’action agenda est prête."
+      : "L’action agenda est prête. Vérifie l’invitation juste en dessous et je gère l’exécution."
   }
   if (hasDrive) {
     return params.executionMode === 'auto'
-      ? "J’ai préparé l’action Drive."
-      : "J’ai préparé l’action Drive. Vérifie-la et j’exécute ça proprement."
+      ? "L’action Drive est prête."
+      : "L’action Drive est prête. Vérifie-la juste en dessous et j’exécute ça proprement."
   }
 
   return params.executionMode === 'auto'
-    ? "J’ai préparé l’action."
-    : "J’ai préparé l’action pour validation."
+    ? `J’ai préparé ${proposalCount} action${proposalCount > 1 ? 's' : ''}.`
+    : `J’ai préparé ${proposalCount} action${proposalCount > 1 ? 's' : ''} à valider juste en dessous.`
 }
 
 function buildDisambiguationReply(

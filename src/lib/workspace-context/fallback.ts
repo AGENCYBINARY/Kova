@@ -157,13 +157,13 @@ export function buildConnectedContextFallbackResponse(
 
   if (lines.length === 0) {
     return language === 'en'
-      ? 'I checked the connected apps live, but I could not summarise them cleanly yet.'
-      : "J’ai vérifié les apps connectées en direct, mais je n’ai pas encore pu les résumer proprement."
+      ? 'I checked the connected apps, but I still need a cleaner read before I can answer properly.'
+      : "J’ai bien regardé les apps connectées, mais il me faut encore une lecture plus propre pour te répondre correctement."
   }
 
   return language === 'en'
-    ? `I checked the connected apps live: ${lines.join('; ')}.`
-    : `J’ai vérifié les applications connectées en direct : ${lines.join('; ')}.`
+    ? `I checked the connected apps. Here is the useful signal: ${lines.join('; ')}.`
+    : `J’ai regardé les apps connectées. Voilà le signal utile : ${lines.join('; ')}.`
 }
 
 function truncateSnippet(snippet: string) {

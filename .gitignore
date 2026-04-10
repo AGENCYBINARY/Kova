@@ -19,3 +19,4 @@ prisma/dev.db
 output/playwright
 .vercel
 .lighthouse
+.omx/
