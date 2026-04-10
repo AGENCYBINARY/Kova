@@ -2368,6 +2368,10 @@ export function buildFallbackResponseWithContactsAndProfile(
       }
 
       const calProp = buildCalendarProposal(input, assistantProfile, bundleContact)
+      calProp.parameters = {
+        ...calProp.parameters,
+        createMeetLink: true,
+      }
       return {
         response:
           language === 'en'

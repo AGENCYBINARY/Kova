@@ -74,6 +74,8 @@ test('resolved direct email request produces a polished subject and body instead
 
   assert.deepEqual(result.proposals.map((proposal) => proposal.type), ['create_calendar_event', 'send_email'])
   const proposal = result.proposals.find((item) => item.type === 'send_email')
+  const calendarProposal = result.proposals.find((item) => item.type === 'create_calendar_event')
+  assert.equal(calendarProposal?.parameters.createMeetLink, true)
   assert.equal(proposal?.parameters.to?.[0], 'neveu.maxime29@gmail.com')
   assert.match(String(proposal?.parameters.subject), /visio|réunion|objectifs/i)
   assert.doesNotMatch(String(proposal?.parameters.subject), /peux-tu|écrire un mail/i)
