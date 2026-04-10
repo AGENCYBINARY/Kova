@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "test": "NODE_ENV=test node --import tsx --test tests/*.test.ts",
@@ -42,7 +42,8 @@
     "react-dom": "^18.3.1",
     "stripe": "^20.4.1",
     "swr": "^2.3.0",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "prisma": "^6.19.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
@@ -50,7 +51,6 @@
     "@types/react-dom": "^18.3.5",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.24",
-    "prisma": "^6.2.1",
     "tsx": "^4.21.0",
     "typescript": "^5.7.3"
   }
